@@ -1,0 +1,3 @@
+
+#define VERTEX_LOCATION 1
+#define NORMAL_LOCATION 2
