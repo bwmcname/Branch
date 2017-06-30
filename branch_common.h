@@ -283,6 +283,8 @@ union v4
    };
    float e[4];
 
+   v3 xyz;
+
    inline v4 operator+(float c);
    inline v4 operator+(v4 b);
 };

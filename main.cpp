@@ -34,7 +34,7 @@ m4 CameraMatrix(Camera &camera)
 			      -camera.position.y,
 			      -camera.position.z);
 
-   return translation * rotation;
+   return rotation * translation;
 }
 
 struct Mesh
@@ -59,20 +59,7 @@ struct MeshObject
 };
 
 static MeshObject Sphere;
-static MeshObject TestTrack;
-
-struct StaticLineBuffers
-{
-   Mesh mesh;
-   MeshBuffers gpubuffers;
-
-   GLint transform_uniform;
-   GLint texture_uniform;
-   GLint length_uniform;
-   GLuint texture_handle;
-};
-
-StaticLineBuffers GlobalLine;
+static MeshObject LinearTrack;
 
 struct ShaderProgram
 {
@@ -99,7 +86,7 @@ struct Object
    v3 worldPos;
    v3 scale;
    quat orientation;
-   MeshObject *meshBuffers;
+   MeshObject meshBuffers;
    ShaderProgram *p;
 };
 
@@ -208,16 +195,17 @@ v3 V3(v2 a, float z)
 
 // cubic bezier control points
 union Curve
-{
+{   
    struct
    {
       v2 p1, p2, p3, p4;
    };
 
    v2 e[4];
-
+ 
    v4 lerpables[2];
 };
+
 
 static inline
 Curve lerp(Curve a, Curve b, float t)
@@ -329,57 +317,6 @@ CreateProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsi
    return result;
 }
 
-#if 0
-void InitLineBuffers(ShaderProgram &program)
-{
-   static float vertices[] = {
-      -0.5f, -0.5f,
-      -0.5f, 0.5f,
-      0.5f, 0.5f,
-
-      -0.5f, -0.5f,
-      0.5f, 0.5f,
-      0.5f, -0.5f
-   };   
-
-   static u32 LineTexture[] = {
-      0xFF00FFFF, // yellow
-      0xFF333333  // gray
-   };
-
-   GlobalLine.gpubuffers = UploadStaticMesh(vertices, 6);
-
-   GlobalLine.mesh.vertices = vertices;
-   GlobalLine.mesh.vcount = 6;   
-
-   GlobalLine.transform_uniform = glGetUniformLocation(program.programHandle, "transform");
-   GlobalLine.length_uniform = glGetUniformLocation(program.programHandle, "length");
-   GlobalLine.texture_uniform = glGetUniformLocation(program.programHandle, "tex");
-
-   glActiveTexture(GL_TEXTURE0);
-   glGenTextures(1, &GlobalLine.texture_handle);
-   glBindTexture(GL_TEXTURE_2D, GlobalLine.texture_handle);
-
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-   glTexImage2D(GL_TEXTURE_2D,
-		0,
-		GL_RGBA,
-		1,
-		2,
-		0,
-		GL_RGBA,
-		GL_UNSIGNED_BYTE,
-		LineTexture);
-
-   
-   glBindTexture(GL_TEXTURE_2D, 0);
-}
-#endif
-
 static
 v3 *Normals(float *vertices, v3 *result, i32 count)
 {
@@ -410,7 +347,7 @@ v3 *Normals(float *vertices, i32 count)
 // Allocates Mesh object and vertex buffers
 // NOT NECASSARY TO CREATING A MESH OBJECT
 // Only for allocating dynamic gpu buffers
-MeshObject AllocatMeshObject(i32 vertexCount)
+MeshObject AllocateMeshObject(i32 vertexCount)
 {   
    MeshObject result;
    result.mesh.vcount = vertexCount;
@@ -473,7 +410,7 @@ void RenderPushObject(Object &obj, m4 &camera, v3 lightPos)
    
    m4 transform = translation * scale * orientation;
    
-   RenderPushMesh(*obj.p, *obj.meshBuffers, transform, camera, lightPos);
+   RenderPushMesh(*obj.p, obj.meshBuffers, transform, camera, lightPos);
 }
 
 enum KeyState
@@ -529,19 +466,274 @@ Collectibles::remove(i32 i)
 
 struct Track
 {
+   enum
+   {
+      staticMesh = 0x1,
+      branch = 0x2,
+      left = 0x8, // else, right
+   };
+
    Object renderable;
    Curve bezier;
+   i32 flags;
 };
+
+static inline
+Track CreateTrack(v3 position, v3 scale, Curve bezier, MeshObject &buffers)
+{
+   Object obj;
+   obj.worldPos = position;
+   obj.scale = scale;
+   obj.orientation = Quat(0.0f, 0.0f, 0.0f, 0.0f);
+   obj.meshBuffers = buffers;
+   obj.p = &DefaultShader;
+
+   Track result;
+   result.renderable = obj;
+   result.bezier = bezier;
+
+   return result;
+}
+
+struct TrackAttribute
+{
+   enum
+   {
+      countMask = 0x3,
+      branch = 0x4,
+      left = 0x8,
+   };
+   
+   i32 flags;
+   i32 e[2]; // each track can have at most 2 edges leading from it.
+};
+
+struct TrackGraph
+{
+   Track *elements;
+   TrackAttribute *adjList;
+   i32 size;
+};
+
+template <typename T>
+struct CircularQueue
+{
+   i32 max;
+   i32 size;
+   i32 begin;
+   i32 end;
+   T *elements;
+
+   CircularQueue(i32 _max);
+   ~CircularQueue();
+   void Push(T e);
+   T Pop();
+   void ClearToZero();   
+
+private:
+   inline void IncrementEnd();
+   inline void IncrementBegin();
+};
+
+template <typename T>
+CircularQueue<T>::CircularQueue(i32 _max)
+{
+   max = _max;
+   size = 0;
+   begin = 0;
+   end = 0;
+   elements = (T *)malloc(max * sizeof(T));
+}
+
+template <typename T>
+CircularQueue<T>::~CircularQueue()
+{
+   free(elements);
+}
+
+template <typename T>
+void CircularQueue<T>::Push(T e)
+{
+   assert(size <= max);
+
+   elements[end] = e;
+   ++size;
+   IncrementEnd();
+}
+
+template <typename T>
+T CircularQueue<T>::Pop()
+{
+   assert(size > 0);
+
+   T pop = elements[begin];
+   --size;
+   IncrementBegin();
+
+   return pop;
+}
+
+template <typename T>
+void CircularQueue<T>::IncrementBegin()
+{
+   if(begin == max - 1)
+   {
+      begin = 0;
+   }
+   else
+   {
+      ++begin;
+   }
+}
+
+template <typename T>
+void CircularQueue<T>::IncrementEnd()
+{
+   if(end == max - 1)
+   {
+      end = 0;
+   }
+   else
+   {
+      ++end;
+   }
+}
+
+template <typename T>
+void CircularQueue<T>::ClearToZero()
+{
+   memset(elements, 0, max * sizeof(T));
+}
+
+struct TrackInfo
+{
+   i32 index;
+   i32 x, y;
+};
+
+struct VirtualTrackCoords
+{
+   i32 x, y;
+};
+
+static
+Track *TestInitTracks()
+{
+   Track *vertices = (Track *)malloc(sizeof(Track) * 20);
+
+   Curve line;
+   line.p1 = V2(0.0f, -0.5f);
+   line.p2 = V2(0.0f, -0.5f);
+   line.p3 = V2(0.0f, 0.5f);
+   line.p4 = V2(0.0f, 0.5f);
+   
+   for(i32 i = 0; i < 20; ++i)
+   {
+      vertices[i] = CreateTrack(V3(0.0f, (float)i * 5.0f, 0.0f), V3(0.5f, 5.0f, 0.5f),
+				line, LinearTrack);
+   }
+
+   return vertices;
+}
+
+static
+TrackGraph InitTrackGraph(i32 initialSize)
+{
+   TrackGraph result;
+
+   // @leak
+   result.elements = (Track *)malloc(sizeof(Track) * initialSize);
+   // @leak
+   result.adjList = (TrackAttribute *)malloc(sizeof(TrackAttribute) * initialSize);
+
+   result.size = 20;
+
+   CircularQueue<TrackInfo> vertices(initialSize);
+   vertices.Push({0, 0, 0});
+
+   i32 firstFree = 1; // next element that can be added to the queue
+   while(vertices.size)
+   {
+      TrackInfo item = vertices.Pop();
+      if(rand() % 4 == 0) // is a branch
+      {	
+	 int branches = 0;
+
+	 if(initialSize - firstFree > 0)
+	 {
+	    ++branches;
+	    vertices.Push({firstFree, item.x - 1, item.y + 1}); // left side
+	    result.adjList[item.index].e[0] = firstFree++;
+
+	    if(initialSize - firstFree > 0)
+	    {
+	       ++branches;
+	       vertices.Push({firstFree, item.x + 1, item.y + 1}); // right side
+	       result.adjList[item.index].e[1] = firstFree++;
+	    }
+	 }	 
+
+	 result.adjList[item.index].flags = branches | TrackAttribute::branch | TrackAttribute::left;
+
+	 /*
+	 MeshObject buffers = AllocateMeshObject(80 * 3);
+	 v3 position = V3((float)item.x * 2.0f, (float)item.y * 2.0f, 0.0f);
+
+	 Curve leftCurve;
+	 leftCurve.p1 = V2(0.0f, -0.5f);
+	 leftCurve.p2 = V2(-0.3f, -0.2f);	 
+	 leftCurve.p3 = V2(0.3f, 0.2f);
+	 leftCurve.p4 = V2(-1.0f, 0.5f);
+	 
+	 MeshObject dynamic = AllocateMeshObject(80 * 3);
+	 result.elements[item.index] = CreateTrack(position, V3(1.0f, 2.0f, 1.0f), leftCurve, dynamic);
+	 result.elements[item.index].flags = Track::branch | Track::left;
+	 */
+      }
+      else // is linear
+      {
+	 if((initialSize - firstFree) > 0)
+	 {
+	    result.adjList[item.index].flags = 1; // size of 1
+	    vertices.Push({firstFree, item.x, item.y + 1});
+	    result.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
+	 }
+	 else
+	 {
+	    result.adjList[item.index].flags = 0;
+	 }
+
+	 /*
+	 v3 position = V3((float)item.x * 2.0f, (float)item.y * 2.0f, 0.0f);
+
+	 Curve linear;
+	 linear.p1 = V2(0.0f, -0.5f);
+	 linear.p2 = V2(0.0f, -0.5f);
+	 linear.p3 = V2(0.0f, 0.5f);
+	 linear.p4 = V2(0.0f, 0.5f);
+   
+	 result.elements[item.index] = CreateTrack(position, V3(1.0f, 2.0f, 1.0f), linear, LinearTrack);
+	 result.elements[item.index].flags = Track::staticMesh;
+	 */
+      }      
+   }
+
+   return result;
+}
 
 struct GameState
 {   
    Camera camera;
    Object sphereGuy;
-   Track testTrack; //@DELETE
    Collectibles collectibles;
    KeyState keyState;
+   TrackGraph tracks;
 
    v3 lightPos;
+
+   Track testTrack; //@DELETE
+
+   Track *testTracks;
 };
 
 ShaderProgram
@@ -569,25 +761,8 @@ Object SpherePrimitive(v3 position, v3 scale, quat orientation)
    result.worldPos = position;
    result.scale = scale;
    result.orientation = orientation;
-   result.meshBuffers = &Sphere;
+   result.meshBuffers = Sphere;
    result.p = &DefaultShader;
-   return result;
-}
-
-static inline
-Track CreateTrack(v3 position, v3 scale, Curve bezier)
-{
-   Object obj;
-   obj.worldPos = position;
-   obj.scale = scale;
-   obj.orientation = Quat(0.0f, 0.0f, 0.0f, 0.0f);
-   obj.meshBuffers = &TestTrack;
-   obj.p = &DefaultShader;
-
-   Track result;
-   result.renderable = obj;
-   result.bezier = bezier;
-
    return result;
 }
 
@@ -615,7 +790,8 @@ void UpdatePlayer(Object &player, Collectibles &collectibles)
 void UpdateCamera(Camera &camera, v3 playerPosition)
 {
    // have camera follow player
-   camera.position.y = playerPosition.y;
+   // camera.position.y = playerPosition.y;
+   camera.position.y += delta * 0.1f;
 }
 
 void CreateCollectibles(Collectibles &collectibles)
@@ -643,47 +819,67 @@ void CreateCollectibles(Collectibles &collectibles)
    collectibles.size = 5;   
 }
 
-void GenerateTrackSegmentVertices(Track track)
+// approximate tangent
+// @ should replace with derivative form
+static inline
+v2 Tangent(Curve c, float t)
 {
-   // 10 segments, 8 tris per segment --- 80 tries
-   
-   tri *tris = (tri *)track.renderable.meshBuffers->mesh.vertices; //lol
+   float begin = min(0.0f, t - 0.000001f);
+   float end = max(1.0f, t + 0.000001f);
 
-   v2 sample = CubicBezier(track.bezier, 0.0f);
+   v2 a = CubicBezier(c, begin);
+   v2 b = CubicBezier(c, end);
+
+   return unit(b - a);
+}
+
+static
+void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier)
+{
+   // 10 segments, 8 tris per segment --- 80 tries   
+   tri *tris = (tri *)meshBuffers.mesh.vertices;
+
+   float t = 0.0f;
+   v2 sample = CubicBezier(bezier, t);
+
+   v2 direction = Tangent(bezier, t);
+   v2 perpindicular = V2(-direction.y, direction.x) * 0.5f;         
 
    v3 top1 = V3(sample.x, sample.y, 0.5f);
-   v3 right1 = V3(sample.x + 0.5f, sample.y, 0.0f);
+   v3 right1 = V3(sample.x + perpindicular.x, sample.y, 0.0f);
    v3 bottom1 = V3(sample.x, sample.y, -0.5f);
-   v3 left1 = V3(sample.x - 0.5f, sample.y, 0.0f);
+   v3 left1 = V3(sample.x - perpindicular.x, sample.y, 0.0f);   
    
-   float t = 0.0f;
    for(i32 i = 0; i < 10; ++i)
    {
       t += 0.1f;
-      sample = CubicBezier(track.bezier, t);
+      sample = CubicBezier(bezier, t);
+
+      direction = Tangent(bezier, t);
+      perpindicular = V2(-direction.y, direction.x) * 0.5f;      
 
       v3 top2 = V3(sample.x, sample.y, 0.5f);
-      v3 right2 = V3(sample.x + 0.5f, sample.y, 0.0f);
+      v3 right2 = V3(sample.x + perpindicular.x, sample.y + perpindicular.y, 0.0f);
       v3 bottom2 = V3(sample.x, sample.y, -0.5f);
-      v3 left2 = V3(sample.x - 0.5f, sample.y, 0.0f);
-
+      v3 left2 = V3(sample.x - perpindicular.x, sample.y - perpindicular.y, 0.0f);
+      
       i32 j = i * 8;
 
       // top left side
-      tris[j] = Tri(top1, left2, left1);
-      tris[j+1] = Tri(top1, top2, left2);
+      tris[j] = Tri(top1, left1, left2);
+      tris[j+1] = Tri(top1, left2, top2);
 
       // top right side
-      tris[j+2] = Tri(top1, right1, top2);
-      tris[j+3] = Tri(top2, right1, right2);
+      tris[j+2] = Tri(top1, top2, right1);
+      tris[j+3] = Tri(top2, right2, right1);
 
       // bottom right side
-      tris[j+4] = Tri(bottom1, bottom2, right1);
-      tris[j+5] = Tri(bottom2, right2, right1);
+      tris[j+4] = Tri(bottom1, right1, bottom2);
+      tris[j+5] = Tri(bottom2, right1, right2);
 
       // bottom left side
-      tris[j+6] = Tri(bottom1, left1, left2);
-      tris[j+7] = Tri(bottom1, left2, bottom2);
+      tris[j+6] = Tri(bottom1, left2, left1);
+      tris[j+7] = Tri(bottom1, bottom2, left2);
 
       top1 = top2;
       right1 = right2;
@@ -691,15 +887,20 @@ void GenerateTrackSegmentVertices(Track track)
       bottom1 = bottom2;
    }
 
-   v3 *normals = track.renderable.meshBuffers->mesh.normals;
+   v3 *normals = meshBuffers.mesh.normals;
    Normals((float *)tris, (v3 *)normals, 80 * 3); // 3 vertices per tri
 
-   glBindBuffer(GL_ARRAY_BUFFER, track.renderable.meshBuffers->handles.vbo);
+   glBindBuffer(GL_ARRAY_BUFFER, meshBuffers.handles.vbo);
    glBufferSubData(GL_ARRAY_BUFFER, 0, (sizeof(tri) * 80), (void *)tris);
-   glBindBuffer(GL_ARRAY_BUFFER, track.renderable.meshBuffers->handles.nbo);
+   glBindBuffer(GL_ARRAY_BUFFER, meshBuffers.handles.nbo);
    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(tri) * 80, (void *)normals);
-   glBindBuffer(GL_ARRAY_BUFFER, 0);
-   
+   glBindBuffer(GL_ARRAY_BUFFER, 0);   
+}
+
+static inline
+void GenerateTrackSegmentVertices(Track &track)
+{
+   GenerateTrackSegmentVertices(track.renderable.meshBuffers, track.bezier);   
 }
 
 void GameInit(GameState &state)
@@ -716,15 +917,21 @@ void GameInit(GameState &state)
    state.keyState = up;
 
    Sphere = InitMeshObject("assets\\sphere.brian");
-   TestTrack = AllocatMeshObject(80 * 3); // Just a test @DELETE
+   LinearTrack = AllocateMeshObject(80 * 3);
+   Curve line;
+   line.p1 = V2(0.0f, -0.5f);
+   line.p2 = V2(0.0f, -0.5f);
+   line.p3 = V2(0.0f, 0.5f);
+   line.p4 = V2(0.0f, 0.5f);
+   GenerateTrackSegmentVertices(LinearTrack, line);
 
    state.camera.position = V3(0.0f, 0.0f, 10.0f);
-   state.camera.orientation = Quat(0.0f, 0.0f, 0.0f, 0.0f);
+   state.camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.0f);
    state.lightPos = state.camera.position;
    
    state.sphereGuy = SpherePrimitive(V3(0.0f, -2.0f, 5.0f),
 				     V3(1.0f, 1.0f, 1.0f),
-				     Quat(0.0f, 0.0f, 0.0f, 0.0f));
+				     Quat(1.0f, 0.0f, 0.0f, 0.0f));   
 
    Curve curve;
    curve.p1 = V2(0.0f, -0.5f);
@@ -732,15 +939,26 @@ void GameInit(GameState &state)
    curve.p3 = V2(-2.0f, 0.3f);
    curve.p4 = V2(0.0f, 0.5f);
 
-   // curve.p1 = V2(0.0f, -0.5f);
-   // curve.p2 = V2(0.0f, -0.5f);
-   // curve.p3 = V2(0.0f, 0.5f);
-   // curve.p4 = V2(0.0f, 0.5f);
-   state.testTrack = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(1.0f, 10.0f, 1.0f), curve);
+   //state.collectibles = Collectibles();
+   //CreateCollectibles(state.collectibles);
+
+   state.tracks = InitTrackGraph(20);
+
+   MeshObject CurvyTrack = AllocateMeshObject(80 * 3);
+   state.testTrack = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(0.5f, 2.0f, 0.5f), curve, CurvyTrack);
    GenerateTrackSegmentVertices(state.testTrack);
 
-   state.collectibles = Collectibles();
-   CreateCollectibles(state.collectibles);
+   /*
+   for(i32 i = 0; i < state.tracks.size; ++i)
+   {
+      if(!(state.tracks.elements[i].flags & Track::staticMesh))
+      {
+	 GenerateTrackSegmentVertices(state.tracks.elements[i]);
+      }
+   }
+   */
+
+   state.testTracks = TestInitTracks();
 }
 
 void GameLoop(GameState &state)
@@ -748,39 +966,28 @@ void GameLoop(GameState &state)
    m4 cameraTransform = CameraMatrix(state.camera);
 
    //UpdatePlayer(state.sphereGuy, state.collectibles);
-   //UpdateCamera(state.camera, state.sphereGuy.worldPos);
+   UpdateCamera(state.camera, state.sphereGuy.worldPos);
    state.lightPos = state.camera.position;
-
-
-   static float rotation = 0.0f;
-
-   Curve curve;
-   curve.p1 = V2(0.0f, -0.5f);
-   curve.p2 = V2(2.0f, -0.3f);
-   curve.p3 = V2(-2.0f, 0.3f);
-   curve.p4 = V2(0.0f, 0.5f);
-
-   Curve curve2;
-   curve2.p1 = V2(0.0f, -0.5f);
-   curve2.p2 = V2(-2.0f, -0.3f);
-   curve2.p3 = V2(2.0f, 0.3f);
-   curve2.p4 = V2(0.0f, 0.5f);
-
-   state.testTrack.bezier = lerp(curve, curve2, (1.0f + sinf(rotation * 10.0f)) / 2.0f);
-   GenerateTrackSegmentVertices(state.testTrack);
-
-   state.testTrack.renderable.orientation = Rotation(V3(0.0f, 1.0f, 0.0f), rotation);
-   rotation += delta / 100.0f;
    
    //RenderPushObject(state.sphereGuy, cameraTransform, state.lightPos);
-   RenderPushObject(state.testTrack.renderable, cameraTransform, state.lightPos);
-
    /*
    for(i32 i = 0; i < state.collectibles.size; ++i)
    {
       RenderPushObject(state.collectibles.c[i], cameraTransform, state.lightPos); 
    }
    */
+   /*
+   for(i32 i = 0; i < state.tracks.size; ++i)
+   {
+      RenderPushObject(state.tracks.elements[i].renderable, cameraTransform, state.lightPos);
+   }
+   */
+   // RenderPushObject(state.testTrack.renderable, cameraTransform, state.lightPos);
+
+   for(i32 i = 0; i < 20; ++i)
+   {
+      RenderPushObject(state.testTracks[i].renderable, cameraTransform, state.lightPos);
+   }
 }
 
 #if 0

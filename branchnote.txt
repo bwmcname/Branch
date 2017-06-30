@@ -1,0 +1,7 @@
+
+Track Graph
+-- Only have reachable tracks in the graph.
+   - finding edges that are not reachable from the 'current edge' (track the player is on)
+     should be quick. Maybe explore all possible paths and mark those reachable, and every one
+     not marked after searching gets evicted.
+   - All vertices on the graph can have at most two edges, so a fixed adjacency list may work.
