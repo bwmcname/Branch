@@ -323,7 +323,7 @@ int CALLBACK WinMain(HINSTANCE Instance,
 	       {
 		  case VK_SPACE:
 		  {
-		     // OnKeyDown(state);
+		     OnKeyDown(state);
 		  }break;
 	       }
 	    }break;

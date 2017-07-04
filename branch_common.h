@@ -161,6 +161,7 @@ union v2
 
    float e[2];
 
+   inline
    v2 operator-(v2 other)
    {
       v2 result;
@@ -169,6 +170,7 @@ union v2
       return result;
    }
 
+   inline
    v2 operator+(v2 other)
    {
       v2 result;
@@ -177,11 +179,27 @@ union v2
       return result;
    }
 
+   inline
    v2 operator*(float c)
    {
       return {c * x, c * y};
    }
 };
+
+static inline
+v2 V2(float x, float y)
+{
+   v2 result;
+   result.x = x;
+   result.y = y;
+   return result;
+}
+
+static inline
+v2 operator*(float c, v2 v)
+{
+   return V2(c * v.x, c * v.y);
+}
 
 union v2i
 {
@@ -210,15 +228,6 @@ tri Tri(v3 a, v3 b, v3 c)
    result.a = a;
    result.b = b;
    result.c = c;
-   return result;
-}
-
-static inline
-v2 V2(float x, float y)
-{
-   v2 result;
-   result.x = x;
-   result.y = y;
    return result;
 }
 

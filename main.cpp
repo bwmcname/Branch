@@ -8,7 +8,7 @@
 
 #define LEVEL_LENGTH 0.5f
 
-float delta;
+static float delta;
 static m4 Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
 
 struct Camera
@@ -206,6 +206,16 @@ union Curve
    v4 lerpables[2];
 };
 
+static inline
+Curve InvertX(Curve c)
+{
+   Curve result;
+   result.p1 = V2(-c.p1.x, c.p1.y);
+   result.p2 = V2(-c.p2.x, c.p2.y);
+   result.p3 = V2(-c.p3.x, c.p3.y);
+   result.p4 = V2(-c.p4.x, c.p4.y);
+   return result;
+}
 
 static inline
 Curve lerp(Curve a, Curve b, float t)
@@ -221,6 +231,8 @@ v2 CubicBezier(v2 p1, v2 p2, v2 p3, v2 p4, float t)
 {
    // uses the quicker non matrix form of the equation
    v2 result;
+
+   static float test = t;
 
    float degree1 = 1 - t;   
    float degree2 = degree1 * degree1; // (1 - t)^2
@@ -471,11 +483,16 @@ struct Track
       staticMesh = 0x1,
       branch = 0x2,
       left = 0x8, // else, right
+      lerping = 0x10
    };
 
    Object renderable;
    Curve bezier;
    i32 flags;
+
+   Curve beginLerp;
+   Curve endLerp;
+   float t;
 };
 
 static inline
@@ -505,14 +522,45 @@ struct TrackAttribute
    };
    
    i32 flags;
-   i32 e[2]; // each track can have at most 2 edges leading from it.
+   u32 e[2]; // each track can have at most 2 edges leading from it.
+
+   inline
+   i32 hasLeft()
+   {
+      return flags & left;
+   }
+
+   inline
+   i32 hasRight()
+   {
+      return (flags & countMask) == 2;
+   }
+
+   inline
+   u32 getRight()
+   {
+      return e[1];
+   }
+
+   inline
+   u32 getLeft()
+   {
+      return e[0];
+   }
 };
 
 struct TrackGraph
 {
+   enum
+   {
+      left = 0x1,
+   };
+
    Track *elements;
    TrackAttribute *adjList;
    i32 size;
+   i32 head;
+   i32 flags;
 };
 
 template <typename T>
@@ -607,7 +655,7 @@ void CircularQueue<T>::ClearToZero()
 
 struct TrackInfo
 {
-   i32 index;
+   u32 index;
    i32 x, y;
 };
 
@@ -616,6 +664,7 @@ struct VirtualTrackCoords
    i32 x, y;
 };
 
+#if 0
 static
 Track *TestInitTracks()
 {
@@ -635,105 +684,162 @@ Track *TestInitTracks()
 
    return vertices;
 }
+#endif
+
+static inline
+v2 VirtualToReal(i32 x, i32 y)
+{
+   return V2((float)x * 4.0f, (float)y * 4.0f);
+}
+
+static inline
+Curve ConnectionsToCurve(i32 x1, i32 y1,
+			 i32 x2, i32 y2)
+{
+   v2 begin = VirtualToReal(x1, y1);
+   v2 end = VirtualToReal(x2, y2);
+
+   v2 direction = end - begin;
+   
+   // right now, just a straight line
+   Curve result;
+   result.p1 = V2(0.0f, 0.0f);
+   result.p2 = 0.333333f * direction;
+   result.p3 = 0.666666f * direction;
+   result.p4 = direction;
+
+   return result;
+}
 
 static
 TrackGraph InitTrackGraph(i32 initialSize)
 {
    TrackGraph result;
 
+   result.head = 0;   
+   result.flags = TrackGraph::left;
+
    // @leak
    result.elements = (Track *)malloc(sizeof(Track) * initialSize);
    // @leak
    result.adjList = (TrackAttribute *)malloc(sizeof(TrackAttribute) * initialSize);
 
+   static u8 taken[20][20];
+   for(u8 i = 0; i < 20; ++i)
+   {
+      for(u8 j = 0; j < 20; ++j)
+      {
+	 taken[i][j] = 0;
+      }
+   }
+
+   enum
+   {
+      hasTrack = 0x1,
+      hasBranch = 0x2,
+   };
+
    result.size = 20;
-
    CircularQueue<TrackInfo> vertices(initialSize);
-   vertices.Push({0, 0, 0});
-
-   i32 firstFree = 1; // next element that can be added to the queue
+   
+   vertices.Push({0, 0, 0}); // Push root segment.
+   u32 firstFree = 1; // next element that can be added to the queue
    while(vertices.size)
    {
       TrackInfo item = vertices.Pop();
       if(rand() % 4 == 0) // is a branch
       {	
-	 int branches = 0;
-
-	 if(initialSize - firstFree > 0)
+	 int branches = 0;      	 	 
+	 
+	 // Queue up subsequent branches
+	 if(initialSize - firstFree > 0 && !(taken[item.x-1][item.y+1] & hasTrack))
 	 {
 	    ++branches;
 	    vertices.Push({firstFree, item.x - 1, item.y + 1}); // left side
-	    result.adjList[item.index].e[0] = firstFree++;
 
-	    if(initialSize - firstFree > 0)
-	    {
-	       ++branches;
-	       vertices.Push({firstFree, item.x + 1, item.y + 1}); // right side
-	       result.adjList[item.index].e[1] = firstFree++;
-	    }
-	 }	 
+	    taken[item.x-1][item.y+1] |= hasTrack | (firstFree >> 2);
+	    result.adjList[item.index].e[0] = firstFree++;	    
+	 }
+	 else if(taken[item.x-1][item.y+1] & hasTrack)
+	 {
+	    result.adjList[item.index].e[0] = (u32)taken[item.x-1][item.y+1] << 2;
+	    ++branches;
+	 }
 
+	 if(initialSize - firstFree > 0 && !(taken[item.x+1][item.y+1] & hasTrack))
+	 {
+	    ++branches;	    
+	    vertices.Push({firstFree, item.x + 1, item.y + 1}); // right side
+
+	    taken[item.x+1][item.y+1] |= hasTrack | (firstFree >> 2);
+	    result.adjList[item.index].e[1] = firstFree++;	    
+	 }
+	 else if(taken[item.x+1][item.y+1] & hasTrack)
+	 {
+	    result.adjList[item.index].e[1] = (u32)taken[item.x+1][item.y+1] << 2;
+	    ++branches;
+	 }
+	 
 	 result.adjList[item.index].flags = branches | TrackAttribute::branch | TrackAttribute::left;
 
-	 /*
-	 MeshObject buffers = AllocateMeshObject(80 * 3);
-	 v3 position = V3((float)item.x * 2.0f, (float)item.y * 2.0f, 0.0f);
+	 Curve leftCurve = ConnectionsToCurve(item.x, item.y,
+					      item.x - 1, item.y + 1);
 
-	 Curve leftCurve;
-	 leftCurve.p1 = V2(0.0f, -0.5f);
-	 leftCurve.p2 = V2(-0.3f, -0.2f);	 
-	 leftCurve.p3 = V2(0.3f, 0.2f);
-	 leftCurve.p4 = V2(-1.0f, 0.5f);
-	 
+
 	 MeshObject dynamic = AllocateMeshObject(80 * 3);
-	 result.elements[item.index] = CreateTrack(position, V3(1.0f, 2.0f, 1.0f), leftCurve, dynamic);
-	 result.elements[item.index].flags = Track::branch | Track::left;
-	 */
+
+	 v2 position = VirtualToReal(item.x, item.y);
+
+	 result.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), leftCurve, dynamic);
+	 result.elements[item.index].flags = Track::branch | Track::left;	 
       }
       else // is linear
-      {
-	 if((initialSize - firstFree) > 0)
+      {	
+	 if((initialSize - firstFree) > 0 && !(taken[item.x][item.y+1] & hasTrack))
 	 {
-	    result.adjList[item.index].flags = 1; // size of 1
+	    result.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
 	    vertices.Push({firstFree, item.x, item.y + 1});
+	    taken[item.x][item.y+1] |= hasTrack | (firstFree >> 2);
 	    result.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
+	 }
+	 else if(taken[item.x][item.y+1] & hasTrack)
+	 {
+	    result.adjList[item.index].e[0] = taken[item.x][item.y+1] << 2;
 	 }
 	 else
 	 {
 	    result.adjList[item.index].flags = 0;
 	 }
 
-	 /*
-	 v3 position = V3((float)item.x * 2.0f, (float)item.y * 2.0f, 0.0f);
+	 Curve linear = ConnectionsToCurve(item.x, item.y,
+					   item.x, item.y + 1);
 
-	 Curve linear;
-	 linear.p1 = V2(0.0f, -0.5f);
-	 linear.p2 = V2(0.0f, -0.5f);
-	 linear.p3 = V2(0.0f, 0.5f);
-	 linear.p4 = V2(0.0f, 0.5f);
-   
-	 result.elements[item.index] = CreateTrack(position, V3(1.0f, 2.0f, 1.0f), linear, LinearTrack);
+	 v2 position = VirtualToReal(item.x, item.y);
+	 result.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), linear, LinearTrack);
 	 result.elements[item.index].flags = Track::staticMesh;
-	 */
       }      
    }
 
    return result;
 }
 
+struct Player
+{
+   Object renderable;
+   Track *currentTrack;
+   i32 trackIndex;
+   float t;
+};
+
 struct GameState
 {   
    Camera camera;
-   Object sphereGuy;
+   Player sphereGuy;
    Collectibles collectibles;
    KeyState keyState;
    TrackGraph tracks;
 
    v3 lightPos;
-
-   Track testTrack; //@DELETE
-
-   Track *testTracks;
 };
 
 ShaderProgram
@@ -766,32 +872,59 @@ Object SpherePrimitive(v3 position, v3 scale, quat orientation)
    return result;
 }
 
-void UpdatePlayer(Object &player, Collectibles &collectibles)
+static inline
+v3 GetPositionOnTrack(Track &track, float t)
+{   
+   v2 displacement = CubicBezier(track.bezier, t);
+   return V3(displacement.x + track.renderable.worldPos.x,
+	     displacement.y + track.renderable.worldPos.y,
+	     track.renderable.worldPos.z);
+}
+
+void UpdatePlayer(Player &player, TrackGraph &tracks)
 {
-   player.worldPos.y += delta * 0.01f;
-
-   for(i32 i = 0; i < collectibles.size; ++i)
+   player.t += 0.01f * delta;
+   if(player.t > 1.0f)
    {
-      Object &other = collectibles.c[i];
+      player.t -= 1.0f;
 
-      // this only works if scale.x == scale.y == scale.z
-      float radiusOther = other.scale.x;
-      float radiusThis = player.scale.x;
-      float distance = fabsf(magnitude(player.worldPos - other.worldPos));
-
-      if(distance < radiusOther + radiusThis)
+      if((tracks.flags & TrackGraph::left) || (player.currentTrack->flags & Track::branch) == 0)
       {
-	 collectibles.remove(i);
-	 --i;
+	 if(tracks.adjList[player.trackIndex].hasLeft())
+	 {
+	    u32 newIndex = tracks.adjList[player.trackIndex].getLeft();
+	    player.currentTrack = &tracks.elements[newIndex];
+	    player.trackIndex = newIndex;
+	 }
+	 else
+	 {
+	    assert(false);
+	 }
+      }
+      else
+      {
+	 if(tracks.adjList[player.trackIndex].hasRight())
+	 {
+	    i32 newIndex = tracks.adjList[player.trackIndex].getRight();
+	    player.currentTrack = &tracks.elements[newIndex];
+	    player.trackIndex = newIndex;
+	 }
+	 else
+	 {
+	    assert(false);
+	 }
       }
    }
+
+   player.renderable.worldPos = GetPositionOnTrack(*player.currentTrack, player.t);
 }
 
 void UpdateCamera(Camera &camera, v3 playerPosition)
 {
    // have camera follow player
-   // camera.position.y = playerPosition.y;
-   camera.position.y += delta * 0.1f;
+   camera.position.y = playerPosition.y - 5.0f;
+   camera.position.x = playerPosition.x;
+   // camera.position.y += delta * 0.1f;
 }
 
 void CreateCollectibles(Collectibles &collectibles)
@@ -856,6 +989,7 @@ void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier)
       sample = CubicBezier(bezier, t);
 
       direction = Tangent(bezier, t);
+      
       perpindicular = V2(-direction.y, direction.x) * 0.5f;      
 
       v3 top2 = V3(sample.x, sample.y, 0.5f);
@@ -918,20 +1052,36 @@ void GameInit(GameState &state)
 
    Sphere = InitMeshObject("assets\\sphere.brian");
    LinearTrack = AllocateMeshObject(80 * 3);
-   Curve line;
-   line.p1 = V2(0.0f, -0.5f);
-   line.p2 = V2(0.0f, -0.5f);
-   line.p3 = V2(0.0f, 0.5f);
-   line.p4 = V2(0.0f, 0.5f);
+   
+   Curve line = ConnectionsToCurve(0, 0, 0, 1);
+   
+   v2 val = CubicBezier(line, 0.0f);
+   float y = val.y;
+   float difference = 0.0f;
+   for(i32 i = 1; i < 11; ++i)
+   {
+      float t = (float)i * 0.1f;
+
+      val = CubicBezier(line, t);
+      difference = val.y - y;
+      y = val.y;
+   }
+
    GenerateTrackSegmentVertices(LinearTrack, line);
 
    state.camera.position = V3(0.0f, 0.0f, 10.0f);
    state.camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.0f);
    state.lightPos = state.camera.position;
+
+   state.tracks = InitTrackGraph(20);
    
-   state.sphereGuy = SpherePrimitive(V3(0.0f, -2.0f, 5.0f),
-				     V3(1.0f, 1.0f, 1.0f),
-				     Quat(1.0f, 0.0f, 0.0f, 0.0f));   
+   state.sphereGuy.renderable = SpherePrimitive(V3(0.0f, -2.0f, 5.0f),
+						V3(1.0f, 1.0f, 1.0f),
+						Quat(1.0f, 0.0f, 0.0f, 0.0f));
+
+   state.sphereGuy.t = 0.0f;
+   state.sphereGuy.currentTrack = &state.tracks.elements[state.tracks.head];
+   state.sphereGuy.trackIndex = 0;
 
    Curve curve;
    curve.p1 = V2(0.0f, -0.5f);
@@ -940,97 +1090,96 @@ void GameInit(GameState &state)
    curve.p4 = V2(0.0f, 0.5f);
 
    //state.collectibles = Collectibles();
-   //CreateCollectibles(state.collectibles);
-
-   state.tracks = InitTrackGraph(20);
+   //CreateCollectibles(state.collectibles);   
 
    MeshObject CurvyTrack = AllocateMeshObject(80 * 3);
-   state.testTrack = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(0.5f, 2.0f, 0.5f), curve, CurvyTrack);
-   GenerateTrackSegmentVertices(state.testTrack);
-
-   /*
+   // state.testTrack = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(0.5f, 2.0f, 0.5f), curve, CurvyTrack);
+   //GenerateTrackSegmentVertices(state.testTrack);
+   
    for(i32 i = 0; i < state.tracks.size; ++i)
    {
       if(!(state.tracks.elements[i].flags & Track::staticMesh))
       {
 	 GenerateTrackSegmentVertices(state.tracks.elements[i]);
-      }
-   }
-   */
+      }      
+   }   
 
-   state.testTracks = TestInitTracks();
+   // state.testTracks = TestInitTracks();
 }
 
 void GameLoop(GameState &state)
 {
+
+   Track *tracks = state.tracks.elements;
+   for(i32 i = 0; i < state.tracks.size; ++i)
+   {
+      if(tracks[i].flags & Track::lerping)
+      {
+	 tracks[i].t = min(tracks[i].t + (0.1f * delta), 1.0f);
+	 tracks[i].bezier = lerp(tracks[i].beginLerp, tracks[i].endLerp, tracks[i].t);
+
+	 GenerateTrackSegmentVertices(tracks[i]);
+
+	 if(tracks[i].t == 1.0f)
+	 {
+	    tracks[i].flags &= ~Track::lerping;
+	 }
+      }
+   }
+
    m4 cameraTransform = CameraMatrix(state.camera);
 
-   //UpdatePlayer(state.sphereGuy, state.collectibles);
-   UpdateCamera(state.camera, state.sphereGuy.worldPos);
+   UpdatePlayer(state.sphereGuy, state.tracks);
+   UpdateCamera(state.camera, state.sphereGuy.renderable.worldPos);
    state.lightPos = state.camera.position;
    
-   //RenderPushObject(state.sphereGuy, cameraTransform, state.lightPos);
+   RenderPushObject(state.sphereGuy.renderable, cameraTransform, state.lightPos);
    /*
    for(i32 i = 0; i < state.collectibles.size; ++i)
    {
       RenderPushObject(state.collectibles.c[i], cameraTransform, state.lightPos); 
    }
    */
-   /*
+
+   
    for(i32 i = 0; i < state.tracks.size; ++i)
    {
       RenderPushObject(state.tracks.elements[i].renderable, cameraTransform, state.lightPos);
    }
-   */
-   // RenderPushObject(state.testTrack.renderable, cameraTransform, state.lightPos);
+   
 
-   for(i32 i = 0; i < 20; ++i)
-   {
-      RenderPushObject(state.testTracks[i].renderable, cameraTransform, state.lightPos);
-   }
+   /*
+   static float rot = 0.0f;
+   state.testTrack.renderable.orientation = Rotation(V3(0.0f, 1.0f, 0.0f), rot);
+   rot += delta / 100.0f;
+   RenderPushObject(state.testTrack.renderable, cameraTransform, state.lightPos);
+   */   
 }
 
-#if 0
 void OnKeyDown(GameState &state)
-{   
-   // toggle branch
-   if(state.keyState != down)
+{
+   Track *tracks = state.tracks.elements;
+
+   state.tracks.flags ^= TrackGraph::left;
+
+   for(i32 i = 0; i < state.tracks.size; ++i)
    {
-      for(int i = 0; i < state.lines.n; ++i)
+      // if already lerping
+      if((tracks[i].flags & (Track::branch | Track::lerping)) == (Track::branch | Track::lerping))
       {
-	 Track &line = state.lines.list[i];
-	 if(line.flags & BRANCH)
-	 {
-	    if(line.flags & RIGHT)
-	    {
-	       line.flags &= ~RIGHT;
-	       line.flags |= LEFT;
-
-	       if(line.left)
-	       {
-		  line.coords[1] = line.left->coords[0];
-	       }
-	    }
-	    else
-	    {
-	       line.flags &= ~LEFT;
-	       line.flags |= RIGHT;
-
-	       if(line.right)
-	       {
-		  line.coords[1] = line.right->coords[0];
-	       }
-	    }
-	 }
+	 Curve temp = tracks[i].beginLerp;
+	 tracks[i].beginLerp = tracks[i].endLerp;
+	 tracks[i].endLerp = temp;
+	 tracks[i].t = 1.0f - tracks[i].t;
       }
-
-
-      if(state.player.currentTrack->flags & BRANCH)
+      // else if branch but not already lerping
+      else if(tracks[i].flags & Track::branch)
       {
-	 state.camera.flags |= INTERPOLATING;	
-	 state.camera.interpElapsed = 0.0f;	 
+	 tracks[i].flags |= Track::lerping;
+
+	 tracks[i].beginLerp = tracks[i].bezier;
+	 tracks[i].endLerp = InvertX(tracks[i].bezier);
+	 tracks[i].t = 0.0f;
       }
    }
-   state.keyState = down;
 }
-#endif
