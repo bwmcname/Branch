@@ -73,6 +73,7 @@ struct ShaderProgram
    GLint MVPUniform;
    GLint VUniform;
    GLint MUniform;
+   GLint diffuseUniform;
    
    GLint vertexAttrib;
    GLint normalAttrib;
@@ -230,9 +231,7 @@ static inline
 v2 CubicBezier(v2 p1, v2 p2, v2 p3, v2 p4, float t)
 {
    // uses the quicker non matrix form of the equation
-   v2 result;
-
-   static float test = t;
+   v2 result;   
 
    float degree1 = 1 - t;   
    float degree2 = degree1 * degree1; // (1 - t)^2
@@ -322,6 +321,7 @@ CreateProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsi
    result.viewUniform = glGetUniformLocation(result.programHandle, "v");
    result.MVPUniform = glGetUniformLocation(result.programHandle, "mvp");
    result.lightPosUniform = glGetUniformLocation(result.programHandle, "lightPos");
+   result.diffuseUniform = glGetUniformLocation(result.programHandle, "diffuseColor");
 
    result.vertexAttrib = 1;
    result.normalAttrib = 2;
@@ -391,7 +391,7 @@ MeshObject InitMeshObject(char *filename)
    return result;
 }
 
-void RenderPushMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 lightPos)
+void RenderPushMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
 {
    glUseProgram(p.programHandle);
 
@@ -399,13 +399,13 @@ void RenderPushMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 l
    time += delta;
 
    m4 lightRotation = M4(Rotation(V3(0.0f, 1.0f, 0.0f), -time / 50.0f));
-
    m4 projection = Projection;
    m4 mvp = projection * view * transform;
    
    glUniformMatrix4fv(p.MVPUniform, 1, GL_FALSE, mvp.e);
    glUniformMatrix4fv(p.modelUniform, 1, GL_FALSE, transform.e);
    glUniformMatrix4fv(p.viewUniform, 1, GL_FALSE, view.e);
+   glUniform3fv(p.diffuseUniform, 1, diffuseColor.e);
    glUniform3fv(p.lightPosUniform, 1, lightPos.e);
    glBindVertexArray(b.handles.vao);
    glDrawArrays(GL_TRIANGLES, 0, b.mesh.vcount);
@@ -414,7 +414,7 @@ void RenderPushMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 l
 }
 
 static
-void RenderPushObject(Object &obj, m4 &camera, v3 lightPos)
+void RenderPushObject(Object &obj, m4 &camera, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
 {
    m4 orientation = M4(obj.orientation);
    m4 scale = Scale(obj.scale);
@@ -422,7 +422,7 @@ void RenderPushObject(Object &obj, m4 &camera, v3 lightPos)
    
    m4 transform = translation * scale * orientation;
    
-   RenderPushMesh(*obj.p, obj.meshBuffers, transform, camera, lightPos);
+   RenderPushMesh(*obj.p, obj.meshBuffers, transform, camera, lightPos, diffuseColor);
 }
 
 enum KeyState
@@ -519,6 +519,7 @@ struct TrackAttribute
       countMask = 0x3,
       branch = 0x4,
       left = 0x8,
+      right = 0x10,
    };
    
    i32 flags;
@@ -533,7 +534,7 @@ struct TrackAttribute
    inline
    i32 hasRight()
    {
-      return (flags & countMask) == 2;
+      return flags & right;
    }
 
    inline
@@ -558,6 +559,7 @@ struct TrackGraph
 
    Track *elements;
    TrackAttribute *adjList;
+   i32 capacity;
    i32 size;
    i32 head;
    i32 flags;
@@ -653,10 +655,18 @@ void CircularQueue<T>::ClearToZero()
    memset(elements, 0, max * sizeof(T));
 }
 
-struct TrackInfo
+// an "order" for a track to be placed
+// used in the queue when creating the graph
+struct TrackOrder
 {
    u32 index;
    i32 x, y;
+
+   enum
+   {
+      dontBranch = 0x1,
+   };
+   i32 rules;
 };
 
 struct VirtualTrackCoords
@@ -711,6 +721,43 @@ Curve ConnectionsToCurve(i32 x1, i32 y1,
    return result;
 }
 
+// Index for the taken array of InitTrackGraph with bounds checking
+static inline
+i32 TemporaryMatrixIndexOf(i32 i)
+{
+   if(i < 10 && i >= -10)
+   {
+      return i + 10;
+   }
+   assert(false);
+
+   return 0;
+}
+
+struct VirtualCoord
+{
+   i32 x;
+   i32 y;
+};
+
+static inline
+i32 CompareVirtualCoords(VirtualCoord a, VirtualCoord b)
+{
+   return a.x == b.x && a.y == b.y;
+}
+
+static inline
+i32 HashVirtualCoord(VirtualCoord key)
+{
+   return a.x + a.y;
+}
+
+// Getting the location flags with bounds checking
+#define LocationFlags(arr, x, y) arr[TemporaryMatrixIndexOf(x)][TemporaryMatrixIndexOf(y)]
+
+// makes sure the value is within the valid range
+#define IsValid(i) ((i) < 10 && (i) >= -10)
+
 static
 TrackGraph InitTrackGraph(i32 initialSize)
 {
@@ -724,63 +771,91 @@ TrackGraph InitTrackGraph(i32 initialSize)
    // @leak
    result.adjList = (TrackAttribute *)malloc(sizeof(TrackAttribute) * initialSize);
 
+   for(i32 i = 0; i < 20; ++i)
+   {
+      result.adjList[i] = {0};
+   }
+
+   /*
    static u8 taken[20][20];
    for(u8 i = 0; i < 20; ++i)
-   {
+   {      
       for(u8 j = 0; j < 20; ++j)
       {
 	 taken[i][j] = 0;
       }
    }
+   */
+
+   HashMap<VirtualCoord, u8, HashVirtualCoord, CompareVirtualCoords, 0> taken(1024); // lol
 
    enum
    {
       hasTrack = 0x1,
-      hasBranch = 0x2,
+      isBranch = 0x2,
    };
 
-   result.size = 20;
-   CircularQueue<TrackInfo> vertices(initialSize);
+   result.capacity = initialSize;   
+   CircularQueue<TrackOrder> orders(initialSize);
    
-   vertices.Push({0, 0, 0}); // Push root segment.
+   orders.Push({0, 0, 0, 0}); // Push root segment.
    u32 firstFree = 1; // next element that can be added to the queue
-   while(vertices.size)
+
+   i32 processed = 0;
+   while(orders.size > 0)
    {
-      TrackInfo item = vertices.Pop();
-      if(rand() % 4 == 0) // is a branch
-      {	
+      TrackOrder item = orders.Pop();
+      ++processed;
+      if(!(item.rules & TrackOrder::dontBranch) && rand() % 4 == 0) // is a branch
+      {
+	 // amount of subsequent branches
 	 int branches = 0;      	 	 
 	 
 	 // Queue up subsequent branches
-	 if(initialSize - firstFree > 0 && !(taken[item.x-1][item.y+1] & hasTrack))
+	 // can we fit a left track?
+	 if(IsValid(item.x-1) && IsValid(item.y+1))
 	 {
-	    ++branches;
-	    vertices.Push({firstFree, item.x - 1, item.y + 1}); // left side
+	    if(initialSize - firstFree > 0 &&	    
+	       !(LocationFlags(taken, item.x-1, item.y+1) & hasTrack))
+	    {
+	       ++branches;
+	       orders.Push({firstFree, item.x-1, item.y+1, TrackOrder::dontBranch}); // left side
 
-	    taken[item.x-1][item.y+1] |= hasTrack | (firstFree >> 2);
-	    result.adjList[item.index].e[0] = firstFree++;	    
-	 }
-	 else if(taken[item.x-1][item.y+1] & hasTrack)
-	 {
-	    result.adjList[item.index].e[0] = (u32)taken[item.x-1][item.y+1] << 2;
-	    ++branches;
-	 }
+	       LocationFlags(taken, item.x-1, item.y+1) |= hasTrack | isBranch | (firstFree << 2);
+	       result.adjList[item.index].e[0] = firstFree++;
+	       result.adjList[item.index].flags |= TrackAttribute::left;
+	    }
 
-	 if(initialSize - firstFree > 0 && !(taken[item.x+1][item.y+1] & hasTrack))
-	 {
-	    ++branches;	    
-	    vertices.Push({firstFree, item.x + 1, item.y + 1}); // right side
-
-	    taken[item.x+1][item.y+1] |= hasTrack | (firstFree >> 2);
-	    result.adjList[item.index].e[1] = firstFree++;	    
-	 }
-	 else if(taken[item.x+1][item.y+1] & hasTrack)
-	 {
-	    result.adjList[item.index].e[1] = (u32)taken[item.x+1][item.y+1] << 2;
-	    ++branches;
+	    else if(LocationFlags(taken, item.x-1, item.y+1) & hasTrack) // is a left track already in that space?
+	    {
+	       result.adjList[item.index].e[0] = LocationFlags(taken, item.x-1, item.y+1) >> 2;
+	       result.adjList[item.index].flags |= TrackAttribute::left;
+	       ++branches;
+	    }
 	 }
 	 
-	 result.adjList[item.index].flags = branches | TrackAttribute::branch | TrackAttribute::left;
+	 // can we fit a right track?
+	 if(IsValid(item.x+1) && IsValid(item.y+1))
+	 {
+	    if(initialSize - firstFree > 0 &&	    
+	       !(LocationFlags(taken, item.x+1, item.y+1) & hasTrack))
+	    {
+	       ++branches;	    
+	       orders.Push({firstFree, item.x+1, item.y+1, TrackOrder::dontBranch}); // right side
+
+	       LocationFlags(taken, item.x+1, item.y+1) |= hasTrack | isBranch | (firstFree << 2);
+	       result.adjList[item.index].e[1] = firstFree++;
+	       result.adjList[item.index].flags |= TrackAttribute::right;
+	    }
+	    else if(LocationFlags(taken, item.x+1, item.y+1) & hasTrack) // is a right track already in that space
+	    {
+	       result.adjList[item.index].e[1] = LocationFlags(taken, item.x+1, item.y+1) >> 2;
+	       result.adjList[item.index].flags |= TrackAttribute::right;
+	       ++branches;
+	    }
+	 }
+	 
+	 result.adjList[item.index].flags |= branches | TrackAttribute::branch;
 
 	 Curve leftCurve = ConnectionsToCurve(item.x, item.y,
 					      item.x - 1, item.y + 1);
@@ -794,17 +869,21 @@ TrackGraph InitTrackGraph(i32 initialSize)
 	 result.elements[item.index].flags = Track::branch | Track::left;	 
       }
       else // is linear
-      {	
-	 if((initialSize - firstFree) > 0 && !(taken[item.x][item.y+1] & hasTrack))
+      {
+	 if(IsValid(item.x) && IsValid(item.y+1))
 	 {
-	    result.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
-	    vertices.Push({firstFree, item.x, item.y + 1});
-	    taken[item.x][item.y+1] |= hasTrack | (firstFree >> 2);
-	    result.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
-	 }
-	 else if(taken[item.x][item.y+1] & hasTrack)
-	 {
-	    result.adjList[item.index].e[0] = taken[item.x][item.y+1] << 2;
+	    if((initialSize - firstFree) > 0 &&
+	       !(LocationFlags(taken, item.x, item.y+1) & hasTrack))
+	    {
+	       result.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
+	       orders.Push({firstFree, item.x, item.y+1, 0});
+	       LocationFlags(taken, item.x, item.y+1) |= hasTrack | (firstFree << 2);
+	       result.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
+	    }
+	    else if(LocationFlags(taken, item.x, item.y+1) & hasTrack)
+	    {
+	       result.adjList[item.index].e[0] = LocationFlags(taken, item.x, item.y+1) << 2;
+	    }
 	 }
 	 else
 	 {
@@ -817,9 +896,29 @@ TrackGraph InitTrackGraph(i32 initialSize)
 	 v2 position = VirtualToReal(item.x, item.y);
 	 result.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), linear, LinearTrack);
 	 result.elements[item.index].flags = Track::staticMesh;
-      }      
+      }
+
+      // when placing tracks after branches, if there is already
+      // a linear track behind the placed track, it will have to be manually
+      // connect here.
+      if(IsValid(item.x) && IsValid(item.y-1))
+      {
+	 u8 behind = LocationFlags(taken, item.x, item.y-1);
+	 if(behind)
+	 {
+	    u8 index = behind >> 2;
+
+	    // if it is not a branch, and if it is not already connected
+	    if(!(result.adjList[index].flags & TrackAttribute::branch) && (result.adjList[index].flags & TrackAttribute::countMask) == 0)
+	    {
+	       result.adjList[index].flags |= 1 | TrackAttribute::left;
+	       result.adjList[index].e[0] = item.index;
+	    }	 
+	 }
+      }
    }
 
+   result.size = processed;
    return result;
 }
 
@@ -1133,26 +1232,25 @@ void GameLoop(GameState &state)
    UpdateCamera(state.camera, state.sphereGuy.renderable.worldPos);
    state.lightPos = state.camera.position;
    
-   RenderPushObject(state.sphereGuy.renderable, cameraTransform, state.lightPos);
+   RenderPushObject(state.sphereGuy.renderable, cameraTransform, state.lightPos, V3(1.0f, 0.0f, 0.0f));
    /*
-   for(i32 i = 0; i < state.collectibles.size; ++i)
-   {
-      RenderPushObject(state.collectibles.c[i], cameraTransform, state.lightPos); 
-   }
+     for(i32 i = 0; i < state.collectibles.size; ++i)
+     {
+     RenderPushObject(state.collectibles.c[i], cameraTransform, state.lightPos); 
+     }
    */
-
    
    for(i32 i = 0; i < state.tracks.size; ++i)
    {
-      RenderPushObject(state.tracks.elements[i].renderable, cameraTransform, state.lightPos);
+      RenderPushObject(state.tracks.elements[i].renderable, cameraTransform, state.lightPos, V3(0.0f, 0.0f, 1.0f));
    }
    
 
    /*
-   static float rot = 0.0f;
-   state.testTrack.renderable.orientation = Rotation(V3(0.0f, 1.0f, 0.0f), rot);
-   rot += delta / 100.0f;
-   RenderPushObject(state.testTrack.renderable, cameraTransform, state.lightPos);
+     static float rot = 0.0f;
+     state.testTrack.renderable.orientation = Rotation(V3(0.0f, 1.0f, 0.0f), rot);
+     rot += delta / 100.0f;
+     RenderPushObject(state.testTrack.renderable, cameraTransform, state.lightPos);
    */   
 }
 
@@ -1183,3 +1281,4 @@ void OnKeyDown(GameState &state)
       }
    }
 }
+   

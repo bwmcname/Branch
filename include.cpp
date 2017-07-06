@@ -12,6 +12,7 @@
 #pragma warning(pop)
 
 #include "branch_common.h"
+#include "map.cpp"
 #include "vertinc.h"
 #include "win32.h"
 #include "main.cpp"

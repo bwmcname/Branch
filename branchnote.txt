@@ -1,7 +1,43 @@
 
-Track Graph
+Track Scene Graph
+* not used for generation, only used for realtime calculations. @clarify this
 -- Only have reachable tracks in the graph.
    - finding edges that are not reachable from the 'current edge' (track the player is on)
      should be quick. Maybe explore all possible paths and mark those reachable, and every one
      not marked after searching gets evicted.
    - All vertices on the graph can have at most two edges, so a fixed adjacency list may work.
+
+How to build the graph
+-- Generate a track with "Grammars"
+   - Grammars are a set of rules for a "language", where as a language is
+     the set of all "strings" (which for our purposes is runs tracks) that are generated
+     by a Grammar.
+
+Different abstract types of tracks (followed by a letter for easy representation with grammar rules)
+-- linear: a
+-- branch: b
+-- loop: c
+
+Let's represent the entry point to our run of tracks as E
+Here are some example rules. "x -> y" reads as "x generates y" and "," reads as "or"
+
+E -> aA
+A -> aA, bB, cC, (empty)
+B -> aAa
+C -> aAa
+
+An example of a valid run of tracks is
+E
+-> aA
+-> abB
+-> abaAa
+-> abacCa
+-> abacaAaa
+-> abaca(empty)aa
+which results in abacaaa
+or linear->branch->linear->loop->linear->linear
+
+Here's how it works
+Randomly generate valid run of tracks
+With the run of tracks, generate the "Scene Graph"
+The scene graph is then interpreted by the renderer and the logic loop.
