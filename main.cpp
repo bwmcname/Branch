@@ -1,5 +1,5 @@
 
-#define assert(x) ((x) ? 0 : *((char *)0) = 'x')
+#define TRACK_SEGMENT_SIZE 12.0f
 
 #define SCREEN_TOP ((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
 #define SCREEN_BOTTOM -((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
@@ -10,11 +10,112 @@
 
 static float delta;
 static m4 Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
+static m4 InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 60.0f);
+
+static const u32 RectangleAttribCount = 6;
+static GLuint RectangleUVBuffer;
+static float RectangleUVs[] =
+{
+   0.0f, 1.0f,
+   1.0f, 1.0f,
+   0.0f, 0.0f,
+
+   1.0f, 1.0f,
+   1.0f, 0.0f,
+   0.0f, 0.0f
+};
+
+static GLuint RectangleVertBuffer;
+static float RectangleVerts[] =
+{
+   -0.5f, -0.5f,
+   0.5f, -0.5f,
+   -0.5f, 0.5f,
+
+   0.5f, -0.5f,
+   0.5f, 0.5f,
+   -0.5f, 0.5f
+};
+
+static GLuint ScreenVertBuffer;
+static float ScreenVerts[] =
+{
+   -1.0f, -1.0f,
+   1.0f, -1.0f,
+   -1.0f, 1.0f,
+
+   1.0f, -1.0f,
+   1.0f, 1.0f,
+   -1.0f, 1.0f
+};
+
+#define BEGIN_TIME() u64 LOCAL_TIME = __rdtsc()
+#define END_TIME() LOCAL_TIME = __rdtsc() - LOCAL_TIME
+#define READ_TIME() LOCAL_TIME
+
+struct Arena
+{
+   size_t size;
+   u8 *base;
+   u8 *current;
+};
+
+struct StackAllocator
+{
+   struct Chunk
+   {
+      Chunk *last;
+      u8 *base;
+      size_t size;
+   };
+
+   Chunk *last;
+   u8 *base;
+   
+   u8 *push(size_t size);
+   void pop();
+};
+
+static inline
+void InitStackAllocator(StackAllocator *allocator)
+{      
+   allocator->base = (u8 *)allocator + sizeof(StackAllocator);
+   allocator->last = (StackAllocator::Chunk *)allocator->base;
+   allocator->last->size = 0;
+   allocator->last->base = (u8 *)allocator->last;
+}
+
+u8 *StackAllocator::push(size_t allocation)
+{
+   Chunk *newChunk = (Chunk *)(last->base + last->size);
+   newChunk->base = ((u8 *)newChunk) + sizeof(Chunk);
+   newChunk->size = allocation;
+   newChunk->last = last;
+
+   last = newChunk;
+
+   return newChunk->base;
+}
+
+void StackAllocator::pop()
+{
+   last->size = 0;
+   last->base = (u8 *)last;
+   last = last->last;
+}
 
 struct Camera
 {
+   enum
+   {
+      lerping,
+   };
+
    quat orientation;
    v3 position;
+
+   u32 flags;
+   float t;
 };
 
 static
@@ -60,6 +161,7 @@ struct MeshObject
 
 static MeshObject Sphere;
 static MeshObject LinearTrack;
+static MeshObject BranchTrack;
 
 struct ShaderProgram
 {
@@ -77,6 +179,8 @@ struct ShaderProgram
    
    GLint vertexAttrib;
    GLint normalAttrib;
+
+   GLint texUniform;
 };
 
 static ShaderProgram DefaultShader;
@@ -90,81 +194,6 @@ struct Object
    MeshObject meshBuffers;
    ShaderProgram *p;
 };
-
-//@ need to do this so that we can keep a consistent candy cane shape
-//  pattern on different sized lines
-void GenerateUVs(v2 *vertices, u32 count, v2 *uvBuffer, float length)
-{
-   for(u32 i = 0; i < count; ++i)
-   {
-      if(vertices[i].x < 0.0f)
-      {
-	 uvBuffer[i].x = 0.0f;
-
-	 if(vertices[i].y < 0.0f)
-	 {
-	    uvBuffer[i].y = 4.0f * length;
-	 }
-	 else
-	 {
-	    uvBuffer[i].y = 0.0f;
-	 }
-      }
-      else
-      {
-	 uvBuffer[i].x = 1.0f;
-
-	 if(vertices[i].y < 0.0f)
-	 {
-	    uvBuffer[i].y = (4.0f * length) - 0.1f;
-	 }
-	 else
-	 {
-	    uvBuffer[i].y = -0.1f;
-	 }
-      }
-   }
-}
-
-static inline
-m3 RotationAboutZ(float rads)
-{
-   m3 result = {};
-
-   result.e2[0][0] = cosf(rads);
-   result.e2[0][1] = -sinf(rads);
-   result.e2[1][0] = sinf(rads);
-   result.e2[1][1] = cosf(rads);
-   result.e2[2][2] = 1.0f;
-
-   return result;
-}
-
-static inline
-m3 Scale3(float x, float y, float z)
-{
-   m3 result = {};
-
-   result.e2[0][0] = x;
-   result.e2[1][1] = y;
-   result.e2[2][2] = z;
-
-   return result;
-}
-
-static inline
-m3 Translate(float x, float y)
-{
-   m3 result = {};
-
-   result.e2[2][0] = x;
-   result.e2[2][1] = y;
-
-   result.e2[0][0] = 1.0f;
-   result.e2[1][1] = 1.0f;
-   result.e2[2][2] = 1.0f;
-   return result;
-}
 
 union tri2
 {
@@ -207,6 +236,9 @@ union Curve
    v4 lerpables[2];
 };
 
+static Curve GlobalLinearCurve;
+static Curve GlobalBranchCurve;
+
 static inline
 Curve InvertX(Curve c)
 {
@@ -227,7 +259,7 @@ Curve lerp(Curve a, Curve b, float t)
    return result;
 }
 
-static inline
+static __forceinline
 v2 CubicBezier(v2 p1, v2 p2, v2 p3, v2 p4, float t)
 {
    // uses the quicker non matrix form of the equation
@@ -245,10 +277,21 @@ v2 CubicBezier(v2 p1, v2 p2, v2 p3, v2 p4, float t)
    return result;
 }
 
-static inline
+static __forceinline
 v2 CubicBezier(Curve c, float t)
 {
    return CubicBezier(c.p1, c.p2, c.p3, c.p4, t);
+}
+
+static inline
+GLuint UploadVertices(float *vertices, i32 count, i32 components = 3)
+{
+   GLuint result;
+   glGenBuffers(1, &result);
+   glBindBuffer(GL_ARRAY_BUFFER, result);
+   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * count * components), (void *)vertices, GL_STATIC_DRAW);
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+   return result;
 }
 
 MeshBuffers
@@ -275,8 +318,7 @@ UploadStaticMesh(float *vertices, v3 *normals, i32 count, i32 components = 3)
 
 // like the previous function, but does not upload any data, just allocates the buffers
 // NOT NECASSARY TO CREATING MESH BUFFERS (you may want to use the function above)
-MeshBuffers
-AllocateMeshBuffers(i32 count, i32 components = 3)
+MeshBuffers AllocateMeshBuffers(i32 count, i32 components = 3)
 {
    MeshBuffers result;
    
@@ -284,7 +326,7 @@ AllocateMeshBuffers(i32 count, i32 components = 3)
    glBindVertexArray(result.vao);
    glGenBuffers(1, &result.vbo);
    glBindBuffer(GL_ARRAY_BUFFER, result.vbo);
-   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * count * components), 0, GL_DYNAMIC_DRAW);   
+   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * count * components), 0, GL_DYNAMIC_DRAW);
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glVertexAttribPointer(VERTEX_LOCATION, components, GL_FLOAT, GL_FALSE, 0, 0);
    glGenBuffers(1, &result.nbo);
@@ -322,6 +364,8 @@ CreateProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsi
    result.MVPUniform = glGetUniformLocation(result.programHandle, "mvp");
    result.lightPosUniform = glGetUniformLocation(result.programHandle, "lightPos");
    result.diffuseUniform = glGetUniformLocation(result.programHandle, "diffuseColor");
+
+   result.texUniform = glGetUniformLocation(result.programHandle, "tex");
 
    result.vertexAttrib = 1;
    result.normalAttrib = 2;
@@ -399,7 +443,7 @@ void RenderPushMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 l
    time += delta;
 
    m4 lightRotation = M4(Rotation(V3(0.0f, 1.0f, 0.0f), -time / 50.0f));
-   m4 projection = Projection;
+   m4 projection = InfiniteProjection;
    m4 mvp = projection * view * transform;
    
    glUniformMatrix4fv(p.MVPUniform, 1, GL_FALSE, mvp.e);
@@ -431,51 +475,6 @@ enum KeyState
    up,
 };
 
-struct Collectibles
-{
-   // Right now, this array is limited to 10 collectibles.
-   Object *c;
-   i32 size;
-
-   void put(Object o);
-   Object get(i32 i);
-   void remove(i32 i);
-   Collectibles();
-};
-
-Collectibles::Collectibles()
-{
-   c = (Object *)malloc(sizeof(Object) * 10);
-   size = 0;
-}
-
-void
-Collectibles::put(Object o)
-{
-   assert(size <= 10);
-
-   c[size++] = o;   
-}
-
-Object
-Collectibles::get(i32 i)
-{
-   return c[i];
-}
-
-void
-Collectibles::remove(i32 i)
-{
-   assert(i < size && i < 10);
-
-   for(int j = i; j < size-1; ++j)
-   {
-      c[j] = c[j + 1];
-   }
-
-   --size;
-}
-
 struct Track
 {
    enum
@@ -483,20 +482,16 @@ struct Track
       staticMesh = 0x1,
       branch = 0x2,
       left = 0x8, // else, right
-      lerping = 0x10
+      breaks = 0x10,
    };
 
    Object renderable;
-   Curve bezier;
+   Curve *bezier;
    i32 flags;
-
-   Curve beginLerp;
-   Curve endLerp;
-   float t;
 };
 
 static inline
-Track CreateTrack(v3 position, v3 scale, Curve bezier, MeshObject &buffers)
+Track CreateTrack(v3 position, v3 scale, Curve *bezier, MeshObject &buffers)
 {
    Object obj;
    obj.worldPos = position;
@@ -520,6 +515,7 @@ struct TrackAttribute
       branch = 0x4,
       left = 0x8,
       right = 0x10,
+      breaks = 0x20,
    };
    
    i32 flags;
@@ -555,6 +551,7 @@ struct TrackGraph
    enum
    {
       left = 0x1,
+      switching = 0x2,
    };
 
    Track *elements;
@@ -563,6 +560,11 @@ struct TrackGraph
    i32 size;
    i32 head;
    i32 flags;
+
+   // switch lerp state 
+   float switchDelta; // how much time has progressed (0 to 1) after the switch is flipped
+   Curve beginLerp;
+   Curve endLerp;
 };
 
 template <typename T>
@@ -674,37 +676,16 @@ struct VirtualTrackCoords
    i32 x, y;
 };
 
-#if 0
-static
-Track *TestInitTracks()
-{
-   Track *vertices = (Track *)malloc(sizeof(Track) * 20);
-
-   Curve line;
-   line.p1 = V2(0.0f, -0.5f);
-   line.p2 = V2(0.0f, -0.5f);
-   line.p3 = V2(0.0f, 0.5f);
-   line.p4 = V2(0.0f, 0.5f);
-   
-   for(i32 i = 0; i < 20; ++i)
-   {
-      vertices[i] = CreateTrack(V3(0.0f, (float)i * 5.0f, 0.0f), V3(0.5f, 5.0f, 0.5f),
-				line, LinearTrack);
-   }
-
-   return vertices;
-}
-#endif
-
 static inline
 v2 VirtualToReal(i32 x, i32 y)
 {
-   return V2((float)x * 4.0f, (float)y * 4.0f);
+   return V2((float)x * TRACK_SEGMENT_SIZE, (float)y * TRACK_SEGMENT_SIZE);
 }
 
+// returns a linear bezier curve
 static inline
-Curve ConnectionsToCurve(i32 x1, i32 y1,
-			 i32 x2, i32 y2)
+Curve LinearCurve(i32 x1, i32 y1,
+		  i32 x2, i32 y2)
 {
    v2 begin = VirtualToReal(x1, y1);
    v2 end = VirtualToReal(x2, y2);
@@ -721,17 +702,40 @@ Curve ConnectionsToCurve(i32 x1, i32 y1,
    return result;
 }
 
-// Index for the taken array of InitTrackGraph with bounds checking
 static inline
-i32 TemporaryMatrixIndexOf(i32 i)
+Curve BreakCurve(i32 x, i32 y)
 {
-   if(i < 10 && i >= -10)
-   {
-      return i + 10;
-   }
-   assert(false);
+   v2 begin = VirtualToReal(x, y);
+   v2 end = V2(begin.x, begin.y + (TRACK_SEGMENT_SIZE / 2.0f));
 
-   return 0;
+   v2 direction = end - begin;
+
+   Curve result;
+   result.p1 = begin;
+   result.p2 = 0.333333f * direction;
+   result.p3 = 0.666666f * direction;
+   result.p4 = direction;
+
+   return result;
+}
+
+static inline
+Curve BranchCurve(i32 x1, i32 y1,
+		  i32 x2, i32 y2)
+{
+   v2 begin = VirtualToReal(x1, y1);
+   v2 end = VirtualToReal(x2, y2);
+
+   v2 direction = end - begin;
+
+   // right now, just a straight line
+   Curve result;
+   result.p1 = V2(0.0f, 0.0f);
+   result.p2 = V2(0.0f, direction.y * 0.666667f);
+   result.p3 = V2(direction.x, direction.y * 0.333333f);
+   result.p4 = direction;
+
+   return result;
 }
 
 struct VirtualCoord
@@ -740,27 +744,23 @@ struct VirtualCoord
    i32 y;
 };
 
-static inline
+inline
 i32 CompareVirtualCoords(VirtualCoord a, VirtualCoord b)
 {
    return a.x == b.x && a.y == b.y;
 }
 
-static inline
+inline
 i32 HashVirtualCoord(VirtualCoord key)
 {
-   return a.x + a.y;
+   return key.x + key.y;
 }
-
-// Getting the location flags with bounds checking
-#define LocationFlags(arr, x, y) arr[TemporaryMatrixIndexOf(x)][TemporaryMatrixIndexOf(y)]
-
-// makes sure the value is within the valid range
-#define IsValid(i) ((i) < 10 && (i) >= -10)
 
 static
 TrackGraph InitTrackGraph(i32 initialSize)
 {
+   BEGIN_TIME();
+   
    TrackGraph result;
 
    result.head = 0;   
@@ -771,28 +771,18 @@ TrackGraph InitTrackGraph(i32 initialSize)
    // @leak
    result.adjList = (TrackAttribute *)malloc(sizeof(TrackAttribute) * initialSize);
 
-   for(i32 i = 0; i < 20; ++i)
+   for(i32 i = 0; i < initialSize; ++i)
    {
       result.adjList[i] = {0};
    }
 
-   /*
-   static u8 taken[20][20];
-   for(u8 i = 0; i < 20; ++i)
-   {      
-      for(u8 j = 0; j < 20; ++j)
-      {
-	 taken[i][j] = 0;
-      }
-   }
-   */
-
-   HashMap<VirtualCoord, u8, HashVirtualCoord, CompareVirtualCoords, 0> taken(1024); // lol
+   HashMap<VirtualCoord, u32, HashVirtualCoord, CompareVirtualCoords, 0> taken(1024); // lol
 
    enum
    {
       hasTrack = 0x1,
       isBranch = 0x2,
+      hasBreak = 0x4,
    };
 
    result.capacity = initialSize;   
@@ -806,107 +796,87 @@ TrackGraph InitTrackGraph(i32 initialSize)
    {
       TrackOrder item = orders.Pop();
       ++processed;
-      if(!(item.rules & TrackOrder::dontBranch) && rand() % 4 == 0) // is a branch
+
+      long roll = rand();
+      if(!(item.rules & TrackOrder::dontBranch) && roll % 4 == 0) // is a branch
       {
 	 // amount of subsequent branches
 	 int branches = 0;      	 	 
 	 
 	 // Queue up subsequent branches
 	 // can we fit a left track?
-	 if(IsValid(item.x-1) && IsValid(item.y+1))
+	 u32 leftFlags = taken.get({item.x-1, item.y+1});
+	 if(initialSize - firstFree > 0 &&
+	    !(leftFlags & (hasTrack | hasBreak)))
 	 {
-	    if(initialSize - firstFree > 0 &&	    
-	       !(LocationFlags(taken, item.x-1, item.y+1) & hasTrack))
-	    {
-	       ++branches;
-	       orders.Push({firstFree, item.x-1, item.y+1, TrackOrder::dontBranch}); // left side
+	    ++branches;
+	    orders.Push({firstFree, item.x-1, item.y+1, TrackOrder::dontBranch}); // left side
 
-	       LocationFlags(taken, item.x-1, item.y+1) |= hasTrack | isBranch | (firstFree << 2);
-	       result.adjList[item.index].e[0] = firstFree++;
-	       result.adjList[item.index].flags |= TrackAttribute::left;
-	    }
+	    taken.put({item.x-1, item.y+1}, leftFlags | hasTrack | isBranch | (firstFree << 2));
+	    result.adjList[item.index].e[0] = firstFree++;
+	    result.adjList[item.index].flags |= TrackAttribute::left;
+	 }
 
-	    else if(LocationFlags(taken, item.x-1, item.y+1) & hasTrack) // is a left track already in that space?
-	    {
-	       result.adjList[item.index].e[0] = LocationFlags(taken, item.x-1, item.y+1) >> 2;
-	       result.adjList[item.index].flags |= TrackAttribute::left;
-	       ++branches;
-	    }
+	 else if(leftFlags & (hasTrack | hasBreak)) // is a left track already in that space?
+	 {
+	    result.adjList[item.index].e[0] = leftFlags >> 2;
+	    result.adjList[item.index].flags |= TrackAttribute::left;
+	    ++branches;
 	 }
 	 
 	 // can we fit a right track?
-	 if(IsValid(item.x+1) && IsValid(item.y+1))
+	 u32 rightFlags = taken.get({item.x+1, item.y+1});
+	 if(initialSize - firstFree > 0 &&	    
+	    !(rightFlags & (hasTrack | hasBreak)))
 	 {
-	    if(initialSize - firstFree > 0 &&	    
-	       !(LocationFlags(taken, item.x+1, item.y+1) & hasTrack))
-	    {
-	       ++branches;	    
-	       orders.Push({firstFree, item.x+1, item.y+1, TrackOrder::dontBranch}); // right side
+	    ++branches;
+	    orders.Push({firstFree, item.x+1, item.y+1, TrackOrder::dontBranch}); // right side
 
-	       LocationFlags(taken, item.x+1, item.y+1) |= hasTrack | isBranch | (firstFree << 2);
-	       result.adjList[item.index].e[1] = firstFree++;
-	       result.adjList[item.index].flags |= TrackAttribute::right;
-	    }
-	    else if(LocationFlags(taken, item.x+1, item.y+1) & hasTrack) // is a right track already in that space
-	    {
-	       result.adjList[item.index].e[1] = LocationFlags(taken, item.x+1, item.y+1) >> 2;
-	       result.adjList[item.index].flags |= TrackAttribute::right;
-	       ++branches;
-	    }
+	    taken.put({item.x+1, item.y+1}, rightFlags | hasTrack | isBranch | (firstFree << 2));
+	    result.adjList[item.index].e[1] = firstFree++;
+	    result.adjList[item.index].flags |= TrackAttribute::right;
+	 }
+	 else if(rightFlags & (hasTrack | hasBreak)) // is a right track already in that space
+	 {
+	    result.adjList[item.index].e[1] = rightFlags >> 2;
+	    result.adjList[item.index].flags |= TrackAttribute::right;
+	    ++branches;
 	 }
 	 
 	 result.adjList[item.index].flags |= branches | TrackAttribute::branch;
 
-	 Curve leftCurve = ConnectionsToCurve(item.x, item.y,
-					      item.x - 1, item.y + 1);
-
-
-	 MeshObject dynamic = AllocateMeshObject(80 * 3);
-
 	 v2 position = VirtualToReal(item.x, item.y);
-
-	 result.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), leftCurve, dynamic);
+       
+	 result.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalBranchCurve, BranchTrack);
 	 result.elements[item.index].flags = Track::branch | Track::left;	 
       }
       else // is linear
       {
-	 if(IsValid(item.x) && IsValid(item.y+1))
+	 u32 behindFlags = taken.get({item.x, item.y+1});
+	 if((initialSize - firstFree) > 0 &&
+	    !(behindFlags & hasTrack))
 	 {
-	    if((initialSize - firstFree) > 0 &&
-	       !(LocationFlags(taken, item.x, item.y+1) & hasTrack))
-	    {
-	       result.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
-	       orders.Push({firstFree, item.x, item.y+1, 0});
-	       LocationFlags(taken, item.x, item.y+1) |= hasTrack | (firstFree << 2);
-	       result.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
-	    }
-	    else if(LocationFlags(taken, item.x, item.y+1) & hasTrack)
-	    {
-	       result.adjList[item.index].e[0] = LocationFlags(taken, item.x, item.y+1) << 2;
-	    }
+	    result.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
+	    orders.Push({firstFree, item.x, item.y+1, 0});
+	    taken.put({item.x, item.y+1}, behindFlags | hasTrack | (firstFree << 2));
+	    result.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
 	 }
-	 else
+	 else if(behindFlags & hasTrack)
 	 {
-	    result.adjList[item.index].flags = 0;
+	    result.adjList[item.index].e[0] = behindFlags << 2;
 	 }
-
-	 Curve linear = ConnectionsToCurve(item.x, item.y,
-					   item.x, item.y + 1);
-
+	 
 	 v2 position = VirtualToReal(item.x, item.y);
-	 result.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), linear, LinearTrack);
+	 result.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve, LinearTrack);
 	 result.elements[item.index].flags = Track::staticMesh;
-      }
 
-      // when placing tracks after branches, if there is already
-      // a linear track behind the placed track, it will have to be manually
-      // connect here.
-      if(IsValid(item.x) && IsValid(item.y-1))
-      {
-	 u8 behind = LocationFlags(taken, item.x, item.y-1);
+	 // when placing tracks after branches, if there is already
+	 // a linear track behind the placed track, it will have to be manually
+	 // connected here.
+	 u32 behind = taken.get({item.x, item.y-1});
 	 if(behind)
 	 {
-	    u8 index = behind >> 2;
+	    u32 index = behind >> 2;
 
 	    // if it is not a branch, and if it is not already connected
 	    if(!(result.adjList[index].flags & TrackAttribute::branch) && (result.adjList[index].flags & TrackAttribute::countMask) == 0)
@@ -915,10 +885,12 @@ TrackGraph InitTrackGraph(i32 initialSize)
 	       result.adjList[index].e[0] = item.index;
 	    }	 
 	 }
-      }
+      }      
    }
 
    result.size = processed;
+   END_TIME();
+   
    return result;
 }
 
@@ -934,28 +906,74 @@ struct GameState
 {   
    Camera camera;
    Player sphereGuy;
-   Collectibles collectibles;
    KeyState keyState;
    TrackGraph tracks;
+   Arena mainArena;
 
    v3 lightPos;
+
+   Image tempFontField; // @delete!
+   FontData tempFontData; // @delete!
+   GLuint fontTextureHandle; //@delete!
+
+   ShaderProgram textureProgram;
 };
 
-ShaderProgram
-LoadFilesAndCreateProgram(char *vertex, char *fragment)
+static
+ShaderProgram LoadFilesAndCreateProgram(char *vertex, char *fragment, StackAllocator *allocator)
 {
    size_t vertSize = WinFileSize(vertex);
    size_t fragSize = WinFileSize(fragment);
-   char *vertBuffer = (char *)malloc(vertSize);
-   char *fragBuffer = (char *)malloc(fragSize);
+   char *vertBuffer = (char *)allocator->push(vertSize);
+   char *fragBuffer = (char *)allocator->push(fragSize);
    WinReadFile(vertex, (u8 *)vertBuffer, vertSize);
    WinReadFile(fragment, (u8 *)fragBuffer, fragSize);
 
    ShaderProgram result = CreateProgram(vertBuffer, vertSize, fragBuffer, fragSize);
 
-   free(vertBuffer);
-   free(fragBuffer);
+   allocator->pop();
+   allocator->pop();
    
+   return result;
+}
+
+// the globalName "LoadImage" is already taken
+static 
+Image LoadImageFile(char *filename, StackAllocator *allocator)
+{
+   size_t fileSize = WinFileSize(filename);
+   // @leak
+   u8 *buffer = allocator->push(fileSize);
+
+   WinReadFile(filename, buffer, fileSize);
+
+   ImageHeader *header = (ImageHeader *)buffer;
+   Image result;
+
+   result.x = header->x;
+   result.y = header->y;
+   result.channels = header->channels;
+   result.data = buffer + sizeof(header);
+
+   return result;
+}
+
+static
+FontData LoadFontFile(char *filename, StackAllocator *allocator)
+{
+   size_t fileSize = WinFileSize(filename);
+
+   u8 *buffer = allocator->push(fileSize);
+   WinReadFile(filename, buffer, fileSize);
+
+   FontHeader *header = (FontHeader *)buffer;
+   FontData result;
+
+   result.count = header->count;
+   result.mapWidth = header->mapWidth;
+   result.mapHeight = header->mapHeight;
+   result.data = (CharInfo *)(buffer + sizeof(FontHeader));
+
    return result;
 }
 
@@ -971,10 +989,10 @@ Object SpherePrimitive(v3 position, v3 scale, quat orientation)
    return result;
 }
 
-static inline
+static __forceinline
 v3 GetPositionOnTrack(Track &track, float t)
 {   
-   v2 displacement = CubicBezier(track.bezier, t);
+   v2 displacement = CubicBezier(*track.bezier, t);
    return V3(displacement.x + track.renderable.worldPos.x,
 	     displacement.y + track.renderable.worldPos.y,
 	     track.renderable.worldPos.z);
@@ -982,7 +1000,7 @@ v3 GetPositionOnTrack(Track &track, float t)
 
 void UpdatePlayer(Player &player, TrackGraph &tracks)
 {
-   player.t += 0.01f * delta;
+   player.t += 0.1f * delta;
    if(player.t > 1.0f)
    {
       player.t -= 1.0f;
@@ -1013,56 +1031,29 @@ void UpdatePlayer(Player &player, TrackGraph &tracks)
 	    assert(false);
 	 }
       }
-   }
+   }   
 
    player.renderable.worldPos = GetPositionOnTrack(*player.currentTrack, player.t);
 }
 
-void UpdateCamera(Camera &camera, v3 playerPosition)
+void UpdateCamera(Camera &camera, const Player &player, const TrackGraph &graph)
 {
-   // have camera follow player
+   v3 playerPosition = player.renderable.worldPos;
    camera.position.y = playerPosition.y - 5.0f;
    camera.position.x = playerPosition.x;
-   // camera.position.y += delta * 0.1f;
 }
 
-void CreateCollectibles(Collectibles &collectibles)
-{
-   collectibles.c[0] = SpherePrimitive(V3(0.0f, 5.0f, 5.0f),
-				       V3(1.0f, 1.0f, 1.0f),
-				       Quat(0.0f, 0.0f, 0.0f, 0.0f));
-
-   collectibles.c[1] = SpherePrimitive(V3(0.0f, 10.0f, 5.0f),
-				       V3(1.0f, 1.0f, 1.0f),
-				       Quat(0.0f, 0.0f, 0.0f, 0.0f));
-
-   collectibles.c[2] = SpherePrimitive(V3(0.0f, 15.0f, 5.0f),
-				       V3(1.0f, 1.0f, 1.0f),
-				       Quat(0.0f, 0.0f, 0.0f, 0.0f));
-
-   collectibles.c[3] = SpherePrimitive(V3(0.0f, 20.0f, 5.0f),
-				       V3(1.0f, 1.0f, 1.0f),
-				       Quat(0.0f, 0.0f, 0.0f, 0.0f));
-
-   collectibles.c[4] = SpherePrimitive(V3(0.0f, 25.0f, 5.0f),
-				       V3(1.0f, 1.0f, 1.0f),
-				       Quat(0.0f, 0.0f, 0.0f, 0.0f));
-
-   collectibles.size = 5;   
-}
-
-// approximate tangent
-// @ should replace with derivative form
-static inline
+static __forceinline
 v2 Tangent(Curve c, float t)
 {
-   float begin = min(0.0f, t - 0.000001f);
-   float end = max(1.0f, t + 0.000001f);
+   v2 result;
 
-   v2 a = CubicBezier(c, begin);
-   v2 b = CubicBezier(c, end);
+   float minust = 1.0f - t;
 
-   return unit(b - a);
+   result.x = 3 * (minust * minust) * (c.p2.x - c.p1.x) + 6.0f * minust * t * (c.p3.x - c.p2.x) + 3.0f * t * t * (c.p4.x - c.p3.x);
+   result.y = 3 * (minust * minust) * (c.p2.y - c.p1.y) + 6.0f * minust * t * (c.p3.y - c.p2.y) + 3.0f * t * t * (c.p4.y - c.p3.y);
+
+   return unit(result);
 }
 
 static
@@ -1133,46 +1124,135 @@ void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier)
 static inline
 void GenerateTrackSegmentVertices(Track &track)
 {
-   GenerateTrackSegmentVertices(track.renderable.meshBuffers, track.bezier);   
+   GenerateTrackSegmentVertices(track.renderable.meshBuffers, *track.bezier);   
 }
 
+void RenderTexture(GLuint texture, ShaderProgram &program)
+{
+   glUseProgram(program.programHandle);
+
+   assert(glIsTexture(texture));
+
+   glBindBuffer(GL_ARRAY_BUFFER, RectangleVertBuffer);
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
+   glEnableVertexAttribArray(UV_LOCATION);
+   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glActiveTexture(GL_TEXTURE0);
+   glBindTexture(GL_TEXTURE_2D, texture);
+   glUniform1i(glGetUniformLocation(program.programHandle, "tex"), 0);
+
+   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+   glBindTexture(GL_TEXTURE_2D, 0);
+   glUseProgram(0);
+}
+
+GLuint UploadDistanceTexture(Image &image)
+{
+   GLuint result;
+   glGenTextures(1, &result);
+   glBindTexture(GL_TEXTURE_2D, result);
+
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.x, image.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
+   glBindTexture(GL_TEXTURE_2D, 0);
+   return result;
+}
+
+GLuint UploadTexture(Image &image)
+{
+   GLuint result;
+   glGenTextures(1, &result);
+   glBindTexture(GL_TEXTURE_2D, result);
+
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.x, image.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
+   glBindTexture(GL_TEXTURE_2D, 0);
+   return result;
+}
+/*
+static GLuint textVao;
+static GLuint textUVVbo;
+static
+void InitTextBuffers()
+{
+   glGenVertexArrays(1, &textVao);
+   glBindVertexArray(textVao);
+   glGenBuffers(1, &textUVVbo);
+   glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
+   glEnableVertexAttribArray(UV_LOCATION);
+   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * 12), 0, GL_STATIC_DRAW);
+
+   glBindBuffer(GL_ARRAY_BUFFER, RectangleVertBuffer);
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+   glBindVertexArray(0);
+}
+*/
 void GameInit(GameState &state)
 {
+   state.mainArena.base = Win32AllocateMemory(GIGABYTES(2), &state.mainArena.size);
+   state.mainArena.current = state.mainArena.base;
+
+   InitStackAllocator((StackAllocator *)state.mainArena.base);
+
+   assert(state.mainArena.base);
+
    srand((u32)__rdtsc());
 
    glEnable(GL_BLEND);
    glEnable(GL_DEPTH_TEST);
    glEnable(GL_CULL_FACE);
-   
+
    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);   
 
-   DefaultShader = LoadFilesAndCreateProgram("assets\\default.vertp", "assets\\default.fragp");
+   DefaultShader = LoadFilesAndCreateProgram("assets\\default.vertp", "assets\\default.fragp",
+					     (StackAllocator *)state.mainArena.base);
+
+   state.textureProgram = LoadFilesAndCreateProgram("assets\\texture.vertp", "assets\\texture.fragp",
+						    (StackAllocator *)state.mainArena.base);   
+
+   state.tempFontField = LoadImageFile("distance_field.bi", (StackAllocator *)state.mainArena.base);
+   state.tempFontData = LoadFontFile("distance_field.bf", (StackAllocator *)state.mainArena.base);   
+
+   state.fontTextureHandle = UploadDistanceTexture(state.tempFontField);
    state.keyState = up;
-
    Sphere = InitMeshObject("assets\\sphere.brian");
+
+   //@leak
    LinearTrack = AllocateMeshObject(80 * 3);
+   BranchTrack = AllocateMeshObject(80 * 3);
    
-   Curve line = ConnectionsToCurve(0, 0, 0, 1);
-   
-   v2 val = CubicBezier(line, 0.0f);
-   float y = val.y;
-   float difference = 0.0f;
-   for(i32 i = 1; i < 11; ++i)
-   {
-      float t = (float)i * 0.1f;
+   GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
+   GlobalBranchCurve = BranchCurve(0, 0,
+				   -1, 1);
 
-      val = CubicBezier(line, t);
-      difference = val.y - y;
-      y = val.y;
-   }
+   GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
+   GenerateTrackSegmentVertices(LinearTrack, GlobalLinearCurve);
 
-   GenerateTrackSegmentVertices(LinearTrack, line);
+   RectangleUVBuffer = UploadVertices(RectangleUVs, 6, 2);
+   RectangleVertBuffer = UploadVertices(RectangleVerts, 6, 2);
+   ScreenVertBuffer = UploadVertices(ScreenVerts, 6, 2);
 
+   //InitTextBuffers();
+      
    state.camera.position = V3(0.0f, 0.0f, 10.0f);
    state.camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.0f);
    state.lightPos = state.camera.position;
 
-   state.tracks = InitTrackGraph(20);
+   state.tracks = InitTrackGraph(1024);
    
    state.sphereGuy.renderable = SpherePrimitive(V3(0.0f, -2.0f, 5.0f),
 						V3(1.0f, 1.0f, 1.0f),
@@ -1181,104 +1261,87 @@ void GameInit(GameState &state)
    state.sphereGuy.t = 0.0f;
    state.sphereGuy.currentTrack = &state.tracks.elements[state.tracks.head];
    state.sphereGuy.trackIndex = 0;
-
-   Curve curve;
-   curve.p1 = V2(0.0f, -0.5f);
-   curve.p2 = V2(2.0f, -0.3f);
-   curve.p3 = V2(-2.0f, 0.3f);
-   curve.p4 = V2(0.0f, 0.5f);
-
-   //state.collectibles = Collectibles();
-   //CreateCollectibles(state.collectibles);   
-
-   MeshObject CurvyTrack = AllocateMeshObject(80 * 3);
-   // state.testTrack = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(0.5f, 2.0f, 0.5f), curve, CurvyTrack);
-   //GenerateTrackSegmentVertices(state.testTrack);
-   
-   for(i32 i = 0; i < state.tracks.size; ++i)
-   {
-      if(!(state.tracks.elements[i].flags & Track::staticMesh))
-      {
-	 GenerateTrackSegmentVertices(state.tracks.elements[i]);
-      }      
-   }   
-
-   // state.testTracks = TestInitTracks();
 }
-
-void GameLoop(GameState &state)
+/*
+static
+void RenderText(char *string, u32 length, v2 clipCoord, FontData &font,
+		ShaderProgram p)
 {
+   float mapWidth = (float)font.mapWidth;
+   float mapHeight = (float)font.mapHeight;
 
-   Track *tracks = state.tracks.elements;
-   for(i32 i = 0; i < state.tracks.size; ++i)
+   glBindVertexArray(textVao);
+   glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
+   
+   for(u32 i = 0; i < length; ++i)
    {
-      if(tracks[i].flags & Track::lerping)
+      char c = string[i];
+      CharInfo params;
+      for(u32 j = 0; j < font.count; ++j)
       {
-	 tracks[i].t = min(tracks[i].t + (0.1f * delta), 1.0f);
-	 tracks[i].bezier = lerp(tracks[i].beginLerp, tracks[i].endLerp, tracks[i].t);
-
-	 GenerateTrackSegmentVertices(tracks[i]);
-
-	 if(tracks[i].t == 1.0f)
+	 if(font.data[j].id == c)
 	 {
-	    tracks[i].flags &= ~Track::lerping;
+	    params = font.data[j];
+	    break;
 	 }
+      }
+   }
+
+   glBindVertexArray(0);
+}
+*/
+void GameLoop(GameState &state)
+{   
+   if(state.tracks.flags & TrackGraph::switching)
+   {
+      state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
+      GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, state.tracks.switchDelta);
+      GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
+
+      if(state.tracks.switchDelta == 1.0f)
+      {
+	 state.tracks.flags &= ~TrackGraph::switching;
       }
    }
 
    m4 cameraTransform = CameraMatrix(state.camera);
 
    UpdatePlayer(state.sphereGuy, state.tracks);
-   UpdateCamera(state.camera, state.sphereGuy.renderable.worldPos);
+   UpdateCamera(state.camera, state.sphereGuy, state.tracks);
    state.lightPos = state.camera.position;
    
    RenderPushObject(state.sphereGuy.renderable, cameraTransform, state.lightPos, V3(1.0f, 0.0f, 0.0f));
-   /*
-     for(i32 i = 0; i < state.collectibles.size; ++i)
-     {
-     RenderPushObject(state.collectibles.c[i], cameraTransform, state.lightPos); 
-     }
-   */
    
    for(i32 i = 0; i < state.tracks.size; ++i)
    {
       RenderPushObject(state.tracks.elements[i].renderable, cameraTransform, state.lightPos, V3(0.0f, 0.0f, 1.0f));
    }
-   
 
-   /*
-     static float rot = 0.0f;
-     state.testTrack.renderable.orientation = Rotation(V3(0.0f, 1.0f, 0.0f), rot);
-     rot += delta / 100.0f;
-     RenderPushObject(state.testTrack.renderable, cameraTransform, state.lightPos);
-   */   
+   RenderTexture(state.fontTextureHandle, state.textureProgram);
 }
 
 void OnKeyDown(GameState &state)
 {
-   Track *tracks = state.tracks.elements;
-
    state.tracks.flags ^= TrackGraph::left;
 
-   for(i32 i = 0; i < state.tracks.size; ++i)
+   // if already lerping
+   if(state.tracks.flags & TrackGraph::switching)
    {
-      // if already lerping
-      if((tracks[i].flags & (Track::branch | Track::lerping)) == (Track::branch | Track::lerping))
-      {
-	 Curve temp = tracks[i].beginLerp;
-	 tracks[i].beginLerp = tracks[i].endLerp;
-	 tracks[i].endLerp = temp;
-	 tracks[i].t = 1.0f - tracks[i].t;
-      }
-      // else if branch but not already lerping
-      else if(tracks[i].flags & Track::branch)
-      {
-	 tracks[i].flags |= Track::lerping;
-
-	 tracks[i].beginLerp = tracks[i].bezier;
-	 tracks[i].endLerp = InvertX(tracks[i].bezier);
-	 tracks[i].t = 0.0f;
-      }
+      state.tracks.beginLerp = state.tracks.endLerp;
+      state.tracks.endLerp = InvertX(state.tracks.beginLerp);
+      state.tracks.switchDelta = 1.0f - state.tracks.switchDelta;
    }
+   else
+   {
+      state.tracks.flags |= TrackGraph::switching;
+
+      state.tracks.beginLerp = GlobalBranchCurve;
+      state.tracks.endLerp = InvertX(GlobalBranchCurve);
+      state.tracks.switchDelta = 0.0f;
+   }   
 }
    
+void GameEnd(GameState &state)
+{
+   Win32FreeMemory(state.mainArena.base);
+}

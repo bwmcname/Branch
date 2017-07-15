@@ -5,6 +5,10 @@
 
 #define PI 3.14159265358979323846f
 
+#define KILOBYTES(count) (count * 1024ull)
+#define MEGABYTES(count) (count * KILOBYTES(1024ull))
+#define GIGABYTES(count) (count * MEGABYTES(1024ull))
+
 typedef int8_t i8;
 typedef int16_t i16;
 typedef int32_t i32;
@@ -151,6 +155,21 @@ union m3
    }
 };
 
+static inline
+m3 Scale(float x, float y, float z)
+{
+   return {x, 0.0f, 0.0f,
+	 0.0f, y, 0.0f,
+	 0.0f, 0.0f, z};
+}
+
+static inline
+m3 Translate(float x, float y)
+{
+   return {1.0f, 0.0f, x,
+	 0.0f, 1.0f, y,
+	 0.0f, 0.0f, 1.0f};
+}
 
 union v2
 {
@@ -466,8 +485,26 @@ m4 M4(quat q)
    return result;
 }
 
-inline
-m4 Projection3D(float width, float height, float b_near, float b_far, float fov)
+static inline
+m4 InfiniteProjection3D(float width, float height, float nearPlane, float fov)
+{
+   m4 result = {};
+
+   float AspectRatio = width/height;
+   float TanthetaOver2 = width/height;
+
+   result.e2[0][0] = 1.0f / TanthetaOver2;
+   result.e2[1][1] = AspectRatio / TanthetaOver2;
+   result.e2[2][3] = -1.0f;
+   result.e2[2][2] = -1.0f;
+   result.e2[3][2] = -2.0f * nearPlane;
+   result.e2[3][3] = 0.0f;
+
+   return result;
+}
+
+static inline
+m4 Projection3D(float width, float height, float nearPlane, float farPlane, float fov)
 {
    m4 Result = {};
 
@@ -477,21 +514,21 @@ m4 Projection3D(float width, float height, float b_near, float b_far, float fov)
    Result.e2[0][0] = 1.0f / TanThetaOver2;
    Result.e2[1][1] = AspectRatio / TanThetaOver2;
    Result.e2[2][3] = -1.0f;
-   Result.e2[2][2] = (b_near + b_far) / (b_near - b_far);
-   Result.e2[3][2] = (2.0f * b_near * b_far) / (b_near - b_far);
+   Result.e2[2][2] = (nearPlane + farPlane) / (nearPlane - farPlane);
+   Result.e2[3][2] = (2.0f * nearPlane * farPlane) / (nearPlane - farPlane);
    Result.e2[3][3] = 0.0f;
 
    return Result;
 }
 
 inline
-m4 Scale(float x, float y, float z)
+m4 Scale(float x, float y, float z, float w = 1.0f)
 {
    m4 result;
    result = {x, 0.0f, 0.0f, 0.0f,
 	     0.0f, y, 0.0f, 0.0f,
 	     0.0f, 0.0f, z, 0.0f,
-	     0.0f, 0.0f, 0.0f, 1.0f};
+	     0.0f, 0.0f, 0.0f, w};
 
    return result;
 }
@@ -499,7 +536,7 @@ m4 Scale(float x, float y, float z)
 inline
 m4 Scale(v3 s)
 {
-   return Scale(s.x, s.y, s.z);
+   return Scale(s.x, s.y, s.z, 1.0f);
 }
 
 inline
@@ -736,3 +773,77 @@ v4 lerp(v4 a, v4 b, float t)
 {
    return (1.0f - t) * a + (t * b);
 }
+
+static inline
+float lerp(float a, float b, float t)
+{
+   return (1.0f - t) * a + (t * b);
+}
+
+static inline
+m3 Scale3(float x, float y, float z)
+{
+   m3 result = {};
+
+   result.e2[0][0] = x;
+   result.e2[1][1] = y;
+   result.e2[2][2] = z;
+
+   return result;
+}
+
+static inline
+m3 RotationAboutZ(float rads)
+{
+   m3 result = {};
+
+   result.e2[0][0] = cosf(rads);
+   result.e2[0][1] = -sinf(rads);
+   result.e2[1][0] = sinf(rads);
+   result.e2[1][1] = cosf(rads);
+   result.e2[2][2] = 1.0f;
+
+   return result;
+}
+
+//@note: should we force pack these?
+struct FontHeader
+{
+   u32 count;
+   u32 mapWidth;
+   u32 mapHeight;
+};
+
+struct CharInfo
+{
+   float xoffset;
+   float yoffset;
+   i8 width;
+   i8 height;
+   i8 x;
+   i8 y;
+   i8 id;
+};
+
+struct FontData
+{
+   u32 count;
+   u32 mapWidth;
+   u32 mapHeight;
+   CharInfo *data;
+};
+
+struct ImageHeader
+{
+   i32 x;
+   i32 y;
+   i32 channels;
+};
+
+struct Image
+{
+   u8 *data;
+   i32 x;
+   i32 y;
+   i32 channels;   
+};

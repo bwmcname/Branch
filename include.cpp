@@ -9,6 +9,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <GL/GL.h>
+#define assert(x) ((x) ? 0 : *((char *)0) = 'x')
 #pragma warning(pop)
 
 #include "branch_common.h"

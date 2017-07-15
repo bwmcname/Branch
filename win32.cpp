@@ -1,8 +1,8 @@
 
 #define ErrorDialogue(str) MessageBoxEx(0, (LPCTSTR)(str), 0, MB_ICONEXCLAMATION, 0)
 
-size_t
-WinFileSize(char *filename)
+static
+size_t WinFileSize(char *filename)
 {
    HANDLE FileHandle = CreateFile(filename,
 				  GENERIC_READ,
@@ -26,8 +26,8 @@ WinFileSize(char *filename)
    }
 }
 
-b32
-WinReadFile(char *filename, u8 *buffer, size_t fileSize)
+static
+b32 WinReadFile(char *filename, u8 *buffer, size_t fileSize)
 {
    HANDLE FileHandle = CreateFile(filename,
 				  GENERIC_READ,
@@ -52,6 +52,39 @@ WinReadFile(char *filename, u8 *buffer, size_t fileSize)
    {
       return false;
    }   
+}
+
+static
+u8 *Win32AllocateMemory(size_t desired, size_t *actual)
+{
+   SYSTEM_INFO info;
+   GetSystemInfo(&info);
+
+   size_t pageSize = info.dwPageSize;
+   size_t requestedPages;
+   
+   if(desired > pageSize)
+   {
+      // for example, if pageSize = 1024 and desired = 2500, then we need 3 pages
+      // (2500 / 1024) + 1 = 3
+      requestedPages = (desired / pageSize) + 1;      
+   }
+   else
+   {
+      requestedPages = 1;
+   }
+
+   *actual = requestedPages * pageSize;
+
+   void *chunk = VirtualAlloc(0, *actual, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+
+   return (u8 *)chunk;
+}
+
+static
+b32 Win32FreeMemory(u8 *address)
+{
+   return VirtualFree(address, 0, MEM_RELEASE);
 }
 
 LRESULT CALLBACK
@@ -221,6 +254,7 @@ int OpenglCreate(HWND WindowHandle)
    WinGetGlExtension(glActiveTexture);
    WinGetGlExtension(glUniform1f);
    WinGetGlExtension(glBufferSubData);
+   //WinGetGlExtension(glGenTextures);
 
    glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
    return true;
@@ -357,5 +391,6 @@ int CALLBACK WinMain(HINSTANCE Instance,
    }
 
    OnWindowsExit();
+   GameEnd(state);
    return 0;
 }

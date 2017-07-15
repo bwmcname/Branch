@@ -66,6 +66,7 @@ typedef void (*glUniform1i_t)(GLint, GLint);
 typedef void (*glActiveTexture_t)(GLenum);
 typedef void (*glUniform1f_t)(GLint, GLfloat);
 typedef void (*glBufferSubData_t) (GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
+//typedef void (*glGenTextures_t) (GLsizei, GLuint *);
 
 wglChoosePixelFormatARB_t wglChoosePixelFormatARB;
 glCreateProgram_t glCreateProgram;
@@ -95,6 +96,7 @@ glUniform1i_t glUniform1i;
 glActiveTexture_t glActiveTexture;
 glUniform1f_t glUniform1f;
 glBufferSubData_t glBufferSubData;
+//glGenTextures_t glGenTextures;
 
 HMODULE glDll = 0;
 
@@ -106,5 +108,7 @@ HMODULE glDll = 0;
    }						
 
 
-size_t WinFileSize(char *);
-b32 WinReadFile(char *, u8 *, size_t);
+static size_t WinFileSize(char *);
+static b32 WinReadFile(char *, u8 *, size_t);
+static u8 *Win32AllocateMemory(size_t, size_t*);
+static b32 Win32FreeMemory(u8 *);

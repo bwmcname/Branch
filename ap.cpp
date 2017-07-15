@@ -3,6 +3,9 @@
 #include <string.h>
 #include "branch_common.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 // vertex mask
 #define VERTEX 1
 #define UV (1 << 1)
@@ -476,6 +479,67 @@ void Shader(char *filename)
    free(buffer);
 }
 
+
+int Font(char *imgFileName, char *dataFileName)
+{
+   FILE *dataFile = fopen(dataFileName, "rb");
+   if(dataFileName)
+   {
+
+      while(fgetc(dataFile) != '\n');
+
+      int count;
+      fscanf(dataFile, "chars count=%i", &count);
+
+      size_t fontDataSize = count * sizeof(CharInfo) + sizeof(FontHeader);
+      FontHeader *header = (FontHeader *)malloc(fontDataSize);
+
+      CharInfo *buffer = (CharInfo *)header + sizeof(header->count);
+
+      for(int i = 0; i < count; ++i)
+      {
+	 fscanf(dataFile, "char id=%hhi x=%hhi y=%hhi width=%hhi height=%hhi xoffset=%f yoffset=%f",
+		&buffer[i].id, &buffer[i].x, &buffer[i].y, &buffer[i].width, &buffer[i].height, &buffer[i].xoffset, &buffer[i].yoffset);
+      }
+
+      ImageHeader resultImage;
+      unsigned char *image = stbi_load(imgFileName, &resultImage.x, &resultImage.y, &resultImage.channels, 0);
+
+      header->count = count;
+      header->mapWidth = resultImage.x;
+      header->mapHeight = resultImage.y;
+
+      if(image == 0)
+      {
+	 fclose(dataFile);
+	 free(header);
+	 return 0;
+      }
+
+      size_t fileSize = (resultImage.x * resultImage.y * resultImage.channels) + sizeof(ImageHeader);
+      void *outImage = malloc(fileSize);
+      *((ImageHeader *)outImage) = resultImage;
+      memcpy((u8 *)outImage + sizeof(ImageHeader), image, resultImage.x * resultImage.y * resultImage.channels);
+
+      FILE *imageFile = fopen("distance_field.bi", "wb");
+      fwrite(outImage, fileSize, 1, imageFile);
+      fclose(imageFile);
+      free(outImage);
+      free(image);
+
+      FILE *fontFile = fopen("font_data.bf", "wb");
+      fwrite(header, fontDataSize, 1, fontFile);
+      fclose(fontFile);
+      free(header);
+   }
+   else
+   {
+      return 0;
+   }
+
+   return 1;
+}
+
 void main(int argc, char **argv)
 {
    if(argc > 1)
@@ -506,6 +570,25 @@ void main(int argc, char **argv)
 	    else
 	    {
 	       printf("Incorrect argument format\n");
+	    }
+	 }
+	 else
+	 {
+	    int font = strcmp(parse, "font");
+
+	    if(font == 0)
+	    {
+	       if(argc == 4)
+	       {
+		  if(!Font(argv[2], argv[3]))
+		  {
+		     printf("unable to finish font processing");
+		  }
+	       }
+	       else
+	       {
+		  printf("Incorrect argument format\n");
+	       }
 	    }
 	 }
       }
