@@ -9,6 +9,10 @@
 #define MEGABYTES(count) (count * KILOBYTES(1024ull))
 #define GIGABYTES(count) (count * MEGABYTES(1024ull))
 
+#define SWAP(type, a, b) type temp = a;		\
+   a = b;					\
+   b = temp					\
+
 typedef int8_t i8;
 typedef int16_t i16;
 typedef int32_t i32;
@@ -166,9 +170,9 @@ m3 Scale(float x, float y, float z)
 static inline
 m3 Translate(float x, float y)
 {
-   return {1.0f, 0.0f, x,
-	 0.0f, 1.0f, y,
-	 0.0f, 0.0f, 1.0f};
+   return {1.0f, 0.0f, 0.0f,
+	 0.0f, 1.0f, 0.0f,
+	 x, y, 1.0f};
 }
 
 union v2
@@ -818,11 +822,12 @@ struct CharInfo
 {
    float xoffset;
    float yoffset;
-   i8 width;
-   i8 height;
-   i8 x;
-   i8 y;
-   i8 id;
+   float xadvance;
+   u32 width;
+   u32 height;
+   u32 x;
+   u32 y;
+   i8 id;   
 };
 
 struct FontData

@@ -254,7 +254,7 @@ int OpenglCreate(HWND WindowHandle)
    WinGetGlExtension(glActiveTexture);
    WinGetGlExtension(glUniform1f);
    WinGetGlExtension(glBufferSubData);
-   //WinGetGlExtension(glGenTextures);
+   WinGetGlExtension(glDeleteBuffers);
 
    glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
    return true;
@@ -368,7 +368,7 @@ int CALLBACK WinMain(HINSTANCE Instance,
 	       {
 		  case VK_SPACE:
 		  {
-		     // OnKeyUp(state);
+		     OnKeyUp(state);
 		  }break;
 	       }
 	    }break;

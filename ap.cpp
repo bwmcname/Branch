@@ -6,6 +6,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#define STB_RECT_PACK_IMPLEMENTATION
+#include "stb_rect_pack.h"
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
+
 // vertex mask
 #define VERTEX 1
 #define UV (1 << 1)
@@ -451,9 +457,7 @@ void Shader(char *filename)
       return;
    }
 
-   fseek(file, 0, SEEK_END);
-   long fileSize = ftell(file);
-   fseek(file, 0, SEEK_SET);
+   long fileSize = FileSize(file);
 
    char *buffer = (char *)malloc(fileSize);
    fread(buffer, fileSize, 1, file);
@@ -489,17 +493,21 @@ int Font(char *imgFileName, char *dataFileName)
       while(fgetc(dataFile) != '\n');
 
       int count;
-      fscanf(dataFile, "chars count=%i", &count);
+      fscanf(dataFile, "chars count=%i\n", &count);
 
       size_t fontDataSize = count * sizeof(CharInfo) + sizeof(FontHeader);
       FontHeader *header = (FontHeader *)malloc(fontDataSize);
 
-      CharInfo *buffer = (CharInfo *)header + sizeof(header->count);
+      CharInfo *buffer = (CharInfo *)((u8 *)header + sizeof(FontHeader));
+
+      int page;
+      int chnl;
 
       for(int i = 0; i < count; ++i)
       {
-	 fscanf(dataFile, "char id=%hhi x=%hhi y=%hhi width=%hhi height=%hhi xoffset=%f yoffset=%f",
-		&buffer[i].id, &buffer[i].x, &buffer[i].y, &buffer[i].width, &buffer[i].height, &buffer[i].xoffset, &buffer[i].yoffset);
+	 fscanf(dataFile, "char id=%hhi\tx=%i\ty=%i\twidth=%i\theight=%i\t xoffset=%f\tyoffset=%f\txadvance=%f\tpage=%i\tchnl=%i\n",
+		&buffer[i].id, &buffer[i].x, &buffer[i].y, &buffer[i].width, &buffer[i].height, &buffer[i].xoffset, &buffer[i].yoffset,
+		&buffer[i].xadvance, &page, &chnl);
       }
 
       ImageHeader resultImage;
@@ -508,6 +516,11 @@ int Font(char *imgFileName, char *dataFileName)
       header->count = count;
       header->mapWidth = resultImage.x;
       header->mapHeight = resultImage.y;
+
+      FILE *fontFile = fopen("font_data.bf", "wb");
+      fwrite(header, fontDataSize, 1, fontFile);
+      fclose(fontFile);
+      free(header);      
 
       if(image == 0)
       {
@@ -526,16 +539,83 @@ int Font(char *imgFileName, char *dataFileName)
       fclose(imageFile);
       free(outImage);
       free(image);
-
-      FILE *fontFile = fopen("font_data.bf", "wb");
-      fwrite(header, fontDataSize, 1, fontFile);
-      fclose(fontFile);
-      free(header);
    }
    else
    {
       return 0;
    }
+
+   return 1;
+}
+
+int BFont(char *filename, int point, int width, int height)
+{
+   FILE *dataFile = fopen(filename, "rb");
+
+   if(!dataFile)
+   {
+      return 0;
+   }
+
+   size_t fileSize = FileSize(dataFile);
+   void *buffer = (void *)malloc(fileSize);
+
+   fread(buffer, fileSize, 1, dataFile);
+
+   stbtt_fontinfo font;
+   if(!stbtt_InitFont(&font, (const u8 *)buffer, 0))
+   {
+      free(buffer);
+      return 0;
+   }
+
+   i32 glyphCount = font.numGlyphs;
+
+   u8 *pixels = (u8 *)malloc(width * height);
+   stbtt_packedchar *charData = (stbtt_packedchar *)malloc(sizeof(stbtt_packedchar) * glyphCount);
+   float fontSize = stbtt_ScaleForPixelHeight(&font, point);
+
+   stbtt_pack_context spc;
+   if(!stbtt_PackBegin(&spc, pixels, width, height, width, 1, 0)) return 0;
+   if(!stbtt_PackFontRange(&spc, (u8 *)buffer, 0, fontSize, 0, glyphCount, charData)) return 0;
+   stbtt_PackEnd(&spc);
+
+   size_t fontDataSize = glyphCount * sizeof(CharInfo) + sizeof(FontHeader);
+   FontHeader *fontDataHeader = (FontHeader *)malloc(fontDataSize);
+   CharInfo *chars = (CharInfo *)(fontDataHeader + 1);
+
+   for(i32 i = 0; i < glyphCount; ++i)
+   {
+      chars[i] = {
+	 charData[i].xoff,
+	 charData[i].yoff,
+	 charData[i].xadvance,
+	 (u32)charData[i].x1 - (u32)charData[i].x0,
+	 (u32)charData[i].y1 - (u32)charData[i].y0,
+	 (u32)charData[i].x0,
+	 (u32)charData[i].y0,
+	 (i8)i
+      };
+   }
+
+   size_t imageSize = sizeof(ImageHeader) + width * height;
+   ImageHeader *resultImage = (ImageHeader *)malloc(imageSize); // 1 channel
+   resultImage->x = width;
+   resultImage->y = height;
+   resultImage->channels = 1;
+   
+   memcpy(resultImage + 1, pixels, width * height);
+   free(pixels);
+
+   FILE *output = fopen("bitmap_font.bi", "wb");
+   fwrite(resultImage, imageSize, 1, output);
+   fclose(output);   
+
+   output = fopen("bitmap_font_data.bf", "wb");
+   fwrite(fontDataHeader, fontDataSize, 1, output);
+   fclose(output);
+   fclose(dataFile);
+   free(buffer);
 
    return 1;
 }
@@ -588,6 +668,25 @@ void main(int argc, char **argv)
 	       else
 	       {
 		  printf("Incorrect argument format\n");
+	       }
+	    }
+	    else
+	    {
+	       int bfont = strcmp(parse, "bfont");
+
+	       if(bfont == 0)
+	       {
+		  if(argc == 6)
+		  {
+		     if(!BFont(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5])))
+		     {
+			printf("unable to finish font processing");
+		     }
+		  }
+		  else
+		  {
+		     printf("Incorrect argument format");
+		  }		     
 	       }
 	    }
 	 }

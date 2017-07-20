@@ -11,6 +11,9 @@
 #define WGL_TYPE_RGBA_ARB 0x202B
 #define WGL_ACCELERATION_ARB 0x2003
 #define WGL_FULL_ACCELERATION_ARB 0x2027
+#define WGL_SAMPLE_BUFFERS_ARB 0x2041
+#define WGL_SAMPLES_ARB 0x2042
+
 
 #define GL_VERTEX_SHADER 0x8B31
 #define GL_FRAGMENT_SHADER 0x8B30
@@ -21,11 +24,16 @@
 
 #define GL_TEXTURE_BUFFER 0x8C2A
 #define GL_CLAMP_TO_EDGE 0x812F
+#define GL_CLAMP_TO_BORDER 0x812D
+
+#define GL_TEXTURE_WRAP_R 0x8072
 
 #define GL_TEXTURE0 0x84C0
 #define GL_TEXTURE1 0x84C1
 #define GL_TEXTURE2 0x84C2
 #define GL_TEXTURE3 0x84C3
+
+#define GL_MULTISAMPLE 0x809D
 
 typedef uint32_t GLenum;
 typedef int32_t GLint;
@@ -66,7 +74,7 @@ typedef void (*glUniform1i_t)(GLint, GLint);
 typedef void (*glActiveTexture_t)(GLenum);
 typedef void (*glUniform1f_t)(GLint, GLfloat);
 typedef void (*glBufferSubData_t) (GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
-//typedef void (*glGenTextures_t) (GLsizei, GLuint *);
+typedef void (*glDeleteBuffers_t) (GLsizei, const GLuint *);
 
 wglChoosePixelFormatARB_t wglChoosePixelFormatARB;
 glCreateProgram_t glCreateProgram;
@@ -96,7 +104,7 @@ glUniform1i_t glUniform1i;
 glActiveTexture_t glActiveTexture;
 glUniform1f_t glUniform1f;
 glBufferSubData_t glBufferSubData;
-//glGenTextures_t glGenTextures;
+glDeleteBuffers_t glDeleteBuffers;
 
 HMODULE glDll = 0;
 

@@ -12,6 +12,8 @@ static float delta;
 static m4 Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
 static m4 InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 60.0f);
 
+static i32 GlobalActionPressed = 0;
+
 static const u32 RectangleAttribCount = 6;
 static GLuint RectangleUVBuffer;
 static float RectangleUVs[] =
@@ -373,6 +375,47 @@ CreateProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsi
    return result;
 }
 
+struct TextProgram
+{
+   GLuint programHandle;
+   GLuint vertexHandle;
+   GLuint fragmentHandle;
+
+   GLint transformUniform;
+   GLint texUniform;
+   GLint vertexAttrib;
+   GLint normalAttrib;   
+};
+
+TextProgram
+CreateTextProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize)
+{
+   TextProgram result;
+
+   result.programHandle = glCreateProgram();
+   result.vertexHandle = glCreateShader(GL_VERTEX_SHADER);
+   result.fragmentHandle = glCreateShader(GL_FRAGMENT_SHADER);
+
+   glShaderSource(result.vertexHandle, 1, &vertexSource, (i32 *)&vsize);
+   glShaderSource(result.fragmentHandle, 1, &fragmentSource, (i32 *)&fsize);
+
+   glCompileShader(result.vertexHandle);
+   glCompileShader(result.fragmentHandle);
+
+   glAttachShader(result.programHandle, result.vertexHandle);
+   glAttachShader(result.programHandle, result.fragmentHandle);
+
+   glLinkProgram(result.programHandle);
+
+   result.transformUniform = glGetUniformLocation(result.programHandle, "transform");
+   result.texUniform = glGetUniformLocation(result.programHandle, "tex");
+
+   result.vertexAttrib = 1;
+   result.normalAttrib = 2;
+
+   return result;
+}
+
 static
 v3 *Normals(float *vertices, v3 *result, i32 count)
 {
@@ -417,9 +460,9 @@ MeshObject AllocateMeshObject(i32 vertexCount)
 // Inits Mesh Object and uploads to vertex buffers
 MeshObject InitMeshObject(char *filename)
 {
-   size_t size = WinFileSize(filename);
+   size_t size = FileSize(filename);
    u8 *buffer = (u8 *)malloc(size);
-   WinReadFile(filename, buffer, size);
+   FileRead(filename, buffer, size);
 
    Mesh mesh;
 
@@ -751,11 +794,12 @@ i32 CompareVirtualCoords(VirtualCoord a, VirtualCoord b)
 }
 
 inline
-i32 HashVirtualCoord(VirtualCoord key)
+u32 HashVirtualCoord(VirtualCoord key)
 {
-   return key.x + key.y;
+   return key.x ^ key.y;
 }
 
+static size_t trackGenTime = 0; // @DELETE
 static
 TrackGraph InitTrackGraph(i32 initialSize)
 {
@@ -890,7 +934,8 @@ TrackGraph InitTrackGraph(i32 initialSize)
 
    result.size = processed;
    END_TIME();
-   
+
+   trackGenTime = READ_TIME();
    return result;
 }
 
@@ -902,8 +947,19 @@ struct Player
    float t;
 };
 
+struct stbFont
+{
+   u8 *rawFile; // @: We might not have to keep this around.
+   stbtt_fontinfo info;
+   stbtt_packedchar *chars;
+   u8 *map;
+   u32 width;
+   u32 height;
+   GLuint textureHandle;
+};
+
 struct GameState
-{   
+{
    Camera camera;
    Player sphereGuy;
    KeyState keyState;
@@ -914,20 +970,33 @@ struct GameState
 
    Image tempFontField; // @delete!
    FontData tempFontData; // @delete!
-   GLuint fontTextureHandle; //@delete!
+   GLuint fontTextureHandle; //@delete!  
 
-   ShaderProgram textureProgram;
+   TextProgram bitmapFontProgram;
+   TextProgram fontProgram;
+
+   stbFont bitmapFont;   
+
+   enum
+   {
+      START,      
+      INITGAME,
+      RESET,
+      LOOP,
+   };
+
+   i32 state;
 };
 
 static
 ShaderProgram LoadFilesAndCreateProgram(char *vertex, char *fragment, StackAllocator *allocator)
 {
-   size_t vertSize = WinFileSize(vertex);
-   size_t fragSize = WinFileSize(fragment);
+   size_t vertSize = FileSize(vertex);
+   size_t fragSize = FileSize(fragment);
    char *vertBuffer = (char *)allocator->push(vertSize);
    char *fragBuffer = (char *)allocator->push(fragSize);
-   WinReadFile(vertex, (u8 *)vertBuffer, vertSize);
-   WinReadFile(fragment, (u8 *)fragBuffer, fragSize);
+   FileRead(vertex, (u8 *)vertBuffer, vertSize);
+   FileRead(fragment, (u8 *)fragBuffer, fragSize);
 
    ShaderProgram result = CreateProgram(vertBuffer, vertSize, fragBuffer, fragSize);
 
@@ -937,15 +1006,33 @@ ShaderProgram LoadFilesAndCreateProgram(char *vertex, char *fragment, StackAlloc
    return result;
 }
 
+static
+TextProgram LoadFilesAndCreateTextProgram(char *vertex, char *fragment, StackAllocator *allocator)
+{
+   size_t vertSize = FileSize(vertex);
+   size_t fragSize = FileSize(fragment);
+   char *vertBuffer = (char *)allocator->push(vertSize);
+   char *fragBuffer = (char *)allocator->push(fragSize);
+   FileRead(vertex, (u8 *)vertBuffer, vertSize);
+   FileRead(fragment, (u8 *)fragBuffer, fragSize);
+
+   TextProgram result = CreateTextProgram(vertBuffer, vertSize, fragBuffer, fragSize);
+
+   allocator->pop();
+   allocator->pop();
+
+   return result;
+}
+
 // the globalName "LoadImage" is already taken
 static 
 Image LoadImageFile(char *filename, StackAllocator *allocator)
 {
-   size_t fileSize = WinFileSize(filename);
+   size_t fileSize = FileSize(filename);
    // @leak
    u8 *buffer = allocator->push(fileSize);
 
-   WinReadFile(filename, buffer, fileSize);
+   FileRead(filename, buffer, fileSize);
 
    ImageHeader *header = (ImageHeader *)buffer;
    Image result;
@@ -961,10 +1048,10 @@ Image LoadImageFile(char *filename, StackAllocator *allocator)
 static
 FontData LoadFontFile(char *filename, StackAllocator *allocator)
 {
-   size_t fileSize = WinFileSize(filename);
+   size_t fileSize = FileSize(filename);
 
    u8 *buffer = allocator->push(fileSize);
-   WinReadFile(filename, buffer, fileSize);
+   FileRead(filename, buffer, fileSize);
 
    FontHeader *header = (FontHeader *)buffer;
    FontData result;
@@ -998,7 +1085,7 @@ v3 GetPositionOnTrack(Track &track, float t)
 	     track.renderable.worldPos.z);
 }
 
-void UpdatePlayer(Player &player, TrackGraph &tracks)
+void UpdatePlayer(Player &player, TrackGraph &tracks, GameState &state)
 {
    player.t += 0.1f * delta;
    if(player.t > 1.0f)
@@ -1015,7 +1102,8 @@ void UpdatePlayer(Player &player, TrackGraph &tracks)
 	 }
 	 else
 	 {
-	    assert(false);
+	    //@TEMPORARY
+	    state.state = GameState::RESET;
 	 }
       }
       else
@@ -1028,7 +1116,8 @@ void UpdatePlayer(Player &player, TrackGraph &tracks)
 	 }
 	 else
 	 {
-	    assert(false);
+	    //@TEMPORARY
+	    state.state = GameState::RESET;
 	 }
       }
    }   
@@ -1156,8 +1245,8 @@ GLuint UploadDistanceTexture(Image &image)
    glGenTextures(1, &result);
    glBindTexture(GL_TEXTURE_2D, result);
 
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
@@ -1166,24 +1255,43 @@ GLuint UploadDistanceTexture(Image &image)
    return result;
 }
 
-GLuint UploadTexture(Image &image)
+GLuint UploadTexture(Image &image, i32 channels = 4)
 {
    GLuint result;
    glGenTextures(1, &result);
    glBindTexture(GL_TEXTURE_2D, result);
 
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.x, image.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
+   GLuint type;
+   switch(channels)
+   {
+      case 1:
+      {
+	 type = GL_RED;
+      }break;
+      case 4:
+      {
+	 type = GL_RGBA;
+      }break;
+      default:
+      {
+	 assert(!"unsupported channel format");
+	 type = 0; // shut the compiler up
+      }
+   }
+
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.x, image.y, 0, type, GL_UNSIGNED_BYTE, image.data);
    glBindTexture(GL_TEXTURE_2D, 0);
    return result;
 }
-/*
+
 static GLuint textVao;
 static GLuint textUVVbo;
+static GLuint textVbo;
 static
 void InitTextBuffers()
 {
@@ -1195,15 +1303,61 @@ void InitTextBuffers()
    glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * 12), 0, GL_STATIC_DRAW);
 
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleVertBuffer);
+   glGenBuffers(1, &textVbo);
+   glBindBuffer(GL_ARRAY_BUFFER, textVbo);
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * 12), 0, GL_STATIC_DRAW);
    glBindVertexArray(0);
 }
-*/
+
+static
+stbFont InitFont_stb(char *fontFile, u32 width, u32 height, StackAllocator *allocator)
+{
+   stbFont result;
+
+   result.width = width;
+   result.height = height;
+
+   size_t fileSize = FileSize(fontFile);
+
+   result.rawFile = allocator->push(fileSize);
+   FileRead(fontFile, result.rawFile, fileSize);
+   
+   if(!stbtt_InitFont(&result.info, result.rawFile, 0))
+   {
+      assert(false);
+   }
+
+   stbtt_pack_context pack;
+   result.chars = (stbtt_packedchar *)allocator->push(sizeof(stbtt_packedchar) * 256);
+   result.map = allocator->push(width * height);
+
+   // @could we do this in the asset processor? and then use the stb_api to pull the quad from the generated texture?
+   stbtt_PackBegin(&pack, result.map, width, height, width, 1, 0); // @should supply our own allocator instead of defaulting to malloc
+   stbtt_PackSetOversampling(&pack, 4, 4);
+
+   stbtt_PackFontRange(&pack, result.rawFile, 0, STBTT_POINT_SIZE(20.0f), 0, 256, result.chars);
+   stbtt_PackEnd(&pack);
+
+   glGenTextures(1, &result.textureHandle);
+   glBindTexture(GL_TEXTURE_2D, result.textureHandle);
+
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, result.map);
+   glBindTexture(GL_TEXTURE_2D, 0);
+
+   return result;
+}
+
 void GameInit(GameState &state)
 {
-   state.mainArena.base = Win32AllocateMemory(GIGABYTES(2), &state.mainArena.size);
+   state.state = GameState::START;
+   state.mainArena.base = AllocateSystemMemory(GIGABYTES(2), &state.mainArena.size);
    state.mainArena.current = state.mainArena.base;
 
    InitStackAllocator((StackAllocator *)state.mainArena.base);
@@ -1216,18 +1370,28 @@ void GameInit(GameState &state)
    glEnable(GL_DEPTH_TEST);
    glEnable(GL_CULL_FACE);
 
-   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);   
+   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+   StackAllocator *stack = (StackAllocator *)state.mainArena.base;
 
    DefaultShader = LoadFilesAndCreateProgram("assets\\default.vertp", "assets\\default.fragp",
-					     (StackAllocator *)state.mainArena.base);
+					     stack);
+   stack->pop();
 
-   state.textureProgram = LoadFilesAndCreateProgram("assets\\texture.vertp", "assets\\texture.fragp",
-						    (StackAllocator *)state.mainArena.base);   
+   state.fontProgram = LoadFilesAndCreateTextProgram("assets\\text.vertp", "assets\\text.fragp",
+						     stack);
+   stack->pop();
 
-   state.tempFontField = LoadImageFile("distance_field.bi", (StackAllocator *)state.mainArena.base);
-   state.tempFontData = LoadFontFile("distance_field.bf", (StackAllocator *)state.mainArena.base);   
+   state.bitmapFontProgram = LoadFilesAndCreateTextProgram("assets\\bitmap_font.vertp", "assets\\bitmap_font.fragp",
+							   stack);
+   stack->pop();
 
-   state.fontTextureHandle = UploadDistanceTexture(state.tempFontField);
+   state.tempFontField = LoadImageFile("distance_field.bi", stack);
+   
+   state.tempFontData = LoadFontFile("font_data.bf", stack);
+
+   state.bitmapFont = InitFont_stb("c:/Windows/Fonts/arial.ttf", 1024, 1024,stack);
+   
+   state.fontTextureHandle = UploadTexture(state.tempFontField);
    state.keyState = up;
    Sphere = InitMeshObject("assets\\sphere.brian");
 
@@ -1246,37 +1410,122 @@ void GameInit(GameState &state)
    RectangleVertBuffer = UploadVertices(RectangleVerts, 6, 2);
    ScreenVertBuffer = UploadVertices(ScreenVerts, 6, 2);
 
-   //InitTextBuffers();
+   InitTextBuffers();
       
    state.camera.position = V3(0.0f, 0.0f, 10.0f);
    state.camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.0f);
    state.lightPos = state.camera.position;
-
-   state.tracks = InitTrackGraph(1024);
    
    state.sphereGuy.renderable = SpherePrimitive(V3(0.0f, -2.0f, 5.0f),
 						V3(1.0f, 1.0f, 1.0f),
 						Quat(1.0f, 0.0f, 0.0f, 0.0f));
 
-   state.sphereGuy.t = 0.0f;
-   state.sphereGuy.currentTrack = &state.tracks.elements[state.tracks.head];
+   state.sphereGuy.t = 0.0f;   
    state.sphereGuy.trackIndex = 0;
 }
-/*
-static
-void RenderText(char *string, u32 length, v2 clipCoord, FontData &font,
-		ShaderProgram p)
+
+static inline
+m3 TextProjection(float screenWidth, float screenHeight)
 {
+   return {2.0f / screenWidth, 0.0f, 0.0f,
+	 0.0f, 2.0f / screenHeight, 0.0f,
+	 -1.0f, -1.0f, 1.0f};
+}
+
+static
+void RenderText_stb(char *string, float x, float y, stbFont &font, TextProgram &p)
+{
+   // convert clip coords to device coords
+   x = ((x + 1.0f) * 0.5f) * (float)SCREEN_WIDTH;
+   y = ((y + 1.0f) * 0.5f) * (float)SCREEN_HEIGHT;
+   
+   glDisable(GL_DEPTH_TEST);
+
+   glBindVertexArray(textVao);
+   glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
+   glUseProgram(p.programHandle);
+
+   glActiveTexture(GL_TEXTURE0);
+   glBindTexture(GL_TEXTURE_2D, font.textureHandle);
+   glUniform1i(p.texUniform, 0);
+
+   glUniformMatrix3fv(p.transformUniform, 1, GL_FALSE, TextProjection(SCREEN_WIDTH, SCREEN_HEIGHT).e);
+
+   stbtt_aligned_quad quad;
+   
+   for(i32 i = 0; string[i]; ++i)
+   {
+      char c = string[i];
+      stbtt_GetPackedQuad(font.chars, font.width, font.height, c, &x, &y, &quad, 0);
+
+      float uvs[] =
+      {
+	 quad.s0, quad.t1,
+	 quad.s1, quad.t1,
+	 quad.s0, quad.t0,
+
+	 quad.s1, quad.t1,
+	 quad.s1, quad.t0,
+	 quad.s0, quad.t0,
+      };
+      
+      float verts[] =
+      {
+	 quad.x0, quad.y0,
+	 quad.x1, quad.y0,
+	 quad.x0, quad.y1,
+
+	 quad.x1, quad.y0,
+	 quad.x1, quad.y1,
+	 quad.x0, quad.y1,
+      };
+
+      glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
+      glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, uvs);
+
+      glBindBuffer(GL_ARRAY_BUFFER, textVbo);
+      glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, verts);
+
+      glDrawArrays(GL_TRIANGLES, 0, 6);
+   }
+
+   glBindVertexArray(0);
+   glEnable(GL_DEPTH_TEST);
+}
+
+static
+void DistanceRenderText(char *string, u32 length, float xpos, float ypos, float scale, FontData &font,
+		TextProgram p, GLuint textureMap)
+{
+
+   xpos = ((xpos + 1.0f) * 0.5f) * (float)SCREEN_WIDTH;
+   ypos = ((ypos + 1.0f) * 0.5f) * (float)SCREEN_HEIGHT;
+
+   glDisable(GL_DEPTH_TEST);      
+
    float mapWidth = (float)font.mapWidth;
    float mapHeight = (float)font.mapHeight;
 
    glBindVertexArray(textVao);
    glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
+   glUseProgram(p.programHandle);
+
+   glActiveTexture(GL_TEXTURE0);
+   glBindTexture(GL_TEXTURE_2D, textureMap);
+   glUniform1i(p.texUniform, 0);
+
+   glUniformMatrix3fv(p.transformUniform, 1, GL_FALSE, TextProjection(SCREEN_WIDTH, SCREEN_HEIGHT).e);
    
+   if(length == 0)
+   {
+      char *c = string;
+      while(*(c++)) ++length;
+   }
+
    for(u32 i = 0; i < length; ++i)
    {
       char c = string[i];
-      CharInfo params;
+      CharInfo params = {};
       for(u32 j = 0; j < font.count; ++j)
       {
 	 if(font.data[j].id == c)
@@ -1284,64 +1533,242 @@ void RenderText(char *string, u32 length, v2 clipCoord, FontData &font,
 	    params = font.data[j];
 	    break;
 	 }
+
+	 assert(j != font.count-1);
       }
+
+      //@ 0.001 to prevent texture bleeding
+      // very noticable with the character 't'
+      float x = ((float)params.x / mapWidth) + 0.001f;
+      float y = (float)params.y / mapHeight + 0.001f;
+      float width = ((float)params.width / mapWidth) - 0.002f;
+      float height = (float)params.height / mapHeight - 0.002f;
+
+      float uvs[] =
+      {
+	 x, y + height,
+	 x + width, y + height,
+	 x, y,
+
+	 x + width, y + height,
+	 x + width, y,
+	 x, y,
+      };
+
+      glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
+      glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, uvs);
+
+      width = (float)params.width * scale;
+      height = (float)params.height * scale;
+      float xoffset = (float)params.xoffset * scale;
+      float yoffset = ((float)params.yoffset * scale) - height;
+
+      float xpen = (xpos + xoffset);
+      float ypen = (ypos + yoffset);
+
+      float verts[] =
+      {
+	 xpen, ypen,
+	 xpen + width, ypen,
+	 xpen, ypen + height,
+
+	 xpen + width, ypen,
+	 xpen + width, ypen + height,
+	 xpen, ypen + height,
+      };
+
+      glBindBuffer(GL_ARRAY_BUFFER, textVbo);
+      glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, verts);
+
+      float xadvance = (float)params.xadvance;
+      xpos += xadvance * scale;
+            
+      glDrawArrays(GL_TRIANGLES, 0, 6);
    }
 
    glBindVertexArray(0);
+   glEnable(GL_DEPTH_TEST);
 }
-*/
-void GameLoop(GameState &state)
-{   
-   if(state.tracks.flags & TrackGraph::switching)
-   {
-      state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
-      GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, state.tracks.switchDelta);
-      GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
 
-      if(state.tracks.switchDelta == 1.0f)
+template <typename int_type>
+static inline void IntToString(char *dest, int_type num)
+{
+   static char table[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+
+   if(num == 0)
+   {
+      dest[0] = '0';
+      dest[1] = '\0';
+      return;
+   }
+   
+   int_type count = 0;
+   for(char *c = dest; num; ++c)
+   {
+      int_type digit = num % 10;
+      dest[count] = table[digit];
+      ++count;
+      num /= 10;
+   }
+
+   for(int_type i = 0; i < (count / 2); ++i)
+   {
+      SWAP(char, dest[i], dest[count - i - 1]);
+   }
+
+   dest[count] = '\0';
+}
+
+void GameLoop(GameState &state)
+{
+   switch(state.state)
+   {
+      case GameState::LOOP:
+      {	 
+	 if(state.tracks.flags & TrackGraph::switching)
+	 {
+	    state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
+	    GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, state.tracks.switchDelta);
+	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
+
+	    if(state.tracks.switchDelta == 1.0f)
+	    {
+	       state.tracks.flags &= ~TrackGraph::switching;
+	    }
+	 }
+
+	 m4 cameraTransform = CameraMatrix(state.camera);
+
+	 UpdatePlayer(state.sphereGuy, state.tracks, state);
+	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);
+	 state.lightPos = state.camera.position;
+   
+	 RenderPushObject(state.sphereGuy.renderable, cameraTransform, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+
+	 i32 rendered = 0;
+	 for(i32 i = 0; i < state.tracks.size; ++i)
+	 {	    
+	    if(state.tracks.elements[i].renderable.worldPos.y > state.sphereGuy.renderable.worldPos.y - (TRACK_SEGMENT_SIZE * 2.0f))
+	    {
+	       if(state.tracks.adjList[i].hasLeft())
+	       {
+		  RenderPushObject(state.tracks.elements[i].renderable, cameraTransform, state.lightPos, V3(0.0f, 1.0f, 0.0f));
+	       }
+	       else
+	       {
+		  RenderPushObject(state.tracks.elements[i].renderable, cameraTransform, state.lightPos, V3(0.0f, 0.0f, 1.0f));
+	       }
+	       ++rendered;
+	    }
+	 }
+
+	 static char onScreen[8];
+	 IntToString(onScreen, rendered);
+	 DistanceRenderText(onScreen, 0, -0.8f, 0.6f, 0.1f, state.tempFontData, state.fontProgram, state.fontTextureHandle);
+
+	 static char trackTime[19];
+	 IntToString(trackTime, trackGenTime);
+	 DistanceRenderText(trackTime, 0, -0.8f, 0.4f, 0.1f, state.tempFontData, state.fontProgram, state.fontTextureHandle);
+
+	 static char framerate[8];
+	 static float time = 120.0f;
+	 time += delta;
+	 if(time > 30.0f)
+	 {
+	    time = 0.0f;
+	    IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
+	 }
+
+	 RenderText_stb(framerate, 0.0f, 0.0f, state.bitmapFont, state.bitmapFontProgram);
+      }break;
+
+      case GameState::RESET:
       {
-	 state.tracks.flags &= ~TrackGraph::switching;
+	 free(state.tracks.elements);
+	 free(state.tracks.adjList);
+
+	 state.state = GameState::START;
+      }break;
+
+      case GameState::START:
+      {
+	 static float position = 0.0f;
+	 position += delta * 0.01f;
+	 DistanceRenderText("Butts", 0, (sinf(position) * 0.6f) - 0.35f, 0.0f, 0.5f, state.tempFontData, state.fontProgram, state.fontTextureHandle);
+
+	 if(GlobalActionPressed)
+	 {
+	    state.state = GameState::LOOP;
+	    state.tracks = InitTrackGraph(1024);
+	    state.sphereGuy.currentTrack = &state.tracks.elements[state.tracks.head];
+	    state.sphereGuy.trackIndex = 0;
+	    state.sphereGuy.t = 0.0f;
+
+	    GlobalBranchCurve = BranchCurve(0, 0,
+					    -1, 1);
+
+	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
+	 }
+      }break;
+      
+      case GameState::INITGAME:
+      {
+      }break;
+      
+      default:
+      {
+	 assert(!"invalid state");
       }
    }
-
-   m4 cameraTransform = CameraMatrix(state.camera);
-
-   UpdatePlayer(state.sphereGuy, state.tracks);
-   UpdateCamera(state.camera, state.sphereGuy, state.tracks);
-   state.lightPos = state.camera.position;
-   
-   RenderPushObject(state.sphereGuy.renderable, cameraTransform, state.lightPos, V3(1.0f, 0.0f, 0.0f));
-   
-   for(i32 i = 0; i < state.tracks.size; ++i)
-   {
-      RenderPushObject(state.tracks.elements[i].renderable, cameraTransform, state.lightPos, V3(0.0f, 0.0f, 1.0f));
-   }
-
-   RenderTexture(state.fontTextureHandle, state.textureProgram);
 }
 
 void OnKeyDown(GameState &state)
 {
-   state.tracks.flags ^= TrackGraph::left;
+   GlobalActionPressed = 1;
 
-   // if already lerping
-   if(state.tracks.flags & TrackGraph::switching)
+   if(state.state == GameState::LOOP)
    {
-      state.tracks.beginLerp = state.tracks.endLerp;
-      state.tracks.endLerp = InvertX(state.tracks.beginLerp);
-      state.tracks.switchDelta = 1.0f - state.tracks.switchDelta;
+      state.tracks.flags ^= TrackGraph::left;
+
+      // if already lerping
+      if(state.tracks.flags & TrackGraph::switching)
+      {
+	 state.tracks.beginLerp = state.tracks.endLerp;
+	 state.tracks.endLerp = InvertX(state.tracks.beginLerp);
+	 state.tracks.switchDelta = 1.0f - state.tracks.switchDelta;
+      }
+      else
+      {
+	 state.tracks.flags |= TrackGraph::switching;
+
+	 state.tracks.beginLerp = GlobalBranchCurve;
+	 state.tracks.endLerp = InvertX(GlobalBranchCurve);
+	 state.tracks.switchDelta = 0.0f;
+      }
    }
-   else
-   {
-      state.tracks.flags |= TrackGraph::switching;
 
-      state.tracks.beginLerp = GlobalBranchCurve;
-      state.tracks.endLerp = InvertX(GlobalBranchCurve);
-      state.tracks.switchDelta = 0.0f;
-   }   
+}
+
+void OnKeyUp(GameState &state)
+{
+   GlobalActionPressed = 0;
 }
    
 void GameEnd(GameState &state)
 {
-   Win32FreeMemory(state.mainArena.base);
+   FreeSystemMemory(state.mainArena.base);
+
+   glDeleteBuffers(1, &textUVVbo);
+   glDeleteBuffers(1, &textVbo);
+   glDeleteBuffers(1, &RectangleUVBuffer);
+   glDeleteBuffers(1, &RectangleVertBuffer);
+   glDeleteBuffers(1, &ScreenVertBuffer);
+   glDeleteBuffers(1, &Sphere.handles.vbo);
+   glDeleteBuffers(1, &Sphere.handles.nbo);
+   glDeleteBuffers(1, &LinearTrack.handles.vbo);
+   glDeleteBuffers(1, &BranchTrack.handles.nbo);
+   glDeleteBuffers(1, &LinearTrack.handles.nbo);
+   glDeleteBuffers(1, &BranchTrack.handles.vbo);
+
+   glDeleteTextures(1, &state.fontTextureHandle);
 }
