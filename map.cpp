@@ -23,11 +23,9 @@ struct HashMap
    u32 misses;
    u32 accesses;
    
-   HashMap(u32 size);
-   ~HashMap();
+   HashMap(u32 size, StackAllocator *allocator);
    void put(K k, V v);
    V get(K k);
-   void expand();
 
 private:
    inline u32 IncrementPointer(u32 ptr);
@@ -52,21 +50,15 @@ u32 HashMap<K, V, HashFunction, Compare, NullValue>::IncrementPointer(u32 ptr)
 }
 
 template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-HashMap<K, V, HashFunction, Compare, NullValue>::HashMap(u32 _capacity)
+HashMap<K, V, HashFunction, Compare, NullValue>::HashMap(u32 _capacity, StackAllocator *allocator)
 {
-   e = (Element *)malloc(sizeof(Element) * _capacity);
+   e = (Element *)allocator->push(sizeof(Element) * _capacity);
    memset(e, 0, sizeof(Element) * _capacity);
    capacity = _capacity;
    size = 0;
 
    misses = 0;
    accesses = 0;
-}
-
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-HashMap<K, V, HashFunction, Compare, NullValue>::~HashMap()
-{
-   free(e);
 }
 
 template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
@@ -160,7 +152,7 @@ struct HashMap
    u32 misses;
    u32 accesses;
    
-   HashMap(u32 size);
+   HashMap(u32 size, StackAllocator *allocator);
    ~HashMap();
    void put(K k, V v);
    V get(K k);
@@ -180,9 +172,9 @@ u32 HashMap<K, V, HashFunction, Compare, NullValue>::IncrementPointer(u32 ptr)
 }
 
 template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-HashMap<K, V, HashFunction, Compare, NullValue>::HashMap(u32 _capacity)
+HashMap<K, V, HashFunction, Compare, NullValue>::HashMap(u32 _capacity, StackAllocator *allocator)
 {
-   e = (Element *)malloc(sizeof(Element) * _capacity);
+   e = (Element *)allocator->(sizeof(Element) * _capacity);
    memset(e, 0, sizeof(Element) * _capacity);
    capacity = _capacity;
    size = 0;

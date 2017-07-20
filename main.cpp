@@ -55,29 +55,6 @@ static float ScreenVerts[] =
 #define END_TIME() LOCAL_TIME = __rdtsc() - LOCAL_TIME
 #define READ_TIME() LOCAL_TIME
 
-struct Arena
-{
-   size_t size;
-   u8 *base;
-   u8 *current;
-};
-
-struct StackAllocator
-{
-   struct Chunk
-   {
-      Chunk *last;
-      u8 *base;
-      size_t size;
-   };
-
-   Chunk *last;
-   u8 *base;
-   
-   u8 *push(size_t size);
-   void pop();
-};
-
 static inline
 void InitStackAllocator(StackAllocator *allocator)
 {      
@@ -87,6 +64,7 @@ void InitStackAllocator(StackAllocator *allocator)
    allocator->last->base = (u8 *)allocator->last;
 }
 
+inline
 u8 *StackAllocator::push(size_t allocation)
 {
    Chunk *newChunk = (Chunk *)(last->base + last->size);
@@ -96,14 +74,18 @@ u8 *StackAllocator::push(size_t allocation)
 
    last = newChunk;
 
+   ++allocs;
+
    return newChunk->base;
 }
 
+inline
 void StackAllocator::pop()
 {
    last->size = 0;
    last->base = (u8 *)last;
    last = last->last;
+   --allocs;
 }
 
 struct Camera
@@ -437,39 +419,43 @@ v3 *Normals(float *vertices, v3 *result, i32 count)
 }
 
 static
-v3 *Normals(float *vertices, i32 count)
+v3 *Normals(float *vertices, i32 count, StackAllocator *allocator)
 {
-   v3 *buffer = (v3 *)malloc(count * sizeof(v3));
+   v3 *buffer = (v3 *)allocator->push(count * sizeof(v3));
    return Normals(vertices, buffer, count);
 }
 
 // Allocates Mesh object and vertex buffers
 // NOT NECASSARY TO CREATING A MESH OBJECT
 // Only for allocating dynamic gpu buffers
-MeshObject AllocateMeshObject(i32 vertexCount)
+MeshObject AllocateMeshObject(i32 vertexCount, StackAllocator *allocator)
 {   
    MeshObject result;
    result.mesh.vcount = vertexCount;
-   result.mesh.vertices = (float *)malloc(sizeof(v3) * vertexCount);
-   result.mesh.normals = (v3 *)malloc(sizeof(v3) * vertexCount);
+   result.mesh.vertices = (float *)allocator->push(sizeof(v3) * vertexCount);
+   result.mesh.normals = (v3 *)allocator->push(sizeof(v3) * vertexCount);
 
    result.handles = AllocateMeshBuffers(result.mesh.vcount, 3);
+   allocator->pop();
+   allocator->pop();
    return result;
 }
 
 // Inits Mesh Object and uploads to vertex buffers
-MeshObject InitMeshObject(char *filename)
+MeshObject InitMeshObject(char *filename, StackAllocator *allocator)
 {
    size_t size = FileSize(filename);
-   u8 *buffer = (u8 *)malloc(size);
+   u8 *buffer = (u8 *)allocator->push(size);
    FileRead(filename, buffer, size);
 
    Mesh mesh;
 
    mesh.vcount = *((i32 *)buffer);
    mesh.vertices = (float *)(buffer + 4);
-   mesh.normals = Normals(mesh.vertices, mesh.vcount);
+   mesh.normals = Normals(mesh.vertices, mesh.vcount, allocator);
    MeshBuffers handles = UploadStaticMesh(mesh.vertices, mesh.normals, mesh.vcount, 3);
+   allocator->pop(); // pop normals
+   allocator->pop(); // pop file
 
    MeshObject result;
    result.mesh = mesh;
@@ -619,8 +605,7 @@ struct CircularQueue
    i32 end;
    T *elements;
 
-   CircularQueue(i32 _max);
-   ~CircularQueue();
+   CircularQueue(i32 _max, StackAllocator *allocator);
    void Push(T e);
    T Pop();
    void ClearToZero();   
@@ -631,19 +616,13 @@ private:
 };
 
 template <typename T>
-CircularQueue<T>::CircularQueue(i32 _max)
+CircularQueue<T>::CircularQueue(i32 _max, StackAllocator *allocator)
 {
    max = _max;
    size = 0;
    begin = 0;
    end = 0;
-   elements = (T *)malloc(max * sizeof(T));
-}
-
-template <typename T>
-CircularQueue<T>::~CircularQueue()
-{
-   free(elements);
+   elements = (T *)allocator->push(max * sizeof(T));
 }
 
 template <typename T>
@@ -799,28 +778,34 @@ u32 HashVirtualCoord(VirtualCoord key)
    return key.x ^ key.y;
 }
 
-static size_t trackGenTime = 0; // @DELETE
 static
-TrackGraph InitTrackGraph(i32 initialSize)
+TrackGraph AllocateTrackGraph(i32 size, StackAllocator *allocator)
+{
+   TrackGraph result;
+   result.capacity = size;
+   result.adjList = (TrackAttribute *)allocator->push(sizeof(TrackAttribute) * size);
+   result.elements = (Track *)allocator->push(sizeof(Track) * result.capacity);   
+   return result;
+}
+
+static size_t trackGenTime = 0; // @DELETE
+
+// To be called each time a new graph of tracks is to be initialized
+// (reuses memory from the initial initialization)
+static
+void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 {
    BEGIN_TIME();
-   
-   TrackGraph result;
 
-   result.head = 0;   
-   result.flags = TrackGraph::left;
+   graph.head = 0;   
+   graph.flags = TrackGraph::left;   
 
-   // @leak
-   result.elements = (Track *)malloc(sizeof(Track) * initialSize);
-   // @leak
-   result.adjList = (TrackAttribute *)malloc(sizeof(TrackAttribute) * initialSize);
-
-   for(i32 i = 0; i < initialSize; ++i)
+   for(i32 i = 0; i < graph.capacity; ++i)
    {
-      result.adjList[i] = {0};
+      graph.adjList[i] = {0};
    }
 
-   HashMap<VirtualCoord, u32, HashVirtualCoord, CompareVirtualCoords, 0> taken(1024); // lol
+   HashMap<VirtualCoord, u32, HashVirtualCoord, CompareVirtualCoords, 0> taken(1024, allocator); // lol
 
    enum
    {
@@ -828,9 +813,8 @@ TrackGraph InitTrackGraph(i32 initialSize)
       isBranch = 0x2,
       hasBreak = 0x4,
    };
-
-   result.capacity = initialSize;   
-   CircularQueue<TrackOrder> orders(initialSize);
+   
+   CircularQueue<TrackOrder> orders(graph.capacity, allocator);
    
    orders.Push({0, 0, 0, 0}); // Push root segment.
    u32 firstFree = 1; // next element that can be added to the queue
@@ -850,69 +834,69 @@ TrackGraph InitTrackGraph(i32 initialSize)
 	 // Queue up subsequent branches
 	 // can we fit a left track?
 	 u32 leftFlags = taken.get({item.x-1, item.y+1});
-	 if(initialSize - firstFree > 0 &&
+	 if(graph.capacity - firstFree > 0 &&
 	    !(leftFlags & (hasTrack | hasBreak)))
 	 {
 	    ++branches;
 	    orders.Push({firstFree, item.x-1, item.y+1, TrackOrder::dontBranch}); // left side
 
 	    taken.put({item.x-1, item.y+1}, leftFlags | hasTrack | isBranch | (firstFree << 2));
-	    result.adjList[item.index].e[0] = firstFree++;
-	    result.adjList[item.index].flags |= TrackAttribute::left;
+	    graph.adjList[item.index].e[0] = firstFree++;
+	    graph.adjList[item.index].flags |= TrackAttribute::left;
 	 }
 
 	 else if(leftFlags & (hasTrack | hasBreak)) // is a left track already in that space?
 	 {
-	    result.adjList[item.index].e[0] = leftFlags >> 2;
-	    result.adjList[item.index].flags |= TrackAttribute::left;
+	    graph.adjList[item.index].e[0] = leftFlags >> 2;
+	    graph.adjList[item.index].flags |= TrackAttribute::left;
 	    ++branches;
 	 }
 	 
 	 // can we fit a right track?
 	 u32 rightFlags = taken.get({item.x+1, item.y+1});
-	 if(initialSize - firstFree > 0 &&	    
+	 if(graph.capacity - firstFree > 0 &&	    
 	    !(rightFlags & (hasTrack | hasBreak)))
 	 {
 	    ++branches;
 	    orders.Push({firstFree, item.x+1, item.y+1, TrackOrder::dontBranch}); // right side
 
 	    taken.put({item.x+1, item.y+1}, rightFlags | hasTrack | isBranch | (firstFree << 2));
-	    result.adjList[item.index].e[1] = firstFree++;
-	    result.adjList[item.index].flags |= TrackAttribute::right;
+	    graph.adjList[item.index].e[1] = firstFree++;
+	    graph.adjList[item.index].flags |= TrackAttribute::right;
 	 }
 	 else if(rightFlags & (hasTrack | hasBreak)) // is a right track already in that space
 	 {
-	    result.adjList[item.index].e[1] = rightFlags >> 2;
-	    result.adjList[item.index].flags |= TrackAttribute::right;
+	    graph.adjList[item.index].e[1] = rightFlags >> 2;
+	    graph.adjList[item.index].flags |= TrackAttribute::right;
 	    ++branches;
 	 }
 	 
-	 result.adjList[item.index].flags |= branches | TrackAttribute::branch;
+	 graph.adjList[item.index].flags |= branches | TrackAttribute::branch;
 
 	 v2 position = VirtualToReal(item.x, item.y);
        
-	 result.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalBranchCurve, BranchTrack);
-	 result.elements[item.index].flags = Track::branch | Track::left;	 
+	 graph.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalBranchCurve, BranchTrack);
+	 graph.elements[item.index].flags = Track::branch | Track::left;	 
       }
       else // is linear
       {
 	 u32 behindFlags = taken.get({item.x, item.y+1});
-	 if((initialSize - firstFree) > 0 &&
+	 if((graph.capacity - firstFree) > 0 &&
 	    !(behindFlags & hasTrack))
 	 {
-	    result.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
+	    graph.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
 	    orders.Push({firstFree, item.x, item.y+1, 0});
 	    taken.put({item.x, item.y+1}, behindFlags | hasTrack | (firstFree << 2));
-	    result.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
+	    graph.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
 	 }
 	 else if(behindFlags & hasTrack)
 	 {
-	    result.adjList[item.index].e[0] = behindFlags << 2;
+	    graph.adjList[item.index].e[0] = behindFlags << 2;
 	 }
 	 
 	 v2 position = VirtualToReal(item.x, item.y);
-	 result.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve, LinearTrack);
-	 result.elements[item.index].flags = Track::staticMesh;
+	 graph.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve, LinearTrack);
+	 graph.elements[item.index].flags = Track::staticMesh;
 
 	 // when placing tracks after branches, if there is already
 	 // a linear track behind the placed track, it will have to be manually
@@ -923,20 +907,25 @@ TrackGraph InitTrackGraph(i32 initialSize)
 	    u32 index = behind >> 2;
 
 	    // if it is not a branch, and if it is not already connected
-	    if(!(result.adjList[index].flags & TrackAttribute::branch) && (result.adjList[index].flags & TrackAttribute::countMask) == 0)
+	    if(!(graph.adjList[index].flags & TrackAttribute::branch) && (graph.adjList[index].flags & TrackAttribute::countMask) == 0)
 	    {
-	       result.adjList[index].flags |= 1 | TrackAttribute::left;
-	       result.adjList[index].e[0] = item.index;
+	       graph.adjList[index].flags |= 1 | TrackAttribute::left;
+	       graph.adjList[index].e[0] = item.index;
 	    }	 
 	 }
       }      
    }
 
-   result.size = processed;
+   // pop hashmap
+   allocator->pop();
+
+   //pop queue
+   allocator->pop();
+   
+   graph.size = processed;
    END_TIME();
 
    trackGenTime = READ_TIME();
-   return result;
 }
 
 struct Player
@@ -1202,7 +1191,7 @@ void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier)
 
    v3 *normals = meshBuffers.mesh.normals;
    Normals((float *)tris, (v3 *)normals, 80 * 3); // 3 vertices per tri
-
+   
    glBindBuffer(GL_ARRAY_BUFFER, meshBuffers.handles.vbo);
    glBufferSubData(GL_ARRAY_BUFFER, 0, (sizeof(tri) * 80), (void *)tris);
    glBindBuffer(GL_ARRAY_BUFFER, meshBuffers.handles.nbo);
@@ -1361,6 +1350,9 @@ void GameInit(GameState &state)
    state.mainArena.current = state.mainArena.base;
 
    InitStackAllocator((StackAllocator *)state.mainArena.base);
+   StackAllocator *stack = (StackAllocator *)state.mainArena.base;
+
+   state.tracks = AllocateTrackGraph(1024, stack);
 
    assert(state.mainArena.base);
 
@@ -1370,20 +1362,16 @@ void GameInit(GameState &state)
    glEnable(GL_DEPTH_TEST);
    glEnable(GL_CULL_FACE);
 
-   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-   StackAllocator *stack = (StackAllocator *)state.mainArena.base;
+   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);   
 
    DefaultShader = LoadFilesAndCreateProgram("assets\\default.vertp", "assets\\default.fragp",
 					     stack);
-   stack->pop();
 
    state.fontProgram = LoadFilesAndCreateTextProgram("assets\\text.vertp", "assets\\text.fragp",
 						     stack);
-   stack->pop();
 
    state.bitmapFontProgram = LoadFilesAndCreateTextProgram("assets\\bitmap_font.vertp", "assets\\bitmap_font.fragp",
 							   stack);
-   stack->pop();
 
    state.tempFontField = LoadImageFile("distance_field.bi", stack);
    
@@ -1393,11 +1381,11 @@ void GameInit(GameState &state)
    
    state.fontTextureHandle = UploadTexture(state.tempFontField);
    state.keyState = up;
-   Sphere = InitMeshObject("assets\\sphere.brian");
+   Sphere = InitMeshObject("assets\\sphere.brian", stack);
 
    //@leak
-   LinearTrack = AllocateMeshObject(80 * 3);
-   BranchTrack = AllocateMeshObject(80 * 3);
+   LinearTrack = AllocateMeshObject(80 * 3, stack);
+   BranchTrack = AllocateMeshObject(80 * 3, stack);
    
    GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
    GlobalBranchCurve = BranchCurve(0, 0,
@@ -1683,10 +1671,7 @@ void GameLoop(GameState &state)
       }break;
 
       case GameState::RESET:
-      {
-	 free(state.tracks.elements);
-	 free(state.tracks.adjList);
-
+      {	 
 	 state.state = GameState::START;
       }break;
 
@@ -1699,7 +1684,7 @@ void GameLoop(GameState &state)
 	 if(GlobalActionPressed)
 	 {
 	    state.state = GameState::LOOP;
-	    state.tracks = InitTrackGraph(1024);
+	    ReInitTrackGraph(state.tracks, (StackAllocator *)state.mainArena.base);
 	    state.sphereGuy.currentTrack = &state.tracks.elements[state.tracks.head];
 	    state.sphereGuy.trackIndex = 0;
 	    state.sphereGuy.t = 0.0f;
