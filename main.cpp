@@ -82,8 +82,6 @@ u8 *StackAllocator::push(size_t allocation)
 inline
 void StackAllocator::pop()
 {
-   last->size = 0;
-   last->base = (u8 *)last;
    last = last->last;
    --allocs;
 }
@@ -100,6 +98,8 @@ struct Camera
 
    u32 flags;
    float t;
+
+   m4 view;
 };
 
 static
@@ -121,6 +121,14 @@ m4 CameraMatrix(Camera &camera)
 
    return rotation * translation;
 }
+
+static
+void InitCamera(Camera &camera)
+{
+   camera.position = V3(0.0f, 0.0f, 10.0f);
+   camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.0f);
+   camera.view = CameraMatrix(camera);   
+};
 
 struct Mesh
 {
@@ -540,15 +548,19 @@ struct TrackAttribute
 {
    enum
    {
-      countMask = 0x3,
+      edgeCountMask = 0x3,
       branch = 0x4,
       left = 0x8,
       right = 0x10,
       breaks = 0x20,
+      reachable = 0x40,
+      ancestorCountMask = 0x180,
+      invisible = 0x200,
    };
    
    i32 flags;
    u32 e[2]; // each track can have at most 2 edges leading from it.
+   u32 a[3]; // each track can have up to two "ancestors" (tracks leading to it).
 
    inline
    i32 hasLeft()
@@ -573,7 +585,78 @@ struct TrackAttribute
    {
       return e[0];
    }
+
+   inline
+   u32 ancestorCount()
+   {
+      return (flags & ancestorCountMask) >> 7;
+   }
+
+   inline
+   u32 edgeCount()
+   {
+      return (flags & edgeCountMask);
+   }
+
+   inline
+   void setAncestorCount(u32 count)
+   {
+      //assert(count <= 2);
+      flags = (flags & ~ancestorCountMask) | (count << 7);
+   }
+
+   
+   inline
+   void setEdgeCount(u32 count)
+   {      
+      flags = (flags & ~edgeCountMask) | count;
+   }
+
+   inline void RemoveAncestor(i32 i);
+   inline void AddAncestor(i32 i);
+   inline void RemoveEdge(u32 i);
 };
+
+inline
+void TrackAttribute::AddAncestor(i32 i)
+{
+   u32 count = ancestorCount();
+   //assert(count < 2);
+   a[count] = i;
+   setAncestorCount(count + 1);
+}
+
+inline
+void TrackAttribute::RemoveAncestor(i32 i)
+{
+   if(i == 0 && (ancestorCount() > 1))
+   {
+      a[0] = a[1];      
+   }
+
+   setAncestorCount(ancestorCount() - 1);
+}
+
+inline
+void TrackAttribute::RemoveEdge(u32 i)
+{
+   if(hasLeft())
+   {
+      if(getLeft() == i)
+      {
+	 flags &= ~left;
+      }
+   }
+   else if(hasRight())
+   {
+      if(getRight() == i)
+      {
+	 flags &= ~right;
+      }	  
+   }
+
+   setEdgeCount(edgeCount() - 1);
+}
 
 struct TrackGraph
 {
@@ -594,7 +677,62 @@ struct TrackGraph
    float switchDelta; // how much time has progressed (0 to 1) after the switch is flipped
    Curve beginLerp;
    Curve endLerp;
+
+   void RemoveTrack(u32 i);
 };
+
+void
+TrackGraph::RemoveTrack(u32 i)
+{
+   --size;
+   // de-attach ancestors
+   for(u32 j = 0; j < adjList[i].ancestorCount(); ++j)
+   {
+      if(adjList[j].hasLeft())
+      {
+	 if(adjList[i].getLeft() == i)
+	 {
+	    adjList[j].flags &= ~TrackAttribute::left;
+	    adjList[j].setEdgeCount(adjList[j].edgeCount() - 1);
+	 }
+      }
+      else if(adjList[j].hasRight())
+      {
+	 if(adjList[j].getRight() == i)
+	 {
+	    adjList[j].flags &= ~TrackAttribute::right;
+	    adjList[j].setEdgeCount(adjList[j].edgeCount() - 1);
+	 }
+      }
+   }
+
+   // remove this element as an ancestor from its edges
+   if(adjList[i].hasLeft())
+   {
+      u32 left = adjList[i].getLeft();
+
+      for(u32 j = 0; j < adjList[i].ancestorCount(); ++j)
+      {
+	 if(adjList[left].a[j] == i)
+	 {
+	    adjList[left].RemoveAncestor(j);
+	 }
+      }
+   }
+
+   if(adjList[i].hasRight())
+   {
+      u32 right = adjList[i].getRight();
+
+      for(u32 j = 0; j < adjList[i].ancestorCount(); ++j)
+      {
+	 if(adjList[right].a[j] == i)
+	 {
+	    adjList[right].RemoveAncestor(j);
+	 }
+      }
+   }
+}
 
 template <typename T>
 struct CircularQueue
@@ -684,11 +822,13 @@ void CircularQueue<T>::ClearToZero()
 struct TrackOrder
 {
    u32 index;
+   u32 ancestor;
    i32 x, y;
 
    enum
    {
       dontBranch = 0x1,
+      noAncestor = 0x2,
    };
    i32 rules;
 };
@@ -816,7 +956,7 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
    
    CircularQueue<TrackOrder> orders(graph.capacity, allocator);
    
-   orders.Push({0, 0, 0, 0}); // Push root segment.
+   orders.Push({0, TrackOrder::noAncestor, 0, 0, 0}); // Push root segment.
    u32 firstFree = 1; // next element that can be added to the queue
 
    i32 processed = 0;
@@ -838,7 +978,7 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	    !(leftFlags & (hasTrack | hasBreak)))
 	 {
 	    ++branches;
-	    orders.Push({firstFree, item.x-1, item.y+1, TrackOrder::dontBranch}); // left side
+	    orders.Push({firstFree, item.index, item.x-1, item.y+1, TrackOrder::dontBranch}); // left side
 
 	    taken.put({item.x-1, item.y+1}, leftFlags | hasTrack | isBranch | (firstFree << 2));
 	    graph.adjList[item.index].e[0] = firstFree++;
@@ -847,8 +987,10 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 
 	 else if(leftFlags & (hasTrack | hasBreak)) // is a left track already in that space?
 	 {
-	    graph.adjList[item.index].e[0] = leftFlags >> 2;
+	    u32 index = leftFlags >> 2;
+	    graph.adjList[item.index].e[0] = index;
 	    graph.adjList[item.index].flags |= TrackAttribute::left;
+	    graph.adjList[index].AddAncestor(item.index);
 	    ++branches;
 	 }
 	 
@@ -858,7 +1000,7 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	    !(rightFlags & (hasTrack | hasBreak)))
 	 {
 	    ++branches;
-	    orders.Push({firstFree, item.x+1, item.y+1, TrackOrder::dontBranch}); // right side
+	    orders.Push({firstFree, item.index, item.x+1, item.y+1, TrackOrder::dontBranch}); // right side
 
 	    taken.put({item.x+1, item.y+1}, rightFlags | hasTrack | isBranch | (firstFree << 2));
 	    graph.adjList[item.index].e[1] = firstFree++;
@@ -866,12 +1008,15 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	 }
 	 else if(rightFlags & (hasTrack | hasBreak)) // is a right track already in that space
 	 {
-	    graph.adjList[item.index].e[1] = rightFlags >> 2;
+	    u32 index = rightFlags >> 2;
+	    graph.adjList[item.index].e[1] = index;
 	    graph.adjList[item.index].flags |= TrackAttribute::right;
+	    graph.adjList[index].AddAncestor(item.index);
 	    ++branches;
 	 }
 	 
 	 graph.adjList[item.index].flags |= branches | TrackAttribute::branch;
+	 if(!(item.rules & TrackOrder::noAncestor)) graph.adjList[item.index].AddAncestor(item.ancestor);
 
 	 v2 position = VirtualToReal(item.x, item.y);
        
@@ -885,34 +1030,40 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	    !(behindFlags & hasTrack))
 	 {
 	    graph.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
-	    orders.Push({firstFree, item.x, item.y+1, 0});
+	    orders.Push({firstFree, item.index, item.x, item.y+1, 0});
 	    taken.put({item.x, item.y+1}, behindFlags | hasTrack | (firstFree << 2));
 	    graph.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
 	 }
 	 else if(behindFlags & hasTrack)
 	 {
-	    graph.adjList[item.index].e[0] = behindFlags << 2;
+	    u32 index = behindFlags << 2;
+	    graph.adjList[item.index].e[0] = index;
+	    graph.adjList[index].AddAncestor(item.index);
 	 }
 	 
 	 v2 position = VirtualToReal(item.x, item.y);
 	 graph.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve, LinearTrack);
-	 graph.elements[item.index].flags = Track::staticMesh;
+	 graph.elements[item.index].flags = Track::staticMesh;	 
 
 	 // when placing tracks after branches, if there is already
 	 // a linear track behind the placed track, it will have to be manually
-	 // connected here.
+	 // connected here.p
 	 u32 behind = taken.get({item.x, item.y-1});
 	 if(behind)
 	 {
 	    u32 index = behind >> 2;
 
+
 	    // if it is not a branch, and if it is not already connected
-	    if(!(graph.adjList[index].flags & TrackAttribute::branch) && (graph.adjList[index].flags & TrackAttribute::countMask) == 0)
+	    if(!(graph.adjList[index].flags & TrackAttribute::branch) && (graph.adjList[index].flags & TrackAttribute::edgeCountMask) == 0)
 	    {
 	       graph.adjList[index].flags |= 1 | TrackAttribute::left;
 	       graph.adjList[index].e[0] = item.index;
+	       graph.adjList[item.index].AddAncestor(index);
 	    }	 
 	 }
+
+	 if(!(item.rules & TrackOrder::noAncestor)) graph.adjList[item.index].AddAncestor(item.ancestor);
       }      
    }
 
@@ -1119,6 +1270,8 @@ void UpdateCamera(Camera &camera, const Player &player, const TrackGraph &graph)
    v3 playerPosition = player.renderable.worldPos;
    camera.position.y = playerPosition.y - 5.0f;
    camera.position.x = playerPosition.x;
+
+   camera.view = CameraMatrix(camera);
 }
 
 static __forceinline
@@ -1326,7 +1479,7 @@ stbFont InitFont_stb(char *fontFile, u32 width, u32 height, StackAllocator *allo
    stbtt_PackBegin(&pack, result.map, width, height, width, 1, 0); // @should supply our own allocator instead of defaulting to malloc
    stbtt_PackSetOversampling(&pack, 4, 4);
 
-   stbtt_PackFontRange(&pack, result.rawFile, 0, STBTT_POINT_SIZE(20.0f), 0, 256, result.chars);
+   stbtt_PackFontRange(&pack, result.rawFile, 0, STBTT_POINT_SIZE(16.0f), 0, 256, result.chars);
    stbtt_PackEnd(&pack);
 
    glGenTextures(1, &result.textureHandle);
@@ -1362,21 +1515,18 @@ void GameInit(GameState &state)
    glEnable(GL_DEPTH_TEST);
    glEnable(GL_CULL_FACE);
 
-   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);   
+   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+   InitCamera(state.camera);
 
    DefaultShader = LoadFilesAndCreateProgram("assets\\default.vertp", "assets\\default.fragp",
 					     stack);
-
    state.fontProgram = LoadFilesAndCreateTextProgram("assets\\text.vertp", "assets\\text.fragp",
 						     stack);
-
    state.bitmapFontProgram = LoadFilesAndCreateTextProgram("assets\\bitmap_font.vertp", "assets\\bitmap_font.fragp",
 							   stack);
-
-   state.tempFontField = LoadImageFile("distance_field.bi", stack);
-   
+   state.tempFontField = LoadImageFile("distance_field.bi", stack);   
    state.tempFontData = LoadFontFile("font_data.bf", stack);
-
    state.bitmapFont = InitFont_stb("c:/Windows/Fonts/arial.ttf", 1024, 1024,stack);
    
    state.fontTextureHandle = UploadTexture(state.tempFontField);
@@ -1399,9 +1549,7 @@ void GameInit(GameState &state)
    ScreenVertBuffer = UploadVertices(ScreenVerts, 6, 2);
 
    InitTextBuffers();
-      
-   state.camera.position = V3(0.0f, 0.0f, 10.0f);
-   state.camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.0f);
+   
    state.lightPos = state.camera.position;
    
    state.sphereGuy.renderable = SpherePrimitive(V3(0.0f, -2.0f, 5.0f),
@@ -1410,6 +1558,8 @@ void GameInit(GameState &state)
 
    state.sphereGuy.t = 0.0f;   
    state.sphereGuy.trackIndex = 0;
+
+   ReInitTrackGraph(state.tracks, stack);
 }
 
 static inline
@@ -1607,10 +1757,170 @@ static inline void IntToString(char *dest, int_type num)
    dest[count] = '\0';
 }
 
+i32 RenderTracks(GameState &state)
+{
+   i32 rendered = 0;
+   for(i32 i = 0; i < state.tracks.size; ++i)
+   {	    
+      if(!(state.tracks.adjList[i].flags & TrackAttribute::invisible))
+      {	 
+	 if(state.tracks.adjList[i].flags & TrackAttribute::reachable)
+	 {
+	    RenderPushObject(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+	 }
+	 else
+	 {
+	    RenderPushObject(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 0.0f, 1.0f));
+	 }
+	 ++rendered;
+      }
+   }
+
+   return rendered;
+}
+
+#if 0
+static
+void SetReachable(TrackAttribute *attributes, i32 start, StackAllocator *allocator)
+{
+   u32 *stack = (u32 *)allocator->push(1024);
+   u32 top = 1;
+
+   stack[0] = start;
+
+   while(top > 0)
+   {
+      u32 index = stack[--top];
+
+      if(!(attributes[index].flags & TrackAttribute::reachable))
+      {
+	 attributes[index].flags |= TrackAttribute::reachable;
+
+	 if(attributes[index].hasLeft())
+	 {
+	    stack[top++] = attributes[index].getLeft();
+	 }
+
+	 if(attributes[index].hasRight())
+	 {
+	    stack[top++] = attributes[index].getRight();
+	 }
+      }
+   }
+
+   allocator->pop();
+}
+#else
+static
+   void SetReachable(TrackAttribute *attributes, i32 track, StackAllocator *allocator)
+{
+   if(!(attributes[track].flags & TrackAttribute::reachable))
+   {
+      attributes[track].flags |= TrackAttribute::reachable;
+
+      if(attributes[track].hasLeft())
+      {
+	 SetReachable(attributes, attributes[track].getLeft(), allocator);
+      }
+
+      if(attributes[track].hasRight())
+      {
+	 SetReachable(attributes, attributes[track].getRight(), allocator);
+      }
+   }
+}
+#endif
+
+#define NotReachableVisible(flags) (flags & TrackAttribute::invisible) && !(flags & TrackAttribute::reachable)
+
+void SortTracks(TrackGraph *tracks)
+{
+   u32 b = tracks->size-1;
+
+   for(u32 a = 0; a < (u32)tracks->size && a != b; ++a)
+   {
+      if(NotReachableVisible(tracks->adjList[a].flags))
+      {
+	 while(NotReachableVisible(tracks->adjList[b].flags)) --b;
+
+	 // remove all links from a
+	 for(u32 i = 0; i < tracks->adjList[a].edgeCount(); ++i)
+	 {
+	    u32 edge = tracks->adjList[a].e[i];
+	    if(tracks->adjList[edge].ancestorCount())
+	    {
+	       tracks->adjList[edge].RemoveAncestor(a);
+	    }
+	 }
+
+	 for(u32 i = 0; i < tracks->adjList[a].ancestorCount(); ++i)
+	 {
+	    u32 ancestor = tracks->adjList[a].a[i];
+	    tracks->adjList[ancestor].RemoveEdge(a);	    
+	 }
+
+	 tracks->adjList[a] = tracks->adjList[b];
+	 tracks->elements[a] = tracks->elements[b];
+
+	 // update ancestors	 
+	 for(u32 i = 0; i < tracks->adjList[a].ancestorCount(); ++i)
+	 {
+	    u32 ancestor = tracks->adjList[a].a[i];
+
+	    if(tracks->adjList[ancestor].hasLeft())
+	    {
+	       if(tracks->adjList[ancestor].getLeft() == b)
+	       {
+		  tracks->adjList[ancestor].e[0] = a;
+		  continue;
+	       }
+	    }
+
+	    if(tracks->adjList[ancestor].hasRight())
+	    {
+	       if(tracks->adjList[ancestor].getRight() == b)
+	       {
+		  tracks->adjList[ancestor].e[1] = a;
+		  continue;
+	       }
+	    }
+	 }
+	 
+	 --b;
+	 --tracks->size;
+      }
+   }
+}
+
+void UpdateTracks(TrackGraph *tracks, Player *player, StackAllocator *allocator)
+{
+   // reset reachable flag
+   for(i32 i = 0; i < tracks->size; ++i)
+   {
+      tracks->adjList[i].flags &= ~TrackAttribute::reachable;
+   }
+   
+   SetReachable(tracks->adjList, player->trackIndex, allocator);
+
+   float cutoff = player->renderable.worldPos.y - (TRACK_SEGMENT_SIZE * 2.0f);
+
+   for(i32 i = 0; i < tracks->size; ++i)
+   {
+      if(tracks->elements[i].renderable.worldPos.y < cutoff)
+      {
+	 tracks->adjList[i].flags |= TrackAttribute::invisible;
+      }
+   }   
+
+   SortTracks(tracks);
+   // if a track is invisible and unreachable,
+   // then we want to remove it from the graph
+}
+
 void GameLoop(GameState &state)
 {
    switch(state.state)
-   {
+  { 
       case GameState::LOOP:
       {	 
 	 if(state.tracks.flags & TrackGraph::switching)
@@ -1625,30 +1935,14 @@ void GameLoop(GameState &state)
 	    }
 	 }
 
-	 m4 cameraTransform = CameraMatrix(state.camera);
-
 	 UpdatePlayer(state.sphereGuy, state.tracks, state);
 	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);
+	 UpdateTracks(&state.tracks, &state.sphereGuy, (StackAllocator *)state.mainArena.base);
 	 state.lightPos = state.camera.position;
    
-	 RenderPushObject(state.sphereGuy.renderable, cameraTransform, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+	 RenderPushObject(state.sphereGuy.renderable, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
 
-	 i32 rendered = 0;
-	 for(i32 i = 0; i < state.tracks.size; ++i)
-	 {	    
-	    if(state.tracks.elements[i].renderable.worldPos.y > state.sphereGuy.renderable.worldPos.y - (TRACK_SEGMENT_SIZE * 2.0f))
-	    {
-	       if(state.tracks.adjList[i].hasLeft())
-	       {
-		  RenderPushObject(state.tracks.elements[i].renderable, cameraTransform, state.lightPos, V3(0.0f, 1.0f, 0.0f));
-	       }
-	       else
-	       {
-		  RenderPushObject(state.tracks.elements[i].renderable, cameraTransform, state.lightPos, V3(0.0f, 0.0f, 1.0f));
-	       }
-	       ++rendered;
-	    }
-	 }
+	 i32 rendered = RenderTracks(state);
 
 	 static char onScreen[8];
 	 IntToString(onScreen, rendered);
@@ -1673,18 +1967,17 @@ void GameLoop(GameState &state)
       case GameState::RESET:
       {	 
 	 state.state = GameState::START;
+	 ReInitTrackGraph(state.tracks, (StackAllocator *)state.mainArena.base);
       }break;
 
       case GameState::START:
       {
 	 static float position = 0.0f;
-	 position += delta * 0.01f;
-	 DistanceRenderText("Butts", 0, (sinf(position) * 0.6f) - 0.35f, 0.0f, 0.5f, state.tempFontData, state.fontProgram, state.fontTextureHandle);
+	 position += delta * 0.01f;	 
 
 	 if(GlobalActionPressed)
 	 {
-	    state.state = GameState::LOOP;
-	    ReInitTrackGraph(state.tracks, (StackAllocator *)state.mainArena.base);
+	    state.state = GameState::LOOP;	    
 	    state.sphereGuy.currentTrack = &state.tracks.elements[state.tracks.head];
 	    state.sphereGuy.trackIndex = 0;
 	    state.sphereGuy.t = 0.0f;
@@ -1694,7 +1987,11 @@ void GameLoop(GameState &state)
 
 	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
 	 }
-      }break;
+
+	 RenderTracks(state);
+
+	 DistanceRenderText("Butts", 0, (sinf(position) * 0.6f) - 0.35f, 0.0f, 0.5f, state.tempFontData, state.fontProgram, state.fontTextureHandle);
+      }break;      
       
       case GameState::INITGAME:
       {
