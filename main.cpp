@@ -605,7 +605,6 @@ struct TrackAttribute
       flags = (flags & ~ancestorCountMask) | (count << 7);
    }
 
-   
    inline
    void setEdgeCount(u32 count)
    {      
@@ -615,13 +614,53 @@ struct TrackAttribute
    inline void RemoveAncestor(i32 i);
    inline void AddAncestor(i32 i);
    inline void RemoveEdge(u32 i);
+   inline void ReplaceEdge(u32 before, u32 after);
+   inline void ReplaceAncestor(u32 before, u32 after);
 };
+
+inline
+void TrackAttribute::ReplaceEdge(u32 before, u32 after)
+{
+   if(hasLeft())
+   {
+      if(getLeft() == before)
+      {
+	 e[0] = after;
+	 return;
+      }
+   }
+
+   if(hasRight())
+   {
+      if(getRight() == before)
+      {
+	 e[1] = after;
+	 return;
+      }
+   }
+   assert(false);
+}
+
+inline
+void TrackAttribute::ReplaceAncestor(u32 before, u32 after)
+{
+   for(u32 i = 0; i < ancestorCount(); ++i)
+   {
+      if(a[i] == before)
+      {
+	 a[i] = after;
+	 return;
+      }	 
+   }
+   assert(false);
+}
+
 
 inline
 void TrackAttribute::AddAncestor(i32 i)
 {
    u32 count = ancestorCount();
-   //assert(count < 2);
+   assert(count < 3);
    a[count] = i;
    setAncestorCount(count + 1);
 }
@@ -632,6 +671,10 @@ void TrackAttribute::RemoveAncestor(i32 i)
    if(i == 0 && (ancestorCount() > 1))
    {
       a[0] = a[1];      
+   }
+   else if(i == 1 && (ancestorCount() > 2))
+   {
+      a[1] = a[2];
    }
 
    setAncestorCount(ancestorCount() - 1);
@@ -645,17 +688,20 @@ void TrackAttribute::RemoveEdge(u32 i)
       if(getLeft() == i)
       {
 	 flags &= ~left;
+	 setEdgeCount(edgeCount() - 1);
+	 return;
       }
    }
-   else if(hasRight())
+   
+   if(hasRight())
    {
       if(getRight() == i)
       {
 	 flags &= ~right;
+	 setEdgeCount(edgeCount() - 1);
+	 return;
       }	  
    }
-
-   setEdgeCount(edgeCount() - 1);
 }
 
 struct TrackGraph
@@ -688,48 +734,17 @@ TrackGraph::RemoveTrack(u32 i)
    // de-attach ancestors
    for(u32 j = 0; j < adjList[i].ancestorCount(); ++j)
    {
-      if(adjList[j].hasLeft())
-      {
-	 if(adjList[i].getLeft() == i)
-	 {
-	    adjList[j].flags &= ~TrackAttribute::left;
-	    adjList[j].setEdgeCount(adjList[j].edgeCount() - 1);
-	 }
-      }
-      else if(adjList[j].hasRight())
-      {
-	 if(adjList[j].getRight() == i)
-	 {
-	    adjList[j].flags &= ~TrackAttribute::right;
-	    adjList[j].setEdgeCount(adjList[j].edgeCount() - 1);
-	 }
-      }
+      u32 ancestor = adjList[i].a[j];
+      adjList[ancestor].RemoveEdge(i);
    }
 
-   // remove this element as an ancestor from its edges
-   if(adjList[i].hasLeft())
+   for(u32 j = 0; j < adjList[i].edgeCount(); ++j)
    {
-      u32 left = adjList[i].getLeft();
+      u32 edge = adjList[i].e[j];
 
-      for(u32 j = 0; j < adjList[i].ancestorCount(); ++j)
+      if(adjList[edge].ancestorCount())
       {
-	 if(adjList[left].a[j] == i)
-	 {
-	    adjList[left].RemoveAncestor(j);
-	 }
-      }
-   }
-
-   if(adjList[i].hasRight())
-   {
-      u32 right = adjList[i].getRight();
-
-      for(u32 j = 0; j < adjList[i].ancestorCount(); ++j)
-      {
-	 if(adjList[right].a[j] == i)
-	 {
-	    adjList[right].RemoveAncestor(j);
-	 }
+	 adjList[edge].RemoveAncestor(i);
       }
    }
 }
@@ -930,8 +945,63 @@ TrackGraph AllocateTrackGraph(i32 size, StackAllocator *allocator)
 
 static size_t trackGenTime = 0; // @DELETE
 
-// To be called each time a new graph of tracks is to be initialized
-// (reuses memory from the initial initialization)
+void CheckGraph(TrackGraph &graph)
+{
+      // ensure graph was formed properly
+   for(u32 i = 0; i < (u32)graph.size; ++i)
+   {
+      for(u32 j = 0; j < graph.adjList[i].ancestorCount(); ++j)
+      {
+	 u32 ancestor = graph.adjList[i].a[j];
+
+	 if(graph.adjList[ancestor].hasLeft())
+	 {
+	    if(i == graph.adjList[ancestor].getLeft()) continue;	    
+	 }
+	 if(graph.adjList[ancestor].hasRight())
+	 {
+	    if(i == graph.adjList[ancestor].getRight()) continue;
+	 }
+	 
+	 assert(false);	 
+      }
+
+      if(graph.adjList[i].hasLeft())
+      {
+	 u32 left = graph.adjList[i].getLeft();
+
+	 i32 good = 0;
+	 for(u32 j = 0; j < graph.adjList[left].ancestorCount(); ++j)
+	 {
+	    if(i == graph.adjList[left].a[j])
+	    {
+	       good = true;
+	       break;
+	    }
+	 }
+
+	 assert(good);
+      }
+      
+      if(graph.adjList[i].hasRight())
+      {
+	 u32 right = graph.adjList[i].getRight();
+
+	 i32 good = 0;
+	 for(u32 j = 0; j < graph.adjList[right].ancestorCount(); ++j)
+	 {
+	    if(i == graph.adjList[right].a[j])
+	    {
+	       good = true;
+	       break;
+	    }
+	 }
+
+	 assert(good);
+      }
+   }
+}
+
 static
 void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 {
@@ -943,20 +1013,20 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
    for(i32 i = 0; i < graph.capacity; ++i)
    {
       graph.adjList[i] = {0};
+      graph.elements[i] = {0};
    }
 
-   HashMap<VirtualCoord, u32, HashVirtualCoord, CompareVirtualCoords, 0> taken(1024, allocator); // lol
-
+   // stored in hashmap
    enum
    {
       hasTrack = 0x1,
       isBranch = 0x2,
-      hasBreak = 0x4,
    };
+   HashMap<VirtualCoord, u32, HashVirtualCoord, CompareVirtualCoords, 0> taken(1024, allocator); // lol   
    
    CircularQueue<TrackOrder> orders(graph.capacity, allocator);
    
-   orders.Push({0, TrackOrder::noAncestor, 0, 0, 0}); // Push root segment.
+   orders.Push({0, 0, 0, 0, TrackOrder::noAncestor}); // Push root segment.
    u32 firstFree = 1; // next element that can be added to the queue
 
    i32 processed = 0;
@@ -975,17 +1045,17 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	 // can we fit a left track?
 	 u32 leftFlags = taken.get({item.x-1, item.y+1});
 	 if(graph.capacity - firstFree > 0 &&
-	    !(leftFlags & (hasTrack | hasBreak)))
+	    !(leftFlags & (hasTrack)))
 	 {
 	    ++branches;
 	    orders.Push({firstFree, item.index, item.x-1, item.y+1, TrackOrder::dontBranch}); // left side
 
-	    taken.put({item.x-1, item.y+1}, leftFlags | hasTrack | isBranch | (firstFree << 2));
+	    taken.put({item.x-1, item.y+1}, (leftFlags & 0x3) | hasTrack | isBranch | (firstFree << 2));
 	    graph.adjList[item.index].e[0] = firstFree++;
 	    graph.adjList[item.index].flags |= TrackAttribute::left;
 	 }
 
-	 else if(leftFlags & (hasTrack | hasBreak)) // is a left track already in that space?
+	 else if(leftFlags & (hasTrack)) // is a left track already in that space?
 	 {
 	    u32 index = leftFlags >> 2;
 	    graph.adjList[item.index].e[0] = index;
@@ -997,16 +1067,16 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	 // can we fit a right track?
 	 u32 rightFlags = taken.get({item.x+1, item.y+1});
 	 if(graph.capacity - firstFree > 0 &&	    
-	    !(rightFlags & (hasTrack | hasBreak)))
+	    !(rightFlags & (hasTrack)))
 	 {
 	    ++branches;
 	    orders.Push({firstFree, item.index, item.x+1, item.y+1, TrackOrder::dontBranch}); // right side
 
-	    taken.put({item.x+1, item.y+1}, rightFlags | hasTrack | isBranch | (firstFree << 2));
+	    taken.put({item.x+1, item.y+1}, (rightFlags & 0x3) | hasTrack | isBranch | (firstFree << 2));
 	    graph.adjList[item.index].e[1] = firstFree++;
 	    graph.adjList[item.index].flags |= TrackAttribute::right;
 	 }
-	 else if(rightFlags & (hasTrack | hasBreak)) // is a right track already in that space
+	 else if(rightFlags & (hasTrack)) // is a right track already in that space
 	 {
 	    u32 index = rightFlags >> 2;
 	    graph.adjList[item.index].e[1] = index;
@@ -1031,12 +1101,12 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	 {
 	    graph.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
 	    orders.Push({firstFree, item.index, item.x, item.y+1, 0});
-	    taken.put({item.x, item.y+1}, behindFlags | hasTrack | (firstFree << 2));
+	    taken.put({item.x, item.y+1}, (behindFlags & 0x3) | hasTrack | (firstFree << 2));
 	    graph.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
 	 }
 	 else if(behindFlags & hasTrack)
 	 {
-	    u32 index = behindFlags << 2;
+	    u32 index = behindFlags >> 2;
 	    graph.adjList[item.index].e[0] = index;
 	    graph.adjList[index].AddAncestor(item.index);
 	 }
@@ -1053,7 +1123,6 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	 {
 	    u32 index = behind >> 2;
 
-
 	    // if it is not a branch, and if it is not already connected
 	    if(!(graph.adjList[index].flags & TrackAttribute::branch) && (graph.adjList[index].flags & TrackAttribute::edgeCountMask) == 0)
 	    {
@@ -1067,13 +1136,15 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
       }      
    }
 
+   graph.size = processed;
+   CheckGraph(graph);
+
    // pop hashmap
    allocator->pop();
 
    //pop queue
    allocator->pop();
    
-   graph.size = processed;
    END_TIME();
 
    trackGenTime = READ_TIME();
@@ -1262,7 +1333,7 @@ void UpdatePlayer(Player &player, TrackGraph &tracks, GameState &state)
       }
    }   
 
-   player.renderable.worldPos = GetPositionOnTrack(*player.currentTrack, player.t);
+   player.renderable.worldPos = GetPositionOnTrack(*player.currentTrack, player.t);   
 }
 
 void UpdateCamera(Camera &camera, const Player &player, const TrackGraph &graph)
@@ -1779,7 +1850,7 @@ i32 RenderTracks(GameState &state)
    return rendered;
 }
 
-#if 0
+#if 1
 static
 void SetReachable(TrackAttribute *attributes, i32 start, StackAllocator *allocator)
 {
@@ -1816,7 +1887,7 @@ static
 {
    if(!(attributes[track].flags & TrackAttribute::reachable))
    {
-      attributes[track].flags |= TrackAttribute::reachable;
+      attributes[track].flags |= TrackAttribute::reachable
 
       if(attributes[track].hasLeft())
       {
@@ -1837,57 +1908,71 @@ void SortTracks(TrackGraph *tracks)
 {
    u32 b = tracks->size-1;
 
-   for(u32 a = 0; a < (u32)tracks->size && a != b; ++a)
+   for(u32 a = 0; a < (u32)tracks->size; ++a)
    {
       if(NotReachableVisible(tracks->adjList[a].flags))
       {
-	 while(NotReachableVisible(tracks->adjList[b].flags)) --b;
-
-	 // remove all links from a
-	 for(u32 i = 0; i < tracks->adjList[a].edgeCount(); ++i)
+	 while(NotReachableVisible(tracks->adjList[b].flags))
 	 {
-	    u32 edge = tracks->adjList[a].e[i];
-	    if(tracks->adjList[edge].ancestorCount())
+	    tracks->RemoveTrack(b);
+	    --b;	    
+	    
+	    if(a > b)
 	    {
-	       tracks->adjList[edge].RemoveAncestor(a);
+	       return;
 	    }
 	 }
 
-	 for(u32 i = 0; i < tracks->adjList[a].ancestorCount(); ++i)
+	 tracks->RemoveTrack(a);
+
+	 if(tracks->adjList[b].hasLeft())
 	 {
-	    u32 ancestor = tracks->adjList[a].a[i];
-	    tracks->adjList[ancestor].RemoveEdge(a);	    
+	    u32 left = tracks->adjList[b].getLeft();
+
+	    tracks->adjList[left].ReplaceAncestor(b, a);
+	 }
+	 
+	 if(tracks->adjList[b].hasRight())
+	 {
+	    u32 right = tracks->adjList[b].getRight();
+
+	    tracks->adjList[right].ReplaceAncestor(b, a);
+	 }
+	 
+	 for(u32 i = 0; i < tracks->adjList[b].ancestorCount(); ++i)
+	 {
+	    u32 ancestor = tracks->adjList[b].a[i];
+
+	    tracks->adjList[ancestor].ReplaceEdge(b, a);
 	 }
 
 	 tracks->adjList[a] = tracks->adjList[b];
 	 tracks->elements[a] = tracks->elements[b];
-
-	 // update ancestors	 
-	 for(u32 i = 0; i < tracks->adjList[a].ancestorCount(); ++i)
-	 {
-	    u32 ancestor = tracks->adjList[a].a[i];
-
-	    if(tracks->adjList[ancestor].hasLeft())
-	    {
-	       if(tracks->adjList[ancestor].getLeft() == b)
-	       {
-		  tracks->adjList[ancestor].e[0] = a;
-		  continue;
-	       }
-	    }
-
-	    if(tracks->adjList[ancestor].hasRight())
-	    {
-	       if(tracks->adjList[ancestor].getRight() == b)
-	       {
-		  tracks->adjList[ancestor].e[1] = a;
-		  continue;
-	       }
-	    }
-	 }
 	 
 	 --b;
-	 --tracks->size;
+	 // --tracks->size;
+      }
+   }
+
+   // ensure graph was formed properly
+   for(u32 i = 0; i < (u32)tracks->size; ++i)
+   {
+      for(u32 j = 0; j < tracks->adjList[i].ancestorCount(); ++j)
+      {
+	 u32 ancestor = tracks->adjList[i].a[j];
+
+	 if(tracks->adjList[ancestor].hasLeft())
+	 {
+	    if(i == tracks->adjList[ancestor].getLeft()) continue;	    
+	 }
+	 if(tracks->adjList[ancestor].hasRight())
+	 {
+	    if(i == tracks->adjList[ancestor].getRight()) continue;
+	 }
+	 
+	 {
+	    assert(false);
+	 }
       }
    }
 }
@@ -1910,7 +1995,7 @@ void UpdateTracks(TrackGraph *tracks, Player *player, StackAllocator *allocator)
       {
 	 tracks->adjList[i].flags |= TrackAttribute::invisible;
       }
-   }   
+   }
 
    SortTracks(tracks);
    // if a track is invisible and unreachable,
@@ -1933,11 +2018,11 @@ void GameLoop(GameState &state)
 	    {
 	       state.tracks.flags &= ~TrackGraph::switching;
 	    }
-	 }
+	 }	 
 
-	 UpdatePlayer(state.sphereGuy, state.tracks, state);
-	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);
 	 UpdateTracks(&state.tracks, &state.sphereGuy, (StackAllocator *)state.mainArena.base);
+	 UpdatePlayer(state.sphereGuy, state.tracks, state);
+	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);	 
 	 state.lightPos = state.camera.position;
    
 	 RenderPushObject(state.sphereGuy.renderable, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
@@ -2028,7 +2113,6 @@ void OnKeyDown(GameState &state)
 	 state.tracks.switchDelta = 0.0f;
       }
    }
-
 }
 
 void OnKeyUp(GameState &state)
