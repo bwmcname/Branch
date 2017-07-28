@@ -1,14 +1,62 @@
 
-#define SWAPMAP
+struct Slot
+{
+   u32 count;
+   u32 elements[3];
 
-#ifdef SWAPMAP
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-struct HashMap
+   enum
+   {
+      hasTrack = 0x1,
+      hasBranch = 0x2,
+   };
+
+   inline u32 GetCombinedFlags();
+   inline u32 GetTrackIndex();
+};
+
+#ifdef DEBUG
+void CheckSlot(Slot s)
+{
+   i32 trackCount = 0;
+   for(u32 i = 0; i < s.count; ++i)
+   {
+      if(s.elements[i] & Slot::hasTrack) ++trackCount;
+   }
+
+   assert(trackCount < 2);
+}
+#define DEBUG_CHECK_SLOT(s) CheckSlot(s)
+#elif
+#define DEBUG_CHECK_SLOT(s)
+#endif
+
+
+inline u32 Slot::GetCombinedFlags()
+{
+   DEBUG_CHECK_SLOT(*this);
+   return elements[0] | elements[1] | elements[2];
+}
+
+inline u32 Slot::GetTrackIndex()
+{
+   DEBUG_CHECK_SLOT(*this);
+
+   // assert(count == 1);
+   for(u32 i = 0; i < count; ++i)
+   {
+      if(elements[i] & hasTrack) return elements[i] >> 2;
+   }
+
+   assert(false);
+   return 0;
+}
+
+struct VirtualCoordHashTable
 {
    struct Element
    {      
-      K k;
-      V v;
+      VirtualCoord k;
+      Slot v;
       u8 flags;
 
       enum
@@ -23,25 +71,36 @@ struct HashMap
    u32 misses;
    u32 accesses;
    
-   HashMap(u32 size, StackAllocator *allocator);
-   void put(K k, V v);
-   V get(K k);
+   VirtualCoordHashTable(u32 size, StackAllocator *allocator);
+   void put(VirtualCoord k, u32 v);
+   Slot get(VirtualCoord k);
 
 private:
    inline u32 IncrementPointer(u32 ptr);
    inline void Swap(u32 a, u32 b);
 };
 
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-void HashMap<K, V, HashFunction, Compare, NullValue>::Swap(u32 a, u32 b)
+inline
+i32 Compare(VirtualCoord a, VirtualCoord b)
+{
+   return a.x == b.x && a.y == b.y;
+}
+
+inline
+u32 HashFunction(VirtualCoord key)
+{
+   return key.x ^ key.y;
+}
+
+
+void VirtualCoordHashTable::Swap(u32 a, u32 b)
 {
    Element temp = e[a];
    e[a] = e[b];
    e[b] = temp;
 }
 
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-u32 HashMap<K, V, HashFunction, Compare, NullValue>::IncrementPointer(u32 ptr)
+u32 VirtualCoordHashTable::IncrementPointer(u32 ptr)
 {
    if(ptr == capacity - 1)
       return 0;
@@ -49,8 +108,7 @@ u32 HashMap<K, V, HashFunction, Compare, NullValue>::IncrementPointer(u32 ptr)
       return ptr + 1;
 }
 
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-HashMap<K, V, HashFunction, Compare, NullValue>::HashMap(u32 _capacity, StackAllocator *allocator)
+VirtualCoordHashTable::VirtualCoordHashTable(u32 _capacity, StackAllocator *allocator)
 {
    e = (Element *)allocator->push(sizeof(Element) * _capacity);
    memset(e, 0, sizeof(Element) * _capacity);
@@ -61,8 +119,7 @@ HashMap<K, V, HashFunction, Compare, NullValue>::HashMap(u32 _capacity, StackAll
    accesses = 0;
 }
 
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-void HashMap<K, V, HashFunction, Compare, NullValue>::put(K k, V v)
+void VirtualCoordHashTable::put(VirtualCoord k, u32 v)
 {
    u32 unbounded = HashFunction(k);
    u32 slot = unbounded % capacity;
@@ -71,10 +128,13 @@ void HashMap<K, V, HashFunction, Compare, NullValue>::put(K k, V v)
 
    while(e[at].flags & Element::occupied)
    {      
-      // replace the value if it is already in the table
+      // add the value to the table
       if(Compare(k, e[at].k))
       {
-	 e[at] = {k, v, Element::occupied};
+	 u32 count = e[at].v.count;
+	 assert(count < 3);
+	 e[at].v.elements[count] = v;
+	 ++e[at].v.count;
 
 	 if(at != slot)
 	 {
@@ -95,11 +155,11 @@ void HashMap<K, V, HashFunction, Compare, NullValue>::put(K k, V v)
    }
    
    ++size;
-   e[slot] = {k, v, Element::occupied};
+   Slot value = {1, {v, 0, 0}};
+   e[slot] = {k, value, Element::occupied};
 }
 
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-V HashMap<K, V, HashFunction, Compare, NullValue>::get(K k)
+Slot VirtualCoordHashTable::get(VirtualCoord k)
 {
    ++accesses;
    i32 unbounded = HashFunction(k);
@@ -126,117 +186,5 @@ V HashMap<K, V, HashFunction, Compare, NullValue>::get(K k)
       ++misses;
    }
    
-   return NullValue;
+   return {0};
 }
-
-#else
-
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-struct HashMap
-{
-   struct Element
-   {      
-      K k;
-      V v;
-      u8 flags;
-
-      enum
-      {
-	 occupied = 0x1,
-      };
-   };
-
-   Element *e;
-   u32 capacity;
-   u32 size;
-   u32 misses;
-   u32 accesses;
-   
-   HashMap(u32 size, StackAllocator *allocator);
-   ~HashMap();
-   void put(K k, V v);
-   V get(K k);
-   void expand();
-
-private:
-   inline u32 IncrementPointer(u32 ptr);
-};
-
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-u32 HashMap<K, V, HashFunction, Compare, NullValue>::IncrementPointer(u32 ptr)
-{
-   if(ptr == capacity - 1)
-      return 0;
-   else
-      return ptr + 1;
-}
-
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-HashMap<K, V, HashFunction, Compare, NullValue>::HashMap(u32 _capacity, StackAllocator *allocator)
-{
-   e = (Element *)allocator->(sizeof(Element) * _capacity);
-   memset(e, 0, sizeof(Element) * _capacity);
-   capacity = _capacity;
-   size = 0;
-
-   misses = 0;
-   accesses = 0;
-}
-
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-HashMap<K, V, HashFunction, Compare, NullValue>::~HashMap()
-{
-   free(e);
-}
-
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-void HashMap<K, V, HashFunction, Compare, NullValue>::put(K k, V v)
-{
-   u32 unbounded = HashFunction(k);
-   u32 slot = unbounded % capacity;
-   u32 at = slot;
-   ++accesses;
-
-   while(e[at].flags & Element::occupied)
-   {      
-      // replace the value if it is already in the table
-      if(Compare(k, e[at].k))
-      {
-	 e[at] = {k, v, Element::occupied};
-
-	 if(at != slot) ++misses;
-	 return;
-      }
-      at = IncrementPointer(at);
-      assert(at != slot);
-   }   
-
-   if(at != slot) ++misses;
-   ++size;
-   e[at] = {k, v, Element::occupied};
-}
-
-template <typename K, typename V, u32 HashFunction(K), i32 Compare(K, K), V NullValue>
-V HashMap<K, V, HashFunction, Compare, NullValue>::get(K k)
-{
-   ++accesses;
-   i32 unbounded = HashFunction(k);
-   i32 slot = unbounded % capacity;
-   i32 at = slot;
-
-   while(e[at].flags & Element::occupied)
-   {
-      if(Compare(k, e[at].k))
-      {
-	 if(at != slot) ++misses;
-	 return e[at].v;
-      }
-      at = IncrementPointer(at);
-      assert(at != slot);
-   }
-
-   if(at != slot) ++misses;
-   return NullValue;
-}
-
-#endif

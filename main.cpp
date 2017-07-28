@@ -915,24 +915,6 @@ Curve BranchCurve(i32 x1, i32 y1,
    return result;
 }
 
-struct VirtualCoord
-{
-   i32 x;
-   i32 y;
-};
-
-inline
-i32 CompareVirtualCoords(VirtualCoord a, VirtualCoord b)
-{
-   return a.x == b.x && a.y == b.y;
-}
-
-inline
-u32 HashVirtualCoord(VirtualCoord key)
-{
-   return key.x ^ key.y;
-}
-
 static
 TrackGraph AllocateTrackGraph(i32 size, StackAllocator *allocator)
 {
@@ -947,7 +929,7 @@ static size_t trackGenTime = 0; // @DELETE
 
 void CheckGraph(TrackGraph &graph)
 {
-      // ensure graph was formed properly
+   // ensure graph was formed properly
    for(u32 i = 0; i < (u32)graph.size; ++i)
    {
       for(u32 j = 0; j < graph.adjList[i].ancestorCount(); ++j)
@@ -1016,13 +998,7 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
       graph.elements[i] = {0};
    }
 
-   // stored in hashmap
-   enum
-   {
-      hasTrack = 0x1,
-      isBranch = 0x2,
-   };
-   HashMap<VirtualCoord, u32, HashVirtualCoord, CompareVirtualCoords, 0> taken(1024, allocator); // lol   
+   VirtualCoordHashTable taken(1024, allocator); // lol   
    
    CircularQueue<TrackOrder> orders(graph.capacity, allocator);
    
@@ -1039,54 +1015,59 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
       if(!(item.rules & TrackOrder::dontBranch) && roll % 4 == 0) // is a branch
       {
 	 // amount of subsequent branches
-	 int branches = 0;      	 	 
+	 int branches = 0;	 	 
 	 
 	 // Queue up subsequent branches
 	 // can we fit a left track?
-	 u32 leftFlags = taken.get({item.x-1, item.y+1});
+	 Slot slot = taken.get({item.x-1, item.y+1});
+	 u32 leftFlags = slot.GetCombinedFlags();
 	 if(graph.capacity - firstFree > 0 &&
-	    !(leftFlags & (hasTrack)))
+	    !(leftFlags & Slot::hasTrack))
 	 {
 	    ++branches;
 	    orders.Push({firstFree, item.index, item.x-1, item.y+1, TrackOrder::dontBranch}); // left side
 
-	    taken.put({item.x-1, item.y+1}, (leftFlags & 0x3) | hasTrack | isBranch | (firstFree << 2));
+	    taken.put({item.x-1, item.y+1}, Slot::hasTrack | Slot::hasBranch | (firstFree << 2));
 	    graph.adjList[item.index].e[0] = firstFree++;
 	    graph.adjList[item.index].flags |= TrackAttribute::left;
 	 }
 
-	 else if(leftFlags & (hasTrack)) // is a left track already in that space?
+	 else if(leftFlags & (Slot::hasTrack)) // is a left track already in that space?
 	 {
-	    u32 index = leftFlags >> 2;
+	    u32 index = slot.GetTrackIndex();
 	    graph.adjList[item.index].e[0] = index;
-	    graph.adjList[item.index].flags |= TrackAttribute::left;
-	    graph.adjList[index].AddAncestor(item.index);
+	    graph.adjList[item.index].flags |=  TrackAttribute::left;
+	    // graph.adjList[index].AddAncestor(item.index);
+	    
 	    ++branches;
 	 }
 	 
 	 // can we fit a right track?
-	 u32 rightFlags = taken.get({item.x+1, item.y+1});
+	 slot = taken.get({item.x+1, item.y+1});
+	 u32 rightFlags = slot.GetCombinedFlags();
 	 if(graph.capacity - firstFree > 0 &&	    
-	    !(rightFlags & (hasTrack)))
+	    !(rightFlags & (Slot::hasTrack)))
 	 {
 	    ++branches;
 	    orders.Push({firstFree, item.index, item.x+1, item.y+1, TrackOrder::dontBranch}); // right side
 
-	    taken.put({item.x+1, item.y+1}, (rightFlags & 0x3) | hasTrack | isBranch | (firstFree << 2));
+	    taken.put({item.x+1, item.y+1}, Slot::hasTrack | Slot::hasBranch | (firstFree << 2));
 	    graph.adjList[item.index].e[1] = firstFree++;
-	    graph.adjList[item.index].flags |= TrackAttribute::right;
+	    graph.adjList[item.index].flags |=  TrackAttribute::right;
 	 }
-	 else if(rightFlags & (hasTrack)) // is a right track already in that space
+	 else if(rightFlags & (Slot::hasTrack)) // is a right track already in that space
 	 {
-	    u32 index = rightFlags >> 2;
+	    u32 index = slot.GetTrackIndex();
 	    graph.adjList[item.index].e[1] = index;
-	    graph.adjList[item.index].flags |= TrackAttribute::right;
-	    graph.adjList[index].AddAncestor(item.index);
+	    graph.adjList[item.index].flags |=  TrackAttribute::right;
+
+	    // graph.adjList[index].AddAncestor(item.index);
+	    
 	    ++branches;
 	 }
 	 
 	 graph.adjList[item.index].flags |= branches | TrackAttribute::branch;
-	 if(!(item.rules & TrackOrder::noAncestor)) graph.adjList[item.index].AddAncestor(item.ancestor);
+	 // if(!(item.rules & TrackOrder::noAncestor)) graph.adjList[item.index].AddAncestor(item.ancestor);
 
 	 v2 position = VirtualToReal(item.x, item.y);
        
@@ -1095,20 +1076,22 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
       }
       else // is linear
       {
-	 u32 behindFlags = taken.get({item.x, item.y+1});
+	 Slot slot = taken.get({item.x, item.y+1});
+	 u32 behindFlags = slot.GetCombinedFlags();
 	 if((graph.capacity - firstFree) > 0 &&
-	    !(behindFlags & hasTrack))
+	    !(behindFlags & Slot::hasTrack))
 	 {
 	    graph.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
 	    orders.Push({firstFree, item.index, item.x, item.y+1, 0});
-	    taken.put({item.x, item.y+1}, (behindFlags & 0x3) | hasTrack | (firstFree << 2));
+	    taken.put({item.x, item.y+1}, behindFlags | Slot::hasTrack | (firstFree << 2));
 	    graph.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
 	 }
-	 else if(behindFlags & hasTrack)
-	 {
-	    u32 index = behindFlags >> 2;
+	 else if(behindFlags & Slot::hasTrack)
+	 {	    	   
+	    u32 index = slot.GetTrackIndex();
 	    graph.adjList[item.index].e[0] = index;
-	    graph.adjList[index].AddAncestor(item.index);
+	    // graph.adjList[index].AddAncestor(item.index);
+	    graph.adjList[item.index].flags |= 1 | TrackAttribute::left;
 	 }
 	 
 	 v2 position = VirtualToReal(item.x, item.y);
@@ -1118,26 +1101,41 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	 // when placing tracks after branches, if there is already
 	 // a linear track behind the placed track, it will have to be manually
 	 // connected here.p
-	 u32 behind = taken.get({item.x, item.y-1});
-	 if(behind)
+	 Slot behind = taken.get({item.x, item.y-1});
+	 if(behind.count)
 	 {
-	    u32 index = behind >> 2;
-
-	    // if it is not a branch, and if it is not already connected
-	    if(!(graph.adjList[index].flags & TrackAttribute::branch) && (graph.adjList[index].flags & TrackAttribute::edgeCountMask) == 0)
+	    u32 index = behind.GetTrackIndex();
+	    if(!(behind.GetCombinedFlags() & Slot::hasTrack) && !(graph.adjList[index].flags & TrackAttribute::edgeCountMask))
 	    {
+	    
 	       graph.adjList[index].flags |= 1 | TrackAttribute::left;
 	       graph.adjList[index].e[0] = item.index;
-	       graph.adjList[item.index].AddAncestor(index);
-	    }	 
+	       // graph.adjList[item.index].AddAncestor(index);	    	 
+	    }
 	 }
-
-	 if(!(item.rules & TrackOrder::noAncestor)) graph.adjList[item.index].AddAncestor(item.ancestor);
+	 
+	 // if(!(item.rules & TrackOrder::noAncestor)) graph.adjList[item.index].AddAncestor(item.ancestor);
       }      
    }
 
+   
+
    graph.size = processed;
-   CheckGraph(graph);
+
+   for(i32 i = 0; i < graph.size; ++i)
+   {
+      if(graph.adjList[i].hasLeft())
+      {
+	 u32 left = graph.adjList[i].getLeft();
+	 graph.adjList[left].AddAncestor(i);
+      }
+
+      if(graph.adjList[i].hasRight())
+      {
+	 u32 right = graph.adjList[i].getRight();
+	 graph.adjList[right].AddAncestor(i);
+      }
+   }
 
    // pop hashmap
    allocator->pop();
@@ -1148,6 +1146,8 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
    END_TIME();
 
    trackGenTime = READ_TIME();
+
+   CheckGraph(graph);
 }
 
 struct Player
@@ -1668,26 +1668,26 @@ void RenderText_stb(char *string, float x, float y, stbFont &font, TextProgram &
       stbtt_GetPackedQuad(font.chars, font.width, font.height, c, &x, &y, &quad, 0);
 
       float uvs[] =
-      {
-	 quad.s0, quad.t1,
-	 quad.s1, quad.t1,
-	 quad.s0, quad.t0,
+	 {
+	    quad.s0, quad.t1,
+	    quad.s1, quad.t1,
+	    quad.s0, quad.t0,
 
-	 quad.s1, quad.t1,
-	 quad.s1, quad.t0,
-	 quad.s0, quad.t0,
-      };
+	    quad.s1, quad.t1,
+	    quad.s1, quad.t0,
+	    quad.s0, quad.t0,
+	 };
       
       float verts[] =
-      {
-	 quad.x0, quad.y0,
-	 quad.x1, quad.y0,
-	 quad.x0, quad.y1,
+	 {
+	    quad.x0, quad.y0,
+	    quad.x1, quad.y0,
+	    quad.x0, quad.y1,
 
-	 quad.x1, quad.y0,
-	 quad.x1, quad.y1,
-	 quad.x0, quad.y1,
-      };
+	    quad.x1, quad.y0,
+	    quad.x1, quad.y1,
+	    quad.x0, quad.y1,
+	 };
 
       glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
       glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, uvs);
@@ -1704,7 +1704,7 @@ void RenderText_stb(char *string, float x, float y, stbFont &font, TextProgram &
 
 static
 void DistanceRenderText(char *string, u32 length, float xpos, float ypos, float scale, FontData &font,
-		TextProgram p, GLuint textureMap)
+			TextProgram p, GLuint textureMap)
 {
 
    xpos = ((xpos + 1.0f) * 0.5f) * (float)SCREEN_WIDTH;
@@ -1754,15 +1754,15 @@ void DistanceRenderText(char *string, u32 length, float xpos, float ypos, float 
       float height = (float)params.height / mapHeight - 0.002f;
 
       float uvs[] =
-      {
-	 x, y + height,
-	 x + width, y + height,
-	 x, y,
+	 {
+	    x, y + height,
+	    x + width, y + height,
+	    x, y,
 
-	 x + width, y + height,
-	 x + width, y,
-	 x, y,
-      };
+	    x + width, y + height,
+	    x + width, y,
+	    x, y,
+	 };
 
       glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
       glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, uvs);
@@ -1776,15 +1776,15 @@ void DistanceRenderText(char *string, u32 length, float xpos, float ypos, float 
       float ypen = (ypos + yoffset);
 
       float verts[] =
-      {
-	 xpen, ypen,
-	 xpen + width, ypen,
-	 xpen, ypen + height,
+	 {
+	    xpen, ypen,
+	    xpen + width, ypen,
+	    xpen, ypen + height,
 
-	 xpen + width, ypen,
-	 xpen + width, ypen + height,
-	 xpen, ypen + height,
-      };
+	    xpen + width, ypen,
+	    xpen + width, ypen + height,
+	    xpen, ypen + height,
+	 };
 
       glBindBuffer(GL_ARRAY_BUFFER, textVbo);
       glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, verts);
@@ -1883,16 +1883,16 @@ void SetReachable(TrackAttribute *attributes, i32 start, StackAllocator *allocat
 }
 #else
 static
-   void SetReachable(TrackAttribute *attributes, i32 track, StackAllocator *allocator)
+void SetReachable(TrackAttribute *attributes, i32 track, StackAllocator *allocator)
 {
    if(!(attributes[track].flags & TrackAttribute::reachable))
    {
       attributes[track].flags |= TrackAttribute::reachable
 
-      if(attributes[track].hasLeft())
-      {
-	 SetReachable(attributes, attributes[track].getLeft(), allocator);
-      }
+	 if(attributes[track].hasLeft())
+	 {
+	    SetReachable(attributes, attributes[track].getLeft(), allocator);
+	 }
 
       if(attributes[track].hasRight())
       {
@@ -1904,7 +1904,7 @@ static
 
 #define NotReachableVisible(flags) (flags & TrackAttribute::invisible) && !(flags & TrackAttribute::reachable)
 
-void SortTracks(TrackGraph *tracks)
+void SortTracks(TrackGraph *tracks, Player *player)
 {
    u32 b = tracks->size-1;
 
@@ -1948,33 +1948,18 @@ void SortTracks(TrackGraph *tracks)
 
 	 tracks->adjList[a] = tracks->adjList[b];
 	 tracks->elements[a] = tracks->elements[b];
+
+	 if(player->trackIndex == (i32)b)
+	 {
+	    player->trackIndex = a;
+	 }
 	 
 	 --b;
 	 // --tracks->size;
       }
    }
 
-   // ensure graph was formed properly
-   for(u32 i = 0; i < (u32)tracks->size; ++i)
-   {
-      for(u32 j = 0; j < tracks->adjList[i].ancestorCount(); ++j)
-      {
-	 u32 ancestor = tracks->adjList[i].a[j];
-
-	 if(tracks->adjList[ancestor].hasLeft())
-	 {
-	    if(i == tracks->adjList[ancestor].getLeft()) continue;	    
-	 }
-	 if(tracks->adjList[ancestor].hasRight())
-	 {
-	    if(i == tracks->adjList[ancestor].getRight()) continue;
-	 }
-	 
-	 {
-	    assert(false);
-	 }
-      }
-   }
+   CheckGraph(*tracks);
 }
 
 void UpdateTracks(TrackGraph *tracks, Player *player, StackAllocator *allocator)
@@ -1997,7 +1982,7 @@ void UpdateTracks(TrackGraph *tracks, Player *player, StackAllocator *allocator)
       }
    }
 
-   SortTracks(tracks);
+   SortTracks(tracks, player);
    // if a track is invisible and unreachable,
    // then we want to remove it from the graph
 }
@@ -2005,7 +1990,7 @@ void UpdateTracks(TrackGraph *tracks, Player *player, StackAllocator *allocator)
 void GameLoop(GameState &state)
 {
    switch(state.state)
-  { 
+   { 
       case GameState::LOOP:
       {	 
 	 if(state.tracks.flags & TrackGraph::switching)

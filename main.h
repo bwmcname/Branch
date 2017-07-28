@@ -22,3 +22,10 @@ struct StackAllocator
    u8 *push(size_t size);
    void pop();
 };
+
+struct VirtualCoord
+{
+   i32 x;
+   i32 y;
+};
+
