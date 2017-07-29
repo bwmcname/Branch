@@ -26,7 +26,7 @@ void CheckSlot(Slot s)
    assert(trackCount < 2);
 }
 #define DEBUG_CHECK_SLOT(s) CheckSlot(s)
-#elif
+#else
 #define DEBUG_CHECK_SLOT(s)
 #endif
 

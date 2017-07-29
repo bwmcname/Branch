@@ -242,7 +242,7 @@ Curve InvertX(Curve c)
    return result;
 }
 
-static inline
+static __forceinline
 Curve lerp(Curve a, Curve b, float t)
 {
    Curve result;
@@ -842,8 +842,7 @@ struct TrackOrder
 
    enum
    {
-      dontBranch = 0x1,
-      noAncestor = 0x2,
+      dontBranch = 0x1,     
    };
    i32 rules;
 };
@@ -998,11 +997,11 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
       graph.elements[i] = {0};
    }
 
-   VirtualCoordHashTable taken(1024, allocator); // lol   
+   VirtualCoordHashTable taken(1024, allocator);
    
    CircularQueue<TrackOrder> orders(graph.capacity, allocator);
    
-   orders.Push({0, 0, 0, 0, TrackOrder::noAncestor}); // Push root segment.
+   orders.Push({0, 0, 0, 0, 0}); // Push root segment.
    u32 firstFree = 1; // next element that can be added to the queue
 
    i32 processed = 0;
@@ -1037,7 +1036,6 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	    u32 index = slot.GetTrackIndex();
 	    graph.adjList[item.index].e[0] = index;
 	    graph.adjList[item.index].flags |=  TrackAttribute::left;
-	    // graph.adjList[index].AddAncestor(item.index);
 	    
 	    ++branches;
 	 }
@@ -1060,14 +1058,11 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	    u32 index = slot.GetTrackIndex();
 	    graph.adjList[item.index].e[1] = index;
 	    graph.adjList[item.index].flags |=  TrackAttribute::right;
-
-	    // graph.adjList[index].AddAncestor(item.index);
 	    
 	    ++branches;
 	 }
 	 
 	 graph.adjList[item.index].flags |= branches | TrackAttribute::branch;
-	 // if(!(item.rules & TrackOrder::noAncestor)) graph.adjList[item.index].AddAncestor(item.ancestor);
 
 	 v2 position = VirtualToReal(item.x, item.y);
        
@@ -1090,7 +1085,6 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	 {	    	   
 	    u32 index = slot.GetTrackIndex();
 	    graph.adjList[item.index].e[0] = index;
-	    // graph.adjList[index].AddAncestor(item.index);
 	    graph.adjList[item.index].flags |= 1 | TrackAttribute::left;
 	 }
 	 
@@ -1107,18 +1101,12 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 	    u32 index = behind.GetTrackIndex();
 	    if(!(behind.GetCombinedFlags() & Slot::hasTrack) && !(graph.adjList[index].flags & TrackAttribute::edgeCountMask))
 	    {
-	    
 	       graph.adjList[index].flags |= 1 | TrackAttribute::left;
 	       graph.adjList[index].e[0] = item.index;
-	       // graph.adjList[item.index].AddAncestor(index);	    	 
 	    }
 	 }
-	 
-	 // if(!(item.rules & TrackOrder::noAncestor)) graph.adjList[item.index].AddAncestor(item.ancestor);
       }      
    }
-
-   
 
    graph.size = processed;
 
@@ -1147,7 +1135,7 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 
    trackGenTime = READ_TIME();
 
-   CheckGraph(graph);
+   DEBUG_DO(CheckGraph(graph));
 }
 
 struct Player
@@ -1799,8 +1787,8 @@ void DistanceRenderText(char *string, u32 length, float xpos, float ypos, float 
    glEnable(GL_DEPTH_TEST);
 }
 
-template <typename int_type>
-static inline void IntToString(char *dest, int_type num)
+template <typename int_type> static __forceinline
+void IntToString(char *dest, int_type num)
 {
    static char table[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
@@ -1959,7 +1947,7 @@ void SortTracks(TrackGraph *tracks, Player *player)
       }
    }
 
-   CheckGraph(*tracks);
+   DEBUG_DO(CheckGraph(*tracks));
 }
 
 void UpdateTracks(TrackGraph *tracks, Player *player, StackAllocator *allocator)

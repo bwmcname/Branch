@@ -19,7 +19,14 @@
 #include <math.h>
 #include <stdlib.h>
 
+#ifdef DEBUG
 #define assert(x) ((x) ? 0 : *((char *)0) = 'x')
+#define DEBUG_DO(x) x
+#else
+#define assert(x)
+#define DEBUG_DO(x)
+#endif
+
 #pragma warning(pop)
 
 #include "branch_common.h"
