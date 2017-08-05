@@ -700,6 +700,4 @@ void main(int argc, char **argv)
       printf("ap model <filename>\n");
       printf("   Converts an obj model to a binary format\n");
    }
-
-   printf("Done\n");
 }

@@ -27,6 +27,16 @@
 #define DEBUG_DO(x)
 #endif
 
+#ifdef TIMERS
+#define BEGIN_TIME() u64 LOCAL_TIME = __rdtsc()
+#define END_TIME() LOCAL_TIME = __rdtsc() - LOCAL_TIME
+#define READ_TIME(into) into = LOCAL_TIME
+#else
+#define BEGIN_TIME() 
+#define END_TIME() 
+#define READ_TIME(into)
+#endif
+
 #pragma warning(pop)
 
 #include "branch_common.h"

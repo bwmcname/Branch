@@ -51,10 +51,6 @@ static float ScreenVerts[] =
    -1.0f, 1.0f
 };
 
-#define BEGIN_TIME() u64 LOCAL_TIME = __rdtsc()
-#define END_TIME() LOCAL_TIME = __rdtsc() - LOCAL_TIME
-#define READ_TIME() LOCAL_TIME
-
 static inline
 void InitStackAllocator(StackAllocator *allocator)
 {      
@@ -154,6 +150,7 @@ struct MeshObject
 static MeshObject Sphere;
 static MeshObject LinearTrack;
 static MeshObject BranchTrack;
+static MeshObject BreakTrack;
 
 struct ShaderProgram
 {
@@ -176,6 +173,7 @@ struct ShaderProgram
 };
 
 static ShaderProgram DefaultShader;
+static ShaderProgram BreakBlockProgram;
 
 // Higher level Game Object abstraction
 struct Object
@@ -230,6 +228,7 @@ union Curve
 
 static Curve GlobalLinearCurve;
 static Curve GlobalBranchCurve;
+static Curve GlobalBreakCurve;
 
 static inline
 Curve InvertX(Curve c)
@@ -495,7 +494,7 @@ void RenderPushMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 l
 }
 
 static
-void RenderPushObject(Object &obj, m4 &camera, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
+void RenderPushObject(Object &obj, m4 &camera, v3 lightPos, v3 diffuseColor)
 {
    m4 orientation = M4(obj.orientation);
    m4 scale = Scale(obj.scale);
@@ -504,6 +503,29 @@ void RenderPushObject(Object &obj, m4 &camera, v3 lightPos, v3 diffuseColor = V3
    m4 transform = translation * scale * orientation;
    
    RenderPushMesh(*obj.p, obj.meshBuffers, transform, camera, lightPos, diffuseColor);
+}
+
+static
+void RenderPushBreak(Object &obj, m4 &camera, v3 lightPos, v3 diffuseColor)
+{
+   RenderPushObject(obj, camera, lightPos, diffuseColor);
+
+   m4 translation = Translate(V3(obj.worldPos.x, obj.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, obj.worldPos.z));
+   m4 orientation = M4(Rotation(V3(-1.0f, 0.0f, 0.0f), 1.5708f));
+   m4 scale = Scale(V3(5.0f, 5.0f, 5.0f));
+
+   m4 model = translation * orientation * scale;
+   m4 mvp = InfiniteProjection * camera * model;
+
+   glBindBuffer(GL_ARRAY_BUFFER, RectangleVertBuffer);
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glUseProgram(BreakBlockProgram.programHandle);
+   glUniformMatrix4fv(BreakBlockProgram.MVPUniform, 1, GL_FALSE, mvp.e);
+   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+   glUseProgram(0);
 }
 
 enum KeyState
@@ -543,6 +565,8 @@ Track CreateTrack(v3 position, v3 scale, Curve *bezier, MeshObject &buffers)
 
    return result;
 }
+
+#if 0
 
 struct TrackAttribute
 {
@@ -725,6 +749,7 @@ struct TrackGraph
    Curve endLerp;
 
    void RemoveTrack(u32 i);
+   inline Attribute &GetTrack(u32 id);
 };
 
 void
@@ -748,6 +773,7 @@ TrackGraph::RemoveTrack(u32 i)
       }
    }
 }
+#endif
 
 template <typename T>
 struct CircularQueue
@@ -758,16 +784,26 @@ struct CircularQueue
    i32 end;
    T *elements;
 
-   CircularQueue(i32 _max, StackAllocator *allocator);
+   //CircularQueue(i32 _max, StackAllocator *allocator);
    void Push(T e);
    T Pop();
-   void ClearToZero();   
+   void ClearToZero();
 
+   inline i32 IncrementIndex(i32 index);
+   
 private:
    inline void IncrementEnd();
    inline void IncrementBegin();
 };
 
+template <typename T>
+inline i32 CircularQueue<T>::IncrementIndex(i32 index)
+{
+   if(index == max) return 0;
+   else return index + 1;
+}
+
+#if 0
 template <typename T>
 CircularQueue<T>::CircularQueue(i32 _max, StackAllocator *allocator)
 {
@@ -777,6 +813,7 @@ CircularQueue<T>::CircularQueue(i32 _max, StackAllocator *allocator)
    end = 0;
    elements = (T *)allocator->push(max * sizeof(T));
 }
+#endif
 
 template <typename T>
 void CircularQueue<T>::Push(T e)
@@ -879,18 +916,16 @@ Curve LinearCurve(i32 x1, i32 y1,
 }
 
 static inline
-Curve BreakCurve(i32 x, i32 y)
+Curve BreakCurve()
 {
-   v2 begin = VirtualToReal(x, y);
-   v2 end = V2(begin.x, begin.y + (TRACK_SEGMENT_SIZE / 2.0f));
 
-   v2 direction = end - begin;
+   float length = 0.7f * TRACK_SEGMENT_SIZE;
 
    Curve result;
-   result.p1 = begin;
-   result.p2 = 0.333333f * direction;
-   result.p3 = 0.666666f * direction;
-   result.p4 = direction;
+   result.p1 = {0.0f, 0.0f};
+   result.p2 = 0.333333f * V2(0.0f, length);
+   result.p3 = 0.666666f * V2(0.0f, length);
+   result.p4 = {1.0f, length};
 
    return result;
 }
@@ -914,6 +949,7 @@ Curve BranchCurve(i32 x1, i32 y1,
    return result;
 }
 
+#if 0
 static
 TrackGraph AllocateTrackGraph(i32 size, StackAllocator *allocator)
 {
@@ -923,9 +959,11 @@ TrackGraph AllocateTrackGraph(i32 size, StackAllocator *allocator)
    result.elements = (Track *)allocator->push(sizeof(Track) * result.capacity);   
    return result;
 }
+#endif
 
 static size_t trackGenTime = 0; // @DELETE
 
+#if 0
 void CheckGraph(TrackGraph &graph)
 {
    // ensure graph was formed properly
@@ -982,7 +1020,8 @@ void CheckGraph(TrackGraph &graph)
       }
    }
 }
-
+#endif
+#if 0
 static
 void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 {
@@ -1135,16 +1174,529 @@ void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
 
    trackGenTime = READ_TIME();
 
-   DEBUG_DO(CheckGraph(graph));
+   //  DEBUG_DO(CheckGraph(graph));
+}
+#endif
+
+struct Attribute
+{
+   enum
+   {
+      hasLeftEdge = 0x1,
+      hasRightEdge = 0x2,
+      reachable = 0x4,
+      invisible = 0x8,
+      unused = 0x10,
+      breaks = 0x20,
+      branch = 0x40,
+      linear = 0x80,
+   };
+
+   u16 id;
+   u16 flags;
+   u16 edgeCount;
+   u16 ancestorCount;
+
+   u16 edges[2];
+   u16 ancestors[3];
+
+   inline u16 leftEdge()
+   {
+      return edges[0];
+   }
+
+   inline u16 rightEdge()
+   {
+      return edges[1];
+   }
+
+   inline u16 hasLeft()
+   {
+      return flags & hasLeftEdge;
+   }
+
+   inline u16 hasRight()
+   {
+      return flags & hasRightEdge;
+   }
+
+   inline i32 isBranch()
+   {
+      return flags & branch; 
+   }
+
+   inline void addAncestor(u16 ancestorID);
+   inline void removeAncestor(u16 ancestorID);
+   inline void removeEdge(u16 edgeID);
+};
+
+inline void
+Attribute::removeEdge(u16 edgeID)
+{
+   if(hasLeft())
+   {
+      if(leftEdge() == edgeID)
+      {
+	 flags &= ~hasLeftEdge;
+	 return;
+      }
+   }
+
+   if(hasRight())
+   {
+      if(leftEdge() == edgeID)
+      {
+	 flags &= ~hasRightEdge;
+	 return;
+      }
+   }
+}
+
+inline void
+Attribute::addAncestor(u16 ancestorID)
+{
+   assert(ancestorCount < 3);
+   ancestors[ancestorCount++] = ancestorID;   
+}
+
+inline void
+Attribute::removeAncestor(u16 ancestorID)
+{
+   assert(ancestorCount > 0);
+
+   u16 i;
+   for(i = 0; i < ancestorCount; ++i)
+   {
+      if(ancestors[i] == ancestorID) break;
+   }
+
+   if(i == ancestorCount - 1)
+   {
+      --ancestorCount;
+   }
+   else
+   {
+      ancestors[i] = ancestors[ancestorCount-1];
+      --ancestorCount;
+   }
+}
+
+struct NewTrackOrder
+{
+   enum
+   {
+      left = 0x1,
+      right = 0x2,
+      sideMask = 0x3,
+      dontBranch = 0x4,
+      dontBreak = 0x8,
+   };
+
+   u16 ancestorID;
+   u16 flags;
+
+   i32 x;
+   i32 y;
+
+   inline u16 Side()
+   {
+      return (flags & sideMask) - 1;
+   }
+};
+
+struct NewTrackGraph
+{
+   enum
+   {
+      left = 0x1,
+      switching = 0x2,
+   };   
+
+   static const u32 capacity = 1024;
+   Attribute *adjList;
+   Track *elements;
+   CircularQueue<u16> availableIDs;
+   CircularQueue<NewTrackOrder> orders;
+   VirtualCoordHashTable taken;
+   u16 *IDtable;
+   u8 flags;
+
+   float switchDelta;
+   Curve beginLerp;
+   Curve endLerp;
+
+   void RemoveTrackActual(u16 id);
+   inline Attribute &GetTrack(u16 id);
+
+#ifdef DEBUG
+   void VerifyGraph();
+#endif
+};
+
+inline Attribute &
+NewTrackGraph::GetTrack(u16 id)
+{
+   return adjList[IDtable[id]];
+}
+
+
+inline
+u16 ActualToVirtual(u16 ID, NewTrackGraph &graph)
+{
+   for(u16 i = 0; i < graph.capacity; ++i)
+   {
+      u16 actual = graph.IDtable[i];
+      if(actual == ID)
+      {
+	 return i;
+      }
+   }
+   
+   assert(false);
+   return 0;
+}
+
+void
+NewTrackGraph::RemoveTrackActual(u16 id)
+{
+   if(adjList[id].hasLeft())
+   {
+      u16 idEdge = IDtable[adjList[id].leftEdge()];
+
+      adjList[idEdge].removeAncestor(id);
+   }
+
+   if(adjList[id].hasRight())
+   {
+      u16 idEdge = IDtable[adjList[id].rightEdge()];
+
+      adjList[idEdge].removeAncestor(id);
+   }
+
+   for(u16 i = 0; i < adjList[id].ancestorCount; ++i)
+   {
+      u16 idAncestor = IDtable[adjList[id].ancestors[i]];
+
+      adjList[idAncestor].removeEdge(id);
+   }   
+}
+
+template <typename T>
+CircularQueue<T> InitCircularQueue(u32 size, StackAllocator *allocator)
+{
+   CircularQueue<T> q;
+   q.max = size;
+   q.begin = 0;
+   q.end = 0;
+   q.size = 0;
+   q.elements = (T *)allocator->push(sizeof(T) * size);
+
+   return q;
+}
+
+NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
+{
+   NewTrackGraph g;
+   g.adjList = (Attribute *)allocator->push(sizeof(Attribute) * 1024);
+
+   for(u32 i = 0; i < g.capacity; ++i)
+   {
+      g.adjList[i] = {0, Attribute::unused, 0, 0, {}, {}};
+   }
+
+   g.availableIDs = InitCircularQueue<u16>(1024, allocator); //@ could be smaller?
+   g.orders = InitCircularQueue<NewTrackOrder>(1024, allocator); //@ could be smaller
+   g.taken = InitVirtualCoordHashTable(1024, allocator);
+   g.IDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
+   g.elements = (Track *)allocator->push(sizeof(Track) * 1024);
+
+   g.IDtable[0] = 0;
+   g.elements[0] = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve, LinearTrack);
+   g.elements[0].flags = Track::left;
+   g.orders.Push({0, NewTrackOrder::left | NewTrackOrder::dontBranch, 0, 1});
+
+   g.flags = NewTrackGraph::left;
+
+   g.switchDelta = 0.0f;
+   g.beginLerp = {};
+   g.endLerp = {};
+
+   for(u16 i = 1; i < g.capacity; ++i)
+   {
+      g.availableIDs.Push(i);
+      g.IDtable[i] = i;
+   }
+
+   return g;
+}
+
+static
+i32 OtherSideOfBranchHasBreak(NewTrackGraph &graph, u16 ancestor, u16 thisSide)
+{
+   u16 actualAncestor = graph.IDtable[ancestor];
+
+   if(thisSide & NewTrackOrder::left)
+   {
+      if(graph.adjList[actualAncestor].hasRight())
+      {
+	 u16 right = graph.IDtable[graph.adjList[actualAncestor].rightEdge()];
+	 return (graph.adjList[right].flags & Attribute::breaks);
+      }
+      return false;
+   }
+   else
+   {
+      if(graph.adjList[actualAncestor].hasLeft())
+      {
+	 u16 left = graph.IDtable[graph.adjList[actualAncestor].leftEdge()];
+	 return (graph.adjList[left].flags & Attribute::breaks);
+      }
+      return false;
+   }
+}
+
+void FillGraph(NewTrackGraph &graph)
+{
+   while(graph.availableIDs.size > 0 && graph.orders.size > 0)
+   {
+      NewTrackOrder item = graph.orders.Pop();
+
+      LocationInfo info = graph.taken.get({item.x, item.y});
+
+      u16 edgeID;
+      u16 flags = 0;
+
+      if(info.hasTrack())
+      {
+	 edgeID = info.ID;	 
+      }
+      else
+      {	
+	 edgeID = graph.availableIDs.Pop();
+	 assert(graph.adjList[graph.IDtable[edgeID]].flags & Attribute::unused);
+	 
+	 v2 position = VirtualToReal(item.x, item.y);
+	 long roll = rand();	 
+
+	 if(roll % 2 == 0 && graph.orders.size >= 10 &&
+	    !(item.flags & NewTrackOrder::dontBreak) &&
+	    !graph.taken.get({item.x, item.y-1}).hasTrack() &&
+	    !OtherSideOfBranchHasBreak(graph, item.ancestorID, item.flags))
+	 {
+	    u16 breakActual = graph.IDtable[edgeID];
+	    graph.elements[breakActual] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
+						      &GlobalBreakCurve, BreakTrack);
+	    flags |= Attribute::breaks;
+	 }
+	 else if(roll % 5 == 0 && !(item.flags & NewTrackOrder::dontBranch))
+	 {
+	    u16 branchActual = graph.IDtable[edgeID];
+	    graph.elements[branchActual] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
+								&GlobalBranchCurve, BranchTrack);
+
+	    graph.elements[branchActual].flags |= Track::branch;
+	    flags |= Attribute::branch;
+	    
+	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBranch, item.x - 1, item.y + 1});
+
+	    graph.orders.Push({edgeID, NewTrackOrder::right | NewTrackOrder::dontBranch, item.x + 1, item.y + 1});
+	 }	 
+	 else
+	 {
+	    graph.elements[graph.IDtable[edgeID]] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
+								&GlobalLinearCurve, LinearTrack);
+
+	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});
+	    flags |= Attribute::linear;
+	 }
+
+	 graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
+      }
+
+      u16 ancestorID = item.ancestorID;
+      u16 actualAncestor = graph.IDtable[ancestorID];
+      u16 actualEdge = graph.IDtable[edgeID];
+
+      assert(actualEdge != actualAncestor);
+
+      if(item.flags & NewTrackOrder::left)
+      {
+	 graph.adjList[actualAncestor].flags |= Attribute::hasLeftEdge;
+      }
+      else
+      {
+	 graph.adjList[actualAncestor].flags |= Attribute::hasRightEdge;
+      }
+
+      graph.adjList[actualAncestor].edges[item.Side()] = edgeID;
+      ++graph.adjList[actualAncestor].edgeCount;
+      
+      graph.adjList[actualEdge].addAncestor(ancestorID);
+      graph.adjList[actualEdge].flags |= flags;
+      graph.adjList[actualEdge].flags &= ~Attribute::unused;
+      DEBUG_DO(graph.VerifyGraph());
+   }   
+}
+
+void NewSetReachable(NewTrackGraph &graph, StackAllocator &allocator, u16 start)
+{
+   u16 *stack = (u16 *)allocator.push(1024);
+   u32 top = 1;
+
+   stack[0] = graph.IDtable[start];
+
+   while(top > 0)
+   {
+      u16 index = stack[--top];
+
+      if(!(graph.adjList[index].flags & Attribute::reachable))
+      {
+	 graph.adjList[index].flags |= Attribute::reachable;
+
+	 if(graph.adjList[index].hasLeft())
+	 {
+	    stack[top++] = graph.IDtable[graph.adjList[index].leftEdge()];
+	 }
+
+	 if(graph.adjList[index].hasRight())
+	 {
+	    stack[top++] = graph.IDtable[graph.adjList[index].rightEdge()];
+	 }
+      }
+   }
+
+   allocator.pop();
+}
+
+#define NotReachableVisible(flags) (((flags) & Attribute::invisible) && !((flags) & Attribute::reachable))
+#define NotReachable(flags) (!((flags) & Attribute::reachable))
+#define NotVisible(flags) ((flags) & Attribute::invisible)
+				
+
+void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator)
+{
+   u16 *removed = (u16 *)allocator.push(1024 * sizeof(u16)); //@ can these be smaller?
+   u16 *unreachable = (u16 *)allocator.push(1024 * sizeof(u16));
+   u16 removedTop = 0;
+   u16 unreachableTop = 0;
+   
+   for(u16 i = 0; i < (u16)graph.capacity; ++i)
+   {      
+      u8 notReachable = NotReachable(graph.adjList[i].flags);
+      u8 notVisible = NotVisible(graph.adjList[i].flags);
+      if(notReachable)
+      {
+	 u16 virt = ActualToVirtual(i, graph);
+	 if(notVisible)
+	 { 
+	    removed[removedTop++] = virt;
+	    graph.RemoveTrackActual(i);
+	    if(graph.availableIDs.size != graph.availableIDs.max)
+	    {
+	       graph.availableIDs.Push(virt);
+	    }
+	    graph.adjList[i] = {};
+	    graph.elements[i] = {};
+	    graph.adjList[i].flags = Attribute::unused;
+	 }
+	 else
+	 {
+	    unreachable[unreachableTop++] = virt;
+	 }
+      }
+   }
+
+   if(unreachableTop > 0)
+   {
+      u32 size = graph.orders.size;
+
+      for(u32 i = 0; i < size; ++i)
+      {
+	 i32 good = 1;
+	 NewTrackOrder item = graph.orders.Pop();
+	 for(u16 j = 0; j < unreachableTop; ++j)
+	 {
+	    if(unreachable[j] == item.ancestorID)
+	    {
+	       good = 0;
+	       break;
+	    }
+	 }
+
+	 if(good) graph.orders.Push(item);
+      }
+   }
+
+   // now remove all orders with removed ancestors
+   i32 good = 1;
+   if(removedTop > 0)
+   {
+      u32 size = graph.orders.size;
+      for(u32 i = 0; i < size; ++i)
+      {
+	 NewTrackOrder item = graph.orders.Pop();
+	 for(u16 j = 0; j < removedTop; ++j)
+	 {
+	    if(removed[j] == item.ancestorID)
+	    {
+	       good = 0;
+	       break;
+	    }
+	 }
+
+	 if(good) graph.orders.Push(item);
+      }
+
+      // now remove all removed items in hashtable
+      for(u16 i = 0; i < graph.capacity; ++i)
+      {
+	 if(graph.taken.e[i].flags & VirtualCoordHashTable::Element::occupied)
+	 {
+	    for(u16 j = 0; j < removedTop; ++j)
+	    {
+	       if(graph.taken.e[i].v.ID == removed[j])
+	       {
+		  graph.taken.e[i].flags = 0;
+		  graph.taken.e[i].v = {0};
+		  graph.taken.e[i].k = {0};	       
+	       }
+	    }
+	 }
+      }
+   }
+   allocator.pop();
 }
 
 struct Player
 {
    Object renderable;
-   Track *currentTrack;
-   i32 trackIndex;
+   u16 trackIndex;
    float t;
 };
+
+void NewUpdateTrackGraph(NewTrackGraph &graph, StackAllocator &allocator, Player &player)
+{
+   for(u16 i = 0; i < graph.capacity; ++i)
+   {
+      graph.adjList[i].flags &= ~Attribute::reachable; 
+   }
+
+   NewSetReachable(graph, allocator, player.trackIndex);
+
+   float cutoff = player.renderable.worldPos.y - (TRACK_SEGMENT_SIZE * 2.0f);
+
+   for(u16 i = 0; i < graph.capacity; ++i)
+   {
+      if(graph.elements[i].renderable.worldPos.y < cutoff)
+      {
+	 graph.adjList[i].flags |= Attribute::invisible;
+      }
+   }
+
+   NewSortTracks(graph, allocator);
+
+   FillGraph(graph);   
+}
 
 struct stbFont
 {
@@ -1162,7 +1714,7 @@ struct GameState
    Camera camera;
    Player sphereGuy;
    KeyState keyState;
-   TrackGraph tracks;
+   NewTrackGraph tracks;
    Arena mainArena;
 
    v3 lightPos;
@@ -1185,6 +1737,13 @@ struct GameState
    };
 
    i32 state;
+
+   #ifdef TIMERS
+   u64 TrackRenderTime;
+   u64 TrackSortTime;
+   u64 TrackGenTime;
+   u64 GameLoopTime;
+   #endif
 };
 
 static
@@ -1284,19 +1843,22 @@ v3 GetPositionOnTrack(Track &track, float t)
 	     track.renderable.worldPos.z);
 }
 
-void UpdatePlayer(Player &player, TrackGraph &tracks, GameState &state)
+void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 {
-   player.t += 0.1f * delta;
+   Track *currentTrack = &tracks.elements[tracks.IDtable[player.trackIndex]];
+
+   player.t += 0.15f * delta;
    if(player.t > 1.0f)
    {
-      player.t -= 1.0f;
+      player.t -= 1.0f;      
 
-      if((tracks.flags & TrackGraph::left) || (player.currentTrack->flags & Track::branch) == 0)
+      if((tracks.flags & NewTrackGraph::left) || (currentTrack->flags & Track::branch) == 0)
       {
-	 if(tracks.adjList[player.trackIndex].hasLeft())
+	 u16 trackActual = tracks.IDtable[player.trackIndex];
+	 if(tracks.adjList[trackActual].hasLeft())
 	 {
-	    u32 newIndex = tracks.adjList[player.trackIndex].getLeft();
-	    player.currentTrack = &tracks.elements[newIndex];
+	    u16 newIndex = tracks.adjList[trackActual].leftEdge();
+	    currentTrack = &tracks.elements[tracks.IDtable[newIndex]];
 	    player.trackIndex = newIndex;
 	 }
 	 else
@@ -1309,8 +1871,8 @@ void UpdatePlayer(Player &player, TrackGraph &tracks, GameState &state)
       {
 	 if(tracks.adjList[player.trackIndex].hasRight())
 	 {
-	    i32 newIndex = tracks.adjList[player.trackIndex].getRight();
-	    player.currentTrack = &tracks.elements[newIndex];
+	    u16 newIndex = tracks.adjList[tracks.IDtable[player.trackIndex]].rightEdge();
+	    currentTrack = &tracks.elements[tracks.IDtable[newIndex]];
 	    player.trackIndex = newIndex;
 	 }
 	 else
@@ -1321,10 +1883,10 @@ void UpdatePlayer(Player &player, TrackGraph &tracks, GameState &state)
       }
    }   
 
-   player.renderable.worldPos = GetPositionOnTrack(*player.currentTrack, player.t);   
+   player.renderable.worldPos = GetPositionOnTrack(*currentTrack, player.t);   
 }
 
-void UpdateCamera(Camera &camera, const Player &player, const TrackGraph &graph)
+void UpdateCamera(Camera &camera, const Player &player)
 {
    v3 playerPosition = player.renderable.worldPos;
    camera.position.y = playerPosition.y - 5.0f;
@@ -1564,7 +2126,7 @@ void GameInit(GameState &state)
    InitStackAllocator((StackAllocator *)state.mainArena.base);
    StackAllocator *stack = (StackAllocator *)state.mainArena.base;
 
-   state.tracks = AllocateTrackGraph(1024, stack);
+   state.tracks = InitNewTrackGraph(stack);
 
    assert(state.mainArena.base);
 
@@ -1584,6 +2146,9 @@ void GameInit(GameState &state)
 						     stack);
    state.bitmapFontProgram = LoadFilesAndCreateTextProgram("assets\\bitmap_font.vertp", "assets\\bitmap_font.fragp",
 							   stack);
+   BreakBlockProgram = LoadFilesAndCreateProgram("assets\\BreakerBlock.vertp", "assets\\BreakerBlock.fragp",
+						   stack);
+
    state.tempFontField = LoadImageFile("distance_field.bi", stack);   
    state.tempFontData = LoadFontFile("font_data.bf", stack);
    state.bitmapFont = InitFont_stb("c:/Windows/Fonts/arial.ttf", 1024, 1024,stack);
@@ -1592,16 +2157,19 @@ void GameInit(GameState &state)
    state.keyState = up;
    Sphere = InitMeshObject("assets\\sphere.brian", stack);
 
-   //@leak
+   // @leak
    LinearTrack = AllocateMeshObject(80 * 3, stack);
    BranchTrack = AllocateMeshObject(80 * 3, stack);
-   
+   BreakTrack = AllocateMeshObject(80 * 3, stack);
+
    GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
    GlobalBranchCurve = BranchCurve(0, 0,
 				   -1, 1);
+   GlobalBreakCurve = BreakCurve();
 
    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
    GenerateTrackSegmentVertices(LinearTrack, GlobalLinearCurve);
+   GenerateTrackSegmentVertices(BreakTrack, GlobalBreakCurve);
 
    RectangleUVBuffer = UploadVertices(RectangleUVs, 6, 2);
    RectangleVertBuffer = UploadVertices(RectangleVerts, 6, 2);
@@ -1618,7 +2186,8 @@ void GameInit(GameState &state)
    state.sphereGuy.t = 0.0f;   
    state.sphereGuy.trackIndex = 0;
 
-   ReInitTrackGraph(state.tracks, stack);
+   //ReInitTrackGraph(state.tracks, stack);
+   FillGraph(state.tracks);
 }
 
 static inline
@@ -1818,27 +2387,45 @@ void IntToString(char *dest, int_type num)
 
 i32 RenderTracks(GameState &state)
 {
+   BEGIN_TIME();
    i32 rendered = 0;
-   for(i32 i = 0; i < state.tracks.size; ++i)
+   for(i32 i = 0; i < state.tracks.capacity; ++i)
    {	    
-      if(!(state.tracks.adjList[i].flags & TrackAttribute::invisible))
+      if(!(state.tracks.adjList[i].flags & Attribute::invisible) &&
+	 !(state.tracks.adjList[i].flags & Attribute::unused))
       {	 
-	 if(state.tracks.adjList[i].flags & TrackAttribute::reachable)
+	 if(state.tracks.adjList[i].flags & Attribute::reachable)
 	 {
-	    RenderPushObject(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+	    if(state.tracks.adjList[i].flags & Attribute::breaks)
+	    {
+	       RenderPushBreak(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
+	    }
+	    else
+	    {
+	       RenderPushObject(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+	    }
 	 }
 	 else
 	 {
-	    RenderPushObject(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 0.0f, 1.0f));
+	    if(state.tracks.adjList[i].flags & Attribute::breaks)
+	    {
+	       RenderPushBreak(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
+	    }
+	    else
+	    {
+	       RenderPushObject(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 0.0f, 1.0f));
+	    }
 	 }
 	 ++rendered;
       }
    }
+   END_TIME();
+   READ_TIME(state.TrackRenderTime);
 
    return rendered;
 }
 
-#if 1
+#if 0
 static
 void SetReachable(TrackAttribute *attributes, i32 start, StackAllocator *allocator)
 {
@@ -1869,7 +2456,7 @@ void SetReachable(TrackAttribute *attributes, i32 start, StackAllocator *allocat
 
    allocator->pop();
 }
-#else
+
 static
 void SetReachable(TrackAttribute *attributes, i32 track, StackAllocator *allocator)
 {
@@ -1890,6 +2477,7 @@ void SetReachable(TrackAttribute *attributes, i32 track, StackAllocator *allocat
 }
 #endif
 
+#if 0
 #define NotReachableVisible(flags) (flags & TrackAttribute::invisible) && !(flags & TrackAttribute::reachable)
 
 void SortTracks(TrackGraph *tracks, Player *player)
@@ -1972,8 +2560,9 @@ void UpdateTracks(TrackGraph *tracks, Player *player, StackAllocator *allocator)
 
    SortTracks(tracks, player);
    // if a track is invisible and unreachable,
-   // then we want to remove it from the graph
+   // then we want to remove it from the graph   
 }
+#endif
 
 void GameLoop(GameState &state)
 {
@@ -1981,7 +2570,7 @@ void GameLoop(GameState &state)
    { 
       case GameState::LOOP:
       {	 
-	 if(state.tracks.flags & TrackGraph::switching)
+	 if(state.tracks.flags & NewTrackGraph::switching)
 	 {
 	    state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
 	    GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, state.tracks.switchDelta);
@@ -1989,27 +2578,20 @@ void GameLoop(GameState &state)
 
 	    if(state.tracks.switchDelta == 1.0f)
 	    {
-	       state.tracks.flags &= ~TrackGraph::switching;
+	       state.tracks.flags &= ~NewTrackGraph::switching;
 	    }
 	 }	 
 
-	 UpdateTracks(&state.tracks, &state.sphereGuy, (StackAllocator *)state.mainArena.base);
+	 NewUpdateTrackGraph(state.tracks, *((StackAllocator *)state.mainArena.base), state.sphereGuy);
 	 UpdatePlayer(state.sphereGuy, state.tracks, state);
-	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);	 
+	 UpdateCamera(state.camera, state.sphereGuy);	 
 	 state.lightPos = state.camera.position;
    
 	 RenderPushObject(state.sphereGuy.renderable, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
 
-	 i32 rendered = RenderTracks(state);
+	 RenderTracks(state);
 
-	 static char onScreen[8];
-	 IntToString(onScreen, rendered);
-	 DistanceRenderText(onScreen, 0, -0.8f, 0.6f, 0.1f, state.tempFontData, state.fontProgram, state.fontTextureHandle);
-
-	 static char trackTime[19];
-	 IntToString(trackTime, trackGenTime);
-	 DistanceRenderText(trackTime, 0, -0.8f, 0.4f, 0.1f, state.tempFontData, state.fontProgram, state.fontTextureHandle);
-
+#ifdef TIMERS
 	 static char framerate[8];
 	 static float time = 120.0f;
 	 time += delta;
@@ -2018,14 +2600,18 @@ void GameLoop(GameState &state)
 	    time = 0.0f;
 	    IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
 	 }
+	 RenderText_stb(framerate, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
 
-	 RenderText_stb(framerate, 0.0f, 0.0f, state.bitmapFont, state.bitmapFontProgram);
+	 static char renderTimeSting[19];
+	 IntToString(renderTimeSting, state.TrackRenderTime);
+	 RenderText_stb(renderTimeSting, -0.8f, 0.75f, state.bitmapFont, state.bitmapFontProgram);	 
+#endif
       }break;
 
       case GameState::RESET:
       {	 
 	 state.state = GameState::START;
-	 ReInitTrackGraph(state.tracks, (StackAllocator *)state.mainArena.base);
+	 FillGraph(state.tracks);
       }break;
 
       case GameState::START:
@@ -2036,7 +2622,6 @@ void GameLoop(GameState &state)
 	 if(GlobalActionPressed)
 	 {
 	    state.state = GameState::LOOP;	    
-	    state.sphereGuy.currentTrack = &state.tracks.elements[state.tracks.head];
 	    state.sphereGuy.trackIndex = 0;
 	    state.sphereGuy.t = 0.0f;
 
@@ -2066,12 +2651,13 @@ void OnKeyDown(GameState &state)
 {
    GlobalActionPressed = 1;
 
-   if(state.state == GameState::LOOP)
+   if(state.state == GameState::LOOP &&
+      (state.sphereGuy.t <= 0.8f || !state.tracks.GetTrack(state.sphereGuy.trackIndex).isBranch()))
    {
-      state.tracks.flags ^= TrackGraph::left;
+      state.tracks.flags ^= NewTrackGraph::left;
 
       // if already lerping
-      if(state.tracks.flags & TrackGraph::switching)
+      if(state.tracks.flags & NewTrackGraph::switching)
       {
 	 state.tracks.beginLerp = state.tracks.endLerp;
 	 state.tracks.endLerp = InvertX(state.tracks.beginLerp);
@@ -2079,7 +2665,7 @@ void OnKeyDown(GameState &state)
       }
       else
       {
-	 state.tracks.flags |= TrackGraph::switching;
+	 state.tracks.flags |= NewTrackGraph::switching;
 
 	 state.tracks.beginLerp = GlobalBranchCurve;
 	 state.tracks.endLerp = InvertX(GlobalBranchCurve);
@@ -2111,3 +2697,119 @@ void GameEnd(GameState &state)
 
    glDeleteTextures(1, &state.fontTextureHandle);
 }
+
+#ifdef DEBUG
+void
+NewTrackGraph::VerifyGraph()
+{
+   for(u32 i = 0; i < capacity; ++i)
+   {
+      if(!(adjList[i].flags & Attribute::unused))
+      {
+	 if(adjList[i].flags & Attribute::branch)
+	 {
+	    if(adjList[i].flags & Attribute::reachable)
+	    {
+	       if(!adjList[i].hasLeft())
+	       {	      
+		  i32 good = 0;
+		  for(i32 j = orders.begin; j != orders.end; j = orders.IncrementIndex(j))
+		  {
+		     if(IDtable[orders.elements[j].ancestorID] == i &&
+			orders.elements[j].flags & NewTrackOrder::left)
+		     {
+			good = 1;
+			break;
+		     }
+		  }
+
+		  assert(good);
+	       }
+	    
+	       if(!adjList[i].hasRight())
+	       {	       
+		  i32 good = 0;
+		  for(i32 j = orders.begin; j != orders.end; j = orders.IncrementIndex(j))
+		  {
+		     if(IDtable[orders.elements[j].ancestorID] == i &&
+			(orders.elements[j].flags & NewTrackOrder::right))
+		     {
+			good = 1;
+			break;
+		     }
+		  }
+
+		  assert(good);
+	       }
+	    }
+	 }
+	 else if(adjList[i].flags & Attribute::breaks)
+	 {
+	    assert(!(adjList[i].flags & (Attribute::hasLeftEdge | Attribute::hasRightEdge)));
+
+	    // There really isn't a good way to test if there is a branch behind a break,
+	    // since tracks are removed once they become invisible
+	    /*
+	    i32 good = 0;
+	    for(u32 j = 0; j < adjList[i].ancestorCount; ++j)
+	    {
+	       u16 ancestor = IDtable[adjList[i].ancestors[j]];
+	       if(adjList[ancestor].flags & Attribute::branch)
+	       {
+		  good = 1;
+
+		  u16 leftEdge = IDtable[adjList[ancestor].leftEdge()];
+		  u16 rightEdge = IDtable[adjList[ancestor].rightEdge()];
+
+		  if(adjList[ancestor].hasLeft())
+		  {
+		     if(leftEdge == i)
+		     {
+			if(adjList[ancestor].hasRight())
+			{
+			   assert(!(adjList[rightEdge].flags & Attribute::breaks));
+			}
+		     }	    		     
+		  }
+		  else if(adjList[ancestor].hasRight())
+		  {
+		     if(rightEdge == i)
+		     {
+			if(adjList[ancestor].hasLeft())
+			{
+			   assert(!(adjList[leftEdge].flags & Attribute::breaks));
+			}
+		     }
+		  }
+		  break;
+	       }
+	    }
+
+	    assert(good);
+	    */
+	 }
+	 else if(adjList[i].flags & Attribute::linear)
+	 {
+	    if(!adjList[i].hasLeft() && (adjList[i].flags & Attribute::reachable))
+	    {
+	       i32 good = 0;
+	       for(i32 j = orders.begin; j != orders.end; j = orders.IncrementIndex(j))
+	       {		  
+		  if(IDtable[orders.elements[j].ancestorID] == i)
+		  {
+		     good = 1;
+		     break;
+		  }
+	       }
+
+	       assert(good);
+	    }
+	 }
+	 else
+	 {
+	    assert(0);
+	 }
+      }
+   }
+}
+#endif
