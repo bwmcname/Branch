@@ -255,6 +255,16 @@ int OpenglCreate(HWND WindowHandle)
    WinGetGlExtension(glUniform1f);
    WinGetGlExtension(glBufferSubData);
    WinGetGlExtension(glDeleteBuffers);
+   WinGetGlExtension(glGenFramebuffers);
+   WinGetGlExtension(glBindFramebuffer);
+   WinGetGlExtension(glFramebufferTexture2D);
+   WinGetGlExtension(glCheckFramebufferStatus);
+   WinGetGlExtension(glBlitFramebuffer);
+   WinGetGlExtension(glGenRenderbuffers);
+   WinGetGlExtension(glBindRenderbuffer);
+   WinGetGlExtension(glFramebufferRenderbuffer);
+   WinGetGlExtension(glRenderbufferStorage);
+   WinGetGlExtension(glDrawBuffers);
 
    glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
    return true;
@@ -377,7 +387,7 @@ int CALLBACK WinMain(HINSTANCE Instance,
 
       GameLoop(state);
       SwapBuffers(hdc);
-      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
       QueryPerformanceCounter(&Elapsed);
       Elapsed.QuadPart -= Begin.QuadPart;

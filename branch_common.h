@@ -852,3 +852,9 @@ struct Image
    i32 y;
    i32 channels;   
 };
+
+struct VirtualCoord
+{
+   i32 x;
+   i32 y;
+};

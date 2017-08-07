@@ -35,6 +35,24 @@
 
 #define GL_MULTISAMPLE 0x809D
 
+#define GL_FRAMEBUFFER 0x8D40
+#define GL_RGBA16F 0x881A
+
+#define GL_COLOR_ATTACHMENT0 0x8CE0
+#define GL_COLOR_ATTACHMENT1 0x8CE1
+
+#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+
+#define GL_DRAW_FRAMEBUFFER 0x8CA9
+#define GL_READ_FRAMEBUFFER 0x8CA8
+
+#define GL_RENDERBUFFER 0x8D41
+#define GL_DEPTH24_STENCIL8 0x88F0
+
+#define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
+
+#define GL_FRAMEBUFFER_SRGB 0x8DB9
+
 typedef uint32_t GLenum;
 typedef int32_t GLint;
 typedef int32_t GLsizei;
@@ -73,8 +91,18 @@ typedef void (*glUniformMatrix4fv_t)(GLint, GLsizei, GLboolean, GLfloat *);
 typedef void (*glUniform1i_t)(GLint, GLint);
 typedef void (*glActiveTexture_t)(GLenum);
 typedef void (*glUniform1f_t)(GLint, GLfloat);
-typedef void (*glBufferSubData_t) (GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
+typedef void (*glBufferSubData_t) (GLenum, GLintptr, GLsizeiptr, const void *);
 typedef void (*glDeleteBuffers_t) (GLsizei, const GLuint *);
+typedef void (*glGenFramebuffers_t) (GLsizei n, GLuint *);
+typedef void (*glBindFramebuffer_t) (GLenum, GLuint);
+typedef void (*glFramebufferTexture2D_t) (GLenum, GLenum, GLenum, GLuint, GLint);
+typedef GLenum (*glCheckFramebufferStatus_t) (GLenum);
+typedef void (*glBlitFramebuffer_t) (GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
+typedef void (*glGenRenderbuffers_t) (GLsizei, GLuint *);
+typedef void (*glBindRenderbuffer_t) (GLenum, GLuint);
+typedef void (*glRenderbufferStorage_t) (GLenum, GLenum, GLsizei, GLsizei); 
+typedef void (*glFramebufferRenderbuffer_t) (GLenum, GLenum, GLenum, GLuint);
+typedef void (*glDrawBuffers_t) (GLsizei, const GLenum *);
 
 wglChoosePixelFormatARB_t wglChoosePixelFormatARB;
 glCreateProgram_t glCreateProgram;
@@ -105,6 +133,16 @@ glActiveTexture_t glActiveTexture;
 glUniform1f_t glUniform1f;
 glBufferSubData_t glBufferSubData;
 glDeleteBuffers_t glDeleteBuffers;
+glGenFramebuffers_t glGenFramebuffers;
+glBindFramebuffer_t glBindFramebuffer;
+glFramebufferTexture2D_t glFramebufferTexture2D;
+glCheckFramebufferStatus_t glCheckFramebufferStatus;
+glBlitFramebuffer_t glBlitFramebuffer;
+glGenRenderbuffers_t glGenRenderbuffers;
+glBindRenderbuffer_t glBindRenderbuffer;
+glRenderbufferStorage_t glRenderbufferStorage;
+glFramebufferRenderbuffer_t glFramebufferRenderbuffer;
+glDrawBuffers_t glDrawBuffers;
 
 HMODULE glDll = 0;
 

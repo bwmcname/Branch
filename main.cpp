@@ -1,55 +1,11 @@
 
-#define TRACK_SEGMENT_SIZE 12.0f
-
 #define SCREEN_TOP ((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
 #define SCREEN_BOTTOM -((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
 #define SCREEN_RIGHT 1.0f
 #define SCREEN_LEFT -1.0f
 
 #define LEVEL_LENGTH 0.5f
-
-static float delta;
-static m4 Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
-static m4 InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 60.0f);
-
 static i32 GlobalActionPressed = 0;
-
-static const u32 RectangleAttribCount = 6;
-static GLuint RectangleUVBuffer;
-static float RectangleUVs[] =
-{
-   0.0f, 1.0f,
-   1.0f, 1.0f,
-   0.0f, 0.0f,
-
-   1.0f, 1.0f,
-   1.0f, 0.0f,
-   0.0f, 0.0f
-};
-
-static GLuint RectangleVertBuffer;
-static float RectangleVerts[] =
-{
-   -0.5f, -0.5f,
-   0.5f, -0.5f,
-   -0.5f, 0.5f,
-
-   0.5f, -0.5f,
-   0.5f, 0.5f,
-   -0.5f, 0.5f
-};
-
-static GLuint ScreenVertBuffer;
-static float ScreenVerts[] =
-{
-   -1.0f, -1.0f,
-   1.0f, -1.0f,
-   -1.0f, 1.0f,
-
-   1.0f, -1.0f,
-   1.0f, 1.0f,
-   -1.0f, 1.0f
-};
 
 static inline
 void InitStackAllocator(StackAllocator *allocator)
@@ -82,22 +38,6 @@ void StackAllocator::pop()
    --allocs;
 }
 
-struct Camera
-{
-   enum
-   {
-      lerping,
-   };
-
-   quat orientation;
-   v3 position;
-
-   u32 flags;
-   float t;
-
-   m4 view;
-};
-
 static
 m4 CameraMatrix(Camera &camera)
 {
@@ -126,74 +66,12 @@ void InitCamera(Camera &camera)
    camera.view = CameraMatrix(camera);   
 };
 
-struct Mesh
-{
-   float *vertices;
-   i32 vcount;
-
-   v3 *normals;
-};
-
-struct MeshBuffers
-{
-   GLuint vbo;
-   GLuint nbo;
-   GLuint vao;
-};
-
-struct MeshObject
-{
-   Mesh mesh;
-   MeshBuffers handles;
-};
-
 static MeshObject Sphere;
 static MeshObject LinearTrack;
 static MeshObject BranchTrack;
 static MeshObject BreakTrack;
 
-struct ShaderProgram
-{
-   GLuint programHandle;
-   GLuint vertexHandle;
-   GLuint fragmentHandle;
-
-   GLint modelUniform;
-   GLint viewUniform;
-   GLint lightPosUniform;
-   GLint MVPUniform;
-   GLint VUniform;
-   GLint MUniform;
-   GLint diffuseUniform;
-   
-   GLint vertexAttrib;
-   GLint normalAttrib;
-
-   GLint texUniform;
-};
-
 static ShaderProgram DefaultShader;
-static ShaderProgram BreakBlockProgram;
-
-// Higher level Game Object abstraction
-struct Object
-{
-   v3 worldPos;
-   v3 scale;
-   quat orientation;
-   MeshObject meshBuffers;
-   ShaderProgram *p;
-};
-
-union tri2
-{
-   v2 e[3];
-
-   struct
-   {
-      v2 a, b, c;
-   };
-};
 
 static inline
 tri2 Tri2(v2 a, v2 b, v2 c)
@@ -212,19 +90,6 @@ v3 V3(v2 a, float z)
 {
    return {a.x, a.y, z}; 
 }
-
-// cubic bezier control points
-union Curve
-{   
-   struct
-   {
-      v2 p1, p2, p3, p4;
-   };
-
-   v2 e[4];
- 
-   v4 lerpables[2];
-};
 
 static Curve GlobalLinearCurve;
 static Curve GlobalBranchCurve;
@@ -275,281 +140,6 @@ v2 CubicBezier(Curve c, float t)
 }
 
 static inline
-GLuint UploadVertices(float *vertices, i32 count, i32 components = 3)
-{
-   GLuint result;
-   glGenBuffers(1, &result);
-   glBindBuffer(GL_ARRAY_BUFFER, result);
-   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * count * components), (void *)vertices, GL_STATIC_DRAW);
-   glBindBuffer(GL_ARRAY_BUFFER, 0);
-   return result;
-}
-
-MeshBuffers
-UploadStaticMesh(float *vertices, v3 *normals, i32 count, i32 components = 3)
-{
-   MeshBuffers result;
-   
-   glGenVertexArrays(1, &result.vao);
-   glBindVertexArray(result.vao);
-   glGenBuffers(1, &result.vbo);
-   glBindBuffer(GL_ARRAY_BUFFER, result.vbo);
-   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * count * components), (void *)vertices, GL_STATIC_DRAW);   
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, components, GL_FLOAT, GL_FALSE, 0, 0);
-   glGenBuffers(1, &result.nbo);
-   glBindBuffer(GL_ARRAY_BUFFER, result.nbo);
-   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * count * components), (void *)normals, GL_STATIC_DRAW);
-   glEnableVertexAttribArray(NORMAL_LOCATION);
-   glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
-   glBindVertexArray(0);
-
-   return result;
-}
-
-// like the previous function, but does not upload any data, just allocates the buffers
-// NOT NECASSARY TO CREATING MESH BUFFERS (you may want to use the function above)
-MeshBuffers AllocateMeshBuffers(i32 count, i32 components = 3)
-{
-   MeshBuffers result;
-   
-   glGenVertexArrays(1, &result.vao);
-   glBindVertexArray(result.vao);
-   glGenBuffers(1, &result.vbo);
-   glBindBuffer(GL_ARRAY_BUFFER, result.vbo);
-   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * count * components), 0, GL_DYNAMIC_DRAW);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, components, GL_FLOAT, GL_FALSE, 0, 0);
-   glGenBuffers(1, &result.nbo);
-   glBindBuffer(GL_ARRAY_BUFFER, result.nbo);
-   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * count * components), 0, GL_DYNAMIC_DRAW);
-   glEnableVertexAttribArray(NORMAL_LOCATION);
-   glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
-   glBindVertexArray(0);
-
-   return result;
-}
-
-ShaderProgram
-CreateProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize)
-{
-   ShaderProgram result;
-
-   result.programHandle = glCreateProgram();
-   result.vertexHandle = glCreateShader(GL_VERTEX_SHADER);
-   result.fragmentHandle = glCreateShader(GL_FRAGMENT_SHADER);
-
-   glShaderSource(result.vertexHandle, 1, &vertexSource, (i32 *)&vsize);
-   glShaderSource(result.fragmentHandle, 1, &fragmentSource, (i32 *)&fsize);
-
-   glCompileShader(result.vertexHandle);
-   glCompileShader(result.fragmentHandle);
-
-   glAttachShader(result.programHandle, result.vertexHandle);
-   glAttachShader(result.programHandle, result.fragmentHandle);
-
-   glLinkProgram(result.programHandle);
-
-   result.modelUniform = glGetUniformLocation(result.programHandle, "m");
-   result.viewUniform = glGetUniformLocation(result.programHandle, "v");
-   result.MVPUniform = glGetUniformLocation(result.programHandle, "mvp");
-   result.lightPosUniform = glGetUniformLocation(result.programHandle, "lightPos");
-   result.diffuseUniform = glGetUniformLocation(result.programHandle, "diffuseColor");
-
-   result.texUniform = glGetUniformLocation(result.programHandle, "tex");
-
-   result.vertexAttrib = 1;
-   result.normalAttrib = 2;
-
-   return result;
-}
-
-struct TextProgram
-{
-   GLuint programHandle;
-   GLuint vertexHandle;
-   GLuint fragmentHandle;
-
-   GLint transformUniform;
-   GLint texUniform;
-   GLint vertexAttrib;
-   GLint normalAttrib;   
-};
-
-TextProgram
-CreateTextProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize)
-{
-   TextProgram result;
-
-   result.programHandle = glCreateProgram();
-   result.vertexHandle = glCreateShader(GL_VERTEX_SHADER);
-   result.fragmentHandle = glCreateShader(GL_FRAGMENT_SHADER);
-
-   glShaderSource(result.vertexHandle, 1, &vertexSource, (i32 *)&vsize);
-   glShaderSource(result.fragmentHandle, 1, &fragmentSource, (i32 *)&fsize);
-
-   glCompileShader(result.vertexHandle);
-   glCompileShader(result.fragmentHandle);
-
-   glAttachShader(result.programHandle, result.vertexHandle);
-   glAttachShader(result.programHandle, result.fragmentHandle);
-
-   glLinkProgram(result.programHandle);
-
-   result.transformUniform = glGetUniformLocation(result.programHandle, "transform");
-   result.texUniform = glGetUniformLocation(result.programHandle, "tex");
-
-   result.vertexAttrib = 1;
-   result.normalAttrib = 2;
-
-   return result;
-}
-
-static
-v3 *Normals(float *vertices, v3 *result, i32 count)
-{
-   tri *tris = (tri *)vertices;
-   i32 faceCount = count / 3;
-
-   for(i32 i = 0; i < faceCount; ++i)
-   {
-      v3 a = tris[i].b - tris[i].a;
-      v3 b = tris[i].c - tris[i].a;
-
-      v3 normal = unit(cross(a, b));
-      result[(i * 3)] = normal;
-      result[(i * 3) + 1] = normal;
-      result[(i * 3) + 2] = normal;
-   }
-
-   return result;
-}
-
-static
-v3 *Normals(float *vertices, i32 count, StackAllocator *allocator)
-{
-   v3 *buffer = (v3 *)allocator->push(count * sizeof(v3));
-   return Normals(vertices, buffer, count);
-}
-
-// Allocates Mesh object and vertex buffers
-// NOT NECASSARY TO CREATING A MESH OBJECT
-// Only for allocating dynamic gpu buffers
-MeshObject AllocateMeshObject(i32 vertexCount, StackAllocator *allocator)
-{   
-   MeshObject result;
-   result.mesh.vcount = vertexCount;
-   result.mesh.vertices = (float *)allocator->push(sizeof(v3) * vertexCount);
-   result.mesh.normals = (v3 *)allocator->push(sizeof(v3) * vertexCount);
-
-   result.handles = AllocateMeshBuffers(result.mesh.vcount, 3);
-   allocator->pop();
-   allocator->pop();
-   return result;
-}
-
-// Inits Mesh Object and uploads to vertex buffers
-MeshObject InitMeshObject(char *filename, StackAllocator *allocator)
-{
-   size_t size = FileSize(filename);
-   u8 *buffer = (u8 *)allocator->push(size);
-   FileRead(filename, buffer, size);
-
-   Mesh mesh;
-
-   mesh.vcount = *((i32 *)buffer);
-   mesh.vertices = (float *)(buffer + 4);
-   mesh.normals = Normals(mesh.vertices, mesh.vcount, allocator);
-   MeshBuffers handles = UploadStaticMesh(mesh.vertices, mesh.normals, mesh.vcount, 3);
-   allocator->pop(); // pop normals
-   allocator->pop(); // pop file
-
-   MeshObject result;
-   result.mesh = mesh;
-   result.handles = handles;   
-
-   return result;
-}
-
-void RenderPushMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
-{
-   glUseProgram(p.programHandle);
-
-   static float time = 0.0f;
-   time += delta;
-
-   m4 lightRotation = M4(Rotation(V3(0.0f, 1.0f, 0.0f), -time / 50.0f));
-   m4 projection = InfiniteProjection;
-   m4 mvp = projection * view * transform;
-   
-   glUniformMatrix4fv(p.MVPUniform, 1, GL_FALSE, mvp.e);
-   glUniformMatrix4fv(p.modelUniform, 1, GL_FALSE, transform.e);
-   glUniformMatrix4fv(p.viewUniform, 1, GL_FALSE, view.e);
-   glUniform3fv(p.diffuseUniform, 1, diffuseColor.e);
-   glUniform3fv(p.lightPosUniform, 1, lightPos.e);
-   glBindVertexArray(b.handles.vao);
-   glDrawArrays(GL_TRIANGLES, 0, b.mesh.vcount);
-   glBindVertexArray(0);
-   glUseProgram(0);
-}
-
-static
-void RenderPushObject(Object &obj, m4 &camera, v3 lightPos, v3 diffuseColor)
-{
-   m4 orientation = M4(obj.orientation);
-   m4 scale = Scale(obj.scale);
-   m4 translation = Translate(obj.worldPos);
-   
-   m4 transform = translation * scale * orientation;
-   
-   RenderPushMesh(*obj.p, obj.meshBuffers, transform, camera, lightPos, diffuseColor);
-}
-
-static
-void RenderPushBreak(Object &obj, m4 &camera, v3 lightPos, v3 diffuseColor)
-{
-   RenderPushObject(obj, camera, lightPos, diffuseColor);
-
-   m4 translation = Translate(V3(obj.worldPos.x, obj.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, obj.worldPos.z));
-   m4 orientation = M4(Rotation(V3(-1.0f, 0.0f, 0.0f), 1.5708f));
-   m4 scale = Scale(V3(5.0f, 5.0f, 5.0f));
-
-   m4 model = translation * orientation * scale;
-   m4 mvp = InfiniteProjection * camera * model;
-
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleVertBuffer);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glUseProgram(BreakBlockProgram.programHandle);
-   glUniformMatrix4fv(BreakBlockProgram.MVPUniform, 1, GL_FALSE, mvp.e);
-   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-   glBindBuffer(GL_ARRAY_BUFFER, 0);
-   glUseProgram(0);
-}
-
-enum KeyState
-{
-   down,
-   up,
-};
-
-struct Track
-{
-   enum
-   {
-      staticMesh = 0x1,
-      branch = 0x2,
-      left = 0x8, // else, right
-      breaks = 0x10,
-   };
-
-   Object renderable;
-   Curve *bezier;
-   i32 flags;
-};
-
-static inline
 Track CreateTrack(v3 position, v3 scale, Curve *bezier, MeshObject &buffers)
 {
    Object obj;
@@ -566,254 +156,12 @@ Track CreateTrack(v3 position, v3 scale, Curve *bezier, MeshObject &buffers)
    return result;
 }
 
-#if 0
-
-struct TrackAttribute
-{
-   enum
-   {
-      edgeCountMask = 0x3,
-      branch = 0x4,
-      left = 0x8,
-      right = 0x10,
-      breaks = 0x20,
-      reachable = 0x40,
-      ancestorCountMask = 0x180,
-      invisible = 0x200,
-   };
-   
-   i32 flags;
-   u32 e[2]; // each track can have at most 2 edges leading from it.
-   u32 a[3]; // each track can have up to two "ancestors" (tracks leading to it).
-
-   inline
-   i32 hasLeft()
-   {
-      return flags & left;
-   }
-
-   inline
-   i32 hasRight()
-   {
-      return flags & right;
-   }
-
-   inline
-   u32 getRight()
-   {
-      return e[1];
-   }
-
-   inline
-   u32 getLeft()
-   {
-      return e[0];
-   }
-
-   inline
-   u32 ancestorCount()
-   {
-      return (flags & ancestorCountMask) >> 7;
-   }
-
-   inline
-   u32 edgeCount()
-   {
-      return (flags & edgeCountMask);
-   }
-
-   inline
-   void setAncestorCount(u32 count)
-   {
-      //assert(count <= 2);
-      flags = (flags & ~ancestorCountMask) | (count << 7);
-   }
-
-   inline
-   void setEdgeCount(u32 count)
-   {      
-      flags = (flags & ~edgeCountMask) | count;
-   }
-
-   inline void RemoveAncestor(i32 i);
-   inline void AddAncestor(i32 i);
-   inline void RemoveEdge(u32 i);
-   inline void ReplaceEdge(u32 before, u32 after);
-   inline void ReplaceAncestor(u32 before, u32 after);
-};
-
-inline
-void TrackAttribute::ReplaceEdge(u32 before, u32 after)
-{
-   if(hasLeft())
-   {
-      if(getLeft() == before)
-      {
-	 e[0] = after;
-	 return;
-      }
-   }
-
-   if(hasRight())
-   {
-      if(getRight() == before)
-      {
-	 e[1] = after;
-	 return;
-      }
-   }
-   assert(false);
-}
-
-inline
-void TrackAttribute::ReplaceAncestor(u32 before, u32 after)
-{
-   for(u32 i = 0; i < ancestorCount(); ++i)
-   {
-      if(a[i] == before)
-      {
-	 a[i] = after;
-	 return;
-      }	 
-   }
-   assert(false);
-}
-
-
-inline
-void TrackAttribute::AddAncestor(i32 i)
-{
-   u32 count = ancestorCount();
-   assert(count < 3);
-   a[count] = i;
-   setAncestorCount(count + 1);
-}
-
-inline
-void TrackAttribute::RemoveAncestor(i32 i)
-{
-   if(i == 0 && (ancestorCount() > 1))
-   {
-      a[0] = a[1];      
-   }
-   else if(i == 1 && (ancestorCount() > 2))
-   {
-      a[1] = a[2];
-   }
-
-   setAncestorCount(ancestorCount() - 1);
-}
-
-inline
-void TrackAttribute::RemoveEdge(u32 i)
-{
-   if(hasLeft())
-   {
-      if(getLeft() == i)
-      {
-	 flags &= ~left;
-	 setEdgeCount(edgeCount() - 1);
-	 return;
-      }
-   }
-   
-   if(hasRight())
-   {
-      if(getRight() == i)
-      {
-	 flags &= ~right;
-	 setEdgeCount(edgeCount() - 1);
-	 return;
-      }	  
-   }
-}
-
-struct TrackGraph
-{
-   enum
-   {
-      left = 0x1,
-      switching = 0x2,
-   };
-
-   Track *elements;
-   TrackAttribute *adjList;
-   i32 capacity;
-   i32 size;
-   i32 head;
-   i32 flags;
-
-   // switch lerp state 
-   float switchDelta; // how much time has progressed (0 to 1) after the switch is flipped
-   Curve beginLerp;
-   Curve endLerp;
-
-   void RemoveTrack(u32 i);
-   inline Attribute &GetTrack(u32 id);
-};
-
-void
-TrackGraph::RemoveTrack(u32 i)
-{
-   --size;
-   // de-attach ancestors
-   for(u32 j = 0; j < adjList[i].ancestorCount(); ++j)
-   {
-      u32 ancestor = adjList[i].a[j];
-      adjList[ancestor].RemoveEdge(i);
-   }
-
-   for(u32 j = 0; j < adjList[i].edgeCount(); ++j)
-   {
-      u32 edge = adjList[i].e[j];
-
-      if(adjList[edge].ancestorCount())
-      {
-	 adjList[edge].RemoveAncestor(i);
-      }
-   }
-}
-#endif
-
-template <typename T>
-struct CircularQueue
-{
-   i32 max;
-   i32 size;
-   i32 begin;
-   i32 end;
-   T *elements;
-
-   //CircularQueue(i32 _max, StackAllocator *allocator);
-   void Push(T e);
-   T Pop();
-   void ClearToZero();
-
-   inline i32 IncrementIndex(i32 index);
-   
-private:
-   inline void IncrementEnd();
-   inline void IncrementBegin();
-};
-
 template <typename T>
 inline i32 CircularQueue<T>::IncrementIndex(i32 index)
 {
    if(index == max) return 0;
    else return index + 1;
 }
-
-#if 0
-template <typename T>
-CircularQueue<T>::CircularQueue(i32 _max, StackAllocator *allocator)
-{
-   max = _max;
-   size = 0;
-   begin = 0;
-   end = 0;
-   elements = (T *)allocator->push(max * sizeof(T));
-}
-#endif
 
 template <typename T>
 void CircularQueue<T>::Push(T e)
@@ -868,26 +216,6 @@ void CircularQueue<T>::ClearToZero()
 {
    memset(elements, 0, max * sizeof(T));
 }
-
-// an "order" for a track to be placed
-// used in the queue when creating the graph
-struct TrackOrder
-{
-   u32 index;
-   u32 ancestor;
-   i32 x, y;
-
-   enum
-   {
-      dontBranch = 0x1,     
-   };
-   i32 rules;
-};
-
-struct VirtualTrackCoords
-{
-   i32 x, y;
-};
 
 static inline
 v2 VirtualToReal(i32 x, i32 y)
@@ -949,287 +277,6 @@ Curve BranchCurve(i32 x1, i32 y1,
    return result;
 }
 
-#if 0
-static
-TrackGraph AllocateTrackGraph(i32 size, StackAllocator *allocator)
-{
-   TrackGraph result;
-   result.capacity = size;
-   result.adjList = (TrackAttribute *)allocator->push(sizeof(TrackAttribute) * size);
-   result.elements = (Track *)allocator->push(sizeof(Track) * result.capacity);   
-   return result;
-}
-#endif
-
-static size_t trackGenTime = 0; // @DELETE
-
-#if 0
-void CheckGraph(TrackGraph &graph)
-{
-   // ensure graph was formed properly
-   for(u32 i = 0; i < (u32)graph.size; ++i)
-   {
-      for(u32 j = 0; j < graph.adjList[i].ancestorCount(); ++j)
-      {
-	 u32 ancestor = graph.adjList[i].a[j];
-
-	 if(graph.adjList[ancestor].hasLeft())
-	 {
-	    if(i == graph.adjList[ancestor].getLeft()) continue;	    
-	 }
-	 if(graph.adjList[ancestor].hasRight())
-	 {
-	    if(i == graph.adjList[ancestor].getRight()) continue;
-	 }
-	 
-	 assert(false);	 
-      }
-
-      if(graph.adjList[i].hasLeft())
-      {
-	 u32 left = graph.adjList[i].getLeft();
-
-	 i32 good = 0;
-	 for(u32 j = 0; j < graph.adjList[left].ancestorCount(); ++j)
-	 {
-	    if(i == graph.adjList[left].a[j])
-	    {
-	       good = true;
-	       break;
-	    }
-	 }
-
-	 assert(good);
-      }
-      
-      if(graph.adjList[i].hasRight())
-      {
-	 u32 right = graph.adjList[i].getRight();
-
-	 i32 good = 0;
-	 for(u32 j = 0; j < graph.adjList[right].ancestorCount(); ++j)
-	 {
-	    if(i == graph.adjList[right].a[j])
-	    {
-	       good = true;
-	       break;
-	    }
-	 }
-
-	 assert(good);
-      }
-   }
-}
-#endif
-#if 0
-static
-void ReInitTrackGraph(TrackGraph &graph, StackAllocator *allocator)
-{
-   BEGIN_TIME();
-
-   graph.head = 0;   
-   graph.flags = TrackGraph::left;   
-
-   for(i32 i = 0; i < graph.capacity; ++i)
-   {
-      graph.adjList[i] = {0};
-      graph.elements[i] = {0};
-   }
-
-   VirtualCoordHashTable taken(1024, allocator);
-   
-   CircularQueue<TrackOrder> orders(graph.capacity, allocator);
-   
-   orders.Push({0, 0, 0, 0, 0}); // Push root segment.
-   u32 firstFree = 1; // next element that can be added to the queue
-
-   i32 processed = 0;
-   while(orders.size > 0)
-   {
-      TrackOrder item = orders.Pop();
-      ++processed;
-
-      long roll = rand();
-      if(!(item.rules & TrackOrder::dontBranch) && roll % 4 == 0) // is a branch
-      {
-	 // amount of subsequent branches
-	 int branches = 0;	 	 
-	 
-	 // Queue up subsequent branches
-	 // can we fit a left track?
-	 Slot slot = taken.get({item.x-1, item.y+1});
-	 u32 leftFlags = slot.GetCombinedFlags();
-	 if(graph.capacity - firstFree > 0 &&
-	    !(leftFlags & Slot::hasTrack))
-	 {
-	    ++branches;
-	    orders.Push({firstFree, item.index, item.x-1, item.y+1, TrackOrder::dontBranch}); // left side
-
-	    taken.put({item.x-1, item.y+1}, Slot::hasTrack | Slot::hasBranch | (firstFree << 2));
-	    graph.adjList[item.index].e[0] = firstFree++;
-	    graph.adjList[item.index].flags |= TrackAttribute::left;
-	 }
-
-	 else if(leftFlags & (Slot::hasTrack)) // is a left track already in that space?
-	 {
-	    u32 index = slot.GetTrackIndex();
-	    graph.adjList[item.index].e[0] = index;
-	    graph.adjList[item.index].flags |=  TrackAttribute::left;
-	    
-	    ++branches;
-	 }
-	 
-	 // can we fit a right track?
-	 slot = taken.get({item.x+1, item.y+1});
-	 u32 rightFlags = slot.GetCombinedFlags();
-	 if(graph.capacity - firstFree > 0 &&	    
-	    !(rightFlags & (Slot::hasTrack)))
-	 {
-	    ++branches;
-	    orders.Push({firstFree, item.index, item.x+1, item.y+1, TrackOrder::dontBranch}); // right side
-
-	    taken.put({item.x+1, item.y+1}, Slot::hasTrack | Slot::hasBranch | (firstFree << 2));
-	    graph.adjList[item.index].e[1] = firstFree++;
-	    graph.adjList[item.index].flags |=  TrackAttribute::right;
-	 }
-	 else if(rightFlags & (Slot::hasTrack)) // is a right track already in that space
-	 {
-	    u32 index = slot.GetTrackIndex();
-	    graph.adjList[item.index].e[1] = index;
-	    graph.adjList[item.index].flags |=  TrackAttribute::right;
-	    
-	    ++branches;
-	 }
-	 
-	 graph.adjList[item.index].flags |= branches | TrackAttribute::branch;
-
-	 v2 position = VirtualToReal(item.x, item.y);
-       
-	 graph.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalBranchCurve, BranchTrack);
-	 graph.elements[item.index].flags = Track::branch | Track::left;	 
-      }
-      else // is linear
-      {
-	 Slot slot = taken.get({item.x, item.y+1});
-	 u32 behindFlags = slot.GetCombinedFlags();
-	 if((graph.capacity - firstFree) > 0 &&
-	    !(behindFlags & Slot::hasTrack))
-	 {
-	    graph.adjList[item.index].flags = 1 | TrackAttribute::left; // size of 1, is linear so has a "left" track following
-	    orders.Push({firstFree, item.index, item.x, item.y+1, 0});
-	    taken.put({item.x, item.y+1}, behindFlags | Slot::hasTrack | (firstFree << 2));
-	    graph.adjList[item.index].e[0] = firstFree++; // When a Track is linear, the index of the next Track is e[0]
-	 }
-	 else if(behindFlags & Slot::hasTrack)
-	 {	    	   
-	    u32 index = slot.GetTrackIndex();
-	    graph.adjList[item.index].e[0] = index;
-	    graph.adjList[item.index].flags |= 1 | TrackAttribute::left;
-	 }
-	 
-	 v2 position = VirtualToReal(item.x, item.y);
-	 graph.elements[item.index] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve, LinearTrack);
-	 graph.elements[item.index].flags = Track::staticMesh;	 
-
-	 // when placing tracks after branches, if there is already
-	 // a linear track behind the placed track, it will have to be manually
-	 // connected here.p
-	 Slot behind = taken.get({item.x, item.y-1});
-	 if(behind.count)
-	 {
-	    u32 index = behind.GetTrackIndex();
-	    if(!(behind.GetCombinedFlags() & Slot::hasTrack) && !(graph.adjList[index].flags & TrackAttribute::edgeCountMask))
-	    {
-	       graph.adjList[index].flags |= 1 | TrackAttribute::left;
-	       graph.adjList[index].e[0] = item.index;
-	    }
-	 }
-      }      
-   }
-
-   graph.size = processed;
-
-   for(i32 i = 0; i < graph.size; ++i)
-   {
-      if(graph.adjList[i].hasLeft())
-      {
-	 u32 left = graph.adjList[i].getLeft();
-	 graph.adjList[left].AddAncestor(i);
-      }
-
-      if(graph.adjList[i].hasRight())
-      {
-	 u32 right = graph.adjList[i].getRight();
-	 graph.adjList[right].AddAncestor(i);
-      }
-   }
-
-   // pop hashmap
-   allocator->pop();
-
-   //pop queue
-   allocator->pop();
-   
-   END_TIME();
-
-   trackGenTime = READ_TIME();
-
-   //  DEBUG_DO(CheckGraph(graph));
-}
-#endif
-
-struct Attribute
-{
-   enum
-   {
-      hasLeftEdge = 0x1,
-      hasRightEdge = 0x2,
-      reachable = 0x4,
-      invisible = 0x8,
-      unused = 0x10,
-      breaks = 0x20,
-      branch = 0x40,
-      linear = 0x80,
-   };
-
-   u16 id;
-   u16 flags;
-   u16 edgeCount;
-   u16 ancestorCount;
-
-   u16 edges[2];
-   u16 ancestors[3];
-
-   inline u16 leftEdge()
-   {
-      return edges[0];
-   }
-
-   inline u16 rightEdge()
-   {
-      return edges[1];
-   }
-
-   inline u16 hasLeft()
-   {
-      return flags & hasLeftEdge;
-   }
-
-   inline u16 hasRight()
-   {
-      return flags & hasRightEdge;
-   }
-
-   inline i32 isBranch()
-   {
-      return flags & branch; 
-   }
-
-   inline void addAncestor(u16 ancestorID);
-   inline void removeAncestor(u16 ancestorID);
-   inline void removeEdge(u16 edgeID);
-};
-
 inline void
 Attribute::removeEdge(u16 edgeID)
 {
@@ -1280,58 +327,6 @@ Attribute::removeAncestor(u16 ancestorID)
       --ancestorCount;
    }
 }
-
-struct NewTrackOrder
-{
-   enum
-   {
-      left = 0x1,
-      right = 0x2,
-      sideMask = 0x3,
-      dontBranch = 0x4,
-      dontBreak = 0x8,
-   };
-
-   u16 ancestorID;
-   u16 flags;
-
-   i32 x;
-   i32 y;
-
-   inline u16 Side()
-   {
-      return (flags & sideMask) - 1;
-   }
-};
-
-struct NewTrackGraph
-{
-   enum
-   {
-      left = 0x1,
-      switching = 0x2,
-   };   
-
-   static const u32 capacity = 1024;
-   Attribute *adjList;
-   Track *elements;
-   CircularQueue<u16> availableIDs;
-   CircularQueue<NewTrackOrder> orders;
-   VirtualCoordHashTable taken;
-   u16 *IDtable;
-   u8 flags;
-
-   float switchDelta;
-   Curve beginLerp;
-   Curve endLerp;
-
-   void RemoveTrackActual(u16 id);
-   inline Attribute &GetTrack(u16 id);
-
-#ifdef DEBUG
-   void VerifyGraph();
-#endif
-};
 
 inline Attribute &
 NewTrackGraph::GetTrack(u16 id)
@@ -1413,7 +408,14 @@ NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
    g.IDtable[0] = 0;
    g.elements[0] = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve, LinearTrack);
    g.elements[0].flags = Track::left;
-   g.orders.Push({0, NewTrackOrder::left | NewTrackOrder::dontBranch, 0, 1});
+
+   g.orders.Push({0, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, 1});
+   g.IDtable[0] = 0;
+   for(u16 i = 1; i < 50; ++i)
+   {
+      g.orders.Push({i, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, 1 + i});
+      g.IDtable[i] = i;
+   }   
 
    g.flags = NewTrackGraph::left;
 
@@ -1421,7 +423,7 @@ NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
    g.beginLerp = {};
    g.endLerp = {};
 
-   for(u16 i = 1; i < g.capacity; ++i)
+   for(u16 i = 50; i < g.capacity; ++i)
    {
       g.availableIDs.Push(i);
       g.IDtable[i] = i;
@@ -1478,7 +480,7 @@ void FillGraph(NewTrackGraph &graph)
 	 v2 position = VirtualToReal(item.x, item.y);
 	 long roll = rand();	 
 
-	 if(roll % 2 == 0 && graph.orders.size >= 10 &&
+	 if(roll % 2 == 0 &&
 	    !(item.flags & NewTrackOrder::dontBreak) &&
 	    !graph.taken.get({item.x, item.y-1}).hasTrack() &&
 	    !OtherSideOfBranchHasBreak(graph, item.ancestorID, item.flags))
@@ -1667,13 +669,6 @@ void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator)
    allocator.pop();
 }
 
-struct Player
-{
-   Object renderable;
-   u16 trackIndex;
-   float t;
-};
-
 void NewUpdateTrackGraph(NewTrackGraph &graph, StackAllocator &allocator, Player &player)
 {
    for(u16 i = 0; i < graph.capacity; ++i)
@@ -1696,90 +691,6 @@ void NewUpdateTrackGraph(NewTrackGraph &graph, StackAllocator &allocator, Player
    NewSortTracks(graph, allocator);
 
    FillGraph(graph);   
-}
-
-struct stbFont
-{
-   u8 *rawFile; // @: We might not have to keep this around.
-   stbtt_fontinfo info;
-   stbtt_packedchar *chars;
-   u8 *map;
-   u32 width;
-   u32 height;
-   GLuint textureHandle;
-};
-
-struct GameState
-{
-   Camera camera;
-   Player sphereGuy;
-   KeyState keyState;
-   NewTrackGraph tracks;
-   Arena mainArena;
-
-   v3 lightPos;
-
-   Image tempFontField; // @delete!
-   FontData tempFontData; // @delete!
-   GLuint fontTextureHandle; //@delete!  
-
-   TextProgram bitmapFontProgram;
-   TextProgram fontProgram;
-
-   stbFont bitmapFont;   
-
-   enum
-   {
-      START,      
-      INITGAME,
-      RESET,
-      LOOP,
-   };
-
-   i32 state;
-
-   #ifdef TIMERS
-   u64 TrackRenderTime;
-   u64 TrackSortTime;
-   u64 TrackGenTime;
-   u64 GameLoopTime;
-   #endif
-};
-
-static
-ShaderProgram LoadFilesAndCreateProgram(char *vertex, char *fragment, StackAllocator *allocator)
-{
-   size_t vertSize = FileSize(vertex);
-   size_t fragSize = FileSize(fragment);
-   char *vertBuffer = (char *)allocator->push(vertSize);
-   char *fragBuffer = (char *)allocator->push(fragSize);
-   FileRead(vertex, (u8 *)vertBuffer, vertSize);
-   FileRead(fragment, (u8 *)fragBuffer, fragSize);
-
-   ShaderProgram result = CreateProgram(vertBuffer, vertSize, fragBuffer, fragSize);
-
-   allocator->pop();
-   allocator->pop();
-   
-   return result;
-}
-
-static
-TextProgram LoadFilesAndCreateTextProgram(char *vertex, char *fragment, StackAllocator *allocator)
-{
-   size_t vertSize = FileSize(vertex);
-   size_t fragSize = FileSize(fragment);
-   char *vertBuffer = (char *)allocator->push(vertSize);
-   char *fragBuffer = (char *)allocator->push(fragSize);
-   FileRead(vertex, (u8 *)vertBuffer, vertSize);
-   FileRead(fragment, (u8 *)fragBuffer, fragSize);
-
-   TextProgram result = CreateTextProgram(vertBuffer, vertSize, fragBuffer, fragSize);
-
-   allocator->pop();
-   allocator->pop();
-
-   return result;
 }
 
 // the globalName "LoadImage" is already taken
@@ -1979,29 +890,6 @@ void GenerateTrackSegmentVertices(Track &track)
    GenerateTrackSegmentVertices(track.renderable.meshBuffers, *track.bezier);   
 }
 
-void RenderTexture(GLuint texture, ShaderProgram &program)
-{
-   glUseProgram(program.programHandle);
-
-   assert(glIsTexture(texture));
-
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleVertBuffer);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
-   glEnableVertexAttribArray(UV_LOCATION);
-   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, texture);
-   glUniform1i(glGetUniformLocation(program.programHandle, "tex"), 0);
-
-   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-   glBindBuffer(GL_ARRAY_BUFFER, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
-   glUseProgram(0);
-}
-
 GLuint UploadDistanceTexture(Image &image)
 {
    GLuint result;
@@ -2052,9 +940,6 @@ GLuint UploadTexture(Image &image, i32 channels = 4)
    return result;
 }
 
-static GLuint textVao;
-static GLuint textUVVbo;
-static GLuint textVbo;
 static
 void InitTextBuffers()
 {
@@ -2119,12 +1004,14 @@ stbFont InitFont_stb(char *fontFile, u32 width, u32 height, StackAllocator *allo
 
 void GameInit(GameState &state)
 {
-   state.state = GameState::START;
    state.mainArena.base = AllocateSystemMemory(GIGABYTES(2), &state.mainArena.size);
    state.mainArena.current = state.mainArena.base;
-
    InitStackAllocator((StackAllocator *)state.mainArena.base);
    StackAllocator *stack = (StackAllocator *)state.mainArena.base;
+
+   state.renderer = InitRenderState(stack);
+
+   state.state = GameState::START;
 
    state.tracks = InitNewTrackGraph(stack);
 
@@ -2148,6 +1035,21 @@ void GameInit(GameState &state)
 							   stack);
    BreakBlockProgram = LoadFilesAndCreateProgram("assets\\BreakerBlock.vertp", "assets\\BreakerBlock.fragp",
 						   stack);
+
+   size_t vertSize;
+   size_t fragSize;
+   char *backgroundVert;
+   char *backgroundFrag;
+   GLuint vertHandle;
+   GLuint fragHandle;
+   
+   LoadProgramFiles("assets\\Background.vertp", "assets\\Background.fragp",
+		    &vertSize, &fragSize, &backgroundVert, &backgroundFrag, stack);
+   state.backgroundProgram = MakeProgram(backgroundVert, vertSize, backgroundFrag, fragSize,
+					 &vertHandle, &fragHandle);
+
+   stack->pop();
+   stack->pop();
 
    state.tempFontField = LoadImageFile("distance_field.bi", stack);   
    state.tempFontData = LoadFontFile("font_data.bf", stack);
@@ -2190,172 +1092,6 @@ void GameInit(GameState &state)
    FillGraph(state.tracks);
 }
 
-static inline
-m3 TextProjection(float screenWidth, float screenHeight)
-{
-   return {2.0f / screenWidth, 0.0f, 0.0f,
-	 0.0f, 2.0f / screenHeight, 0.0f,
-	 -1.0f, -1.0f, 1.0f};
-}
-
-static
-void RenderText_stb(char *string, float x, float y, stbFont &font, TextProgram &p)
-{
-   // convert clip coords to device coords
-   x = ((x + 1.0f) * 0.5f) * (float)SCREEN_WIDTH;
-   y = ((y + 1.0f) * 0.5f) * (float)SCREEN_HEIGHT;
-   
-   glDisable(GL_DEPTH_TEST);
-
-   glBindVertexArray(textVao);
-   glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
-   glUseProgram(p.programHandle);
-
-   glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, font.textureHandle);
-   glUniform1i(p.texUniform, 0);
-
-   glUniformMatrix3fv(p.transformUniform, 1, GL_FALSE, TextProjection(SCREEN_WIDTH, SCREEN_HEIGHT).e);
-
-   stbtt_aligned_quad quad;
-   
-   for(i32 i = 0; string[i]; ++i)
-   {
-      char c = string[i];
-      stbtt_GetPackedQuad(font.chars, font.width, font.height, c, &x, &y, &quad, 0);
-
-      float uvs[] =
-	 {
-	    quad.s0, quad.t1,
-	    quad.s1, quad.t1,
-	    quad.s0, quad.t0,
-
-	    quad.s1, quad.t1,
-	    quad.s1, quad.t0,
-	    quad.s0, quad.t0,
-	 };
-      
-      float verts[] =
-	 {
-	    quad.x0, quad.y0,
-	    quad.x1, quad.y0,
-	    quad.x0, quad.y1,
-
-	    quad.x1, quad.y0,
-	    quad.x1, quad.y1,
-	    quad.x0, quad.y1,
-	 };
-
-      glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
-      glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, uvs);
-
-      glBindBuffer(GL_ARRAY_BUFFER, textVbo);
-      glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, verts);
-
-      glDrawArrays(GL_TRIANGLES, 0, 6);
-   }
-
-   glBindVertexArray(0);
-   glEnable(GL_DEPTH_TEST);
-}
-
-static
-void DistanceRenderText(char *string, u32 length, float xpos, float ypos, float scale, FontData &font,
-			TextProgram p, GLuint textureMap)
-{
-
-   xpos = ((xpos + 1.0f) * 0.5f) * (float)SCREEN_WIDTH;
-   ypos = ((ypos + 1.0f) * 0.5f) * (float)SCREEN_HEIGHT;
-
-   glDisable(GL_DEPTH_TEST);      
-
-   float mapWidth = (float)font.mapWidth;
-   float mapHeight = (float)font.mapHeight;
-
-   glBindVertexArray(textVao);
-   glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
-   glUseProgram(p.programHandle);
-
-   glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, textureMap);
-   glUniform1i(p.texUniform, 0);
-
-   glUniformMatrix3fv(p.transformUniform, 1, GL_FALSE, TextProjection(SCREEN_WIDTH, SCREEN_HEIGHT).e);
-   
-   if(length == 0)
-   {
-      char *c = string;
-      while(*(c++)) ++length;
-   }
-
-   for(u32 i = 0; i < length; ++i)
-   {
-      char c = string[i];
-      CharInfo params = {};
-      for(u32 j = 0; j < font.count; ++j)
-      {
-	 if(font.data[j].id == c)
-	 {
-	    params = font.data[j];
-	    break;
-	 }
-
-	 assert(j != font.count-1);
-      }
-
-      //@ 0.001 to prevent texture bleeding
-      // very noticable with the character 't'
-      float x = ((float)params.x / mapWidth) + 0.001f;
-      float y = (float)params.y / mapHeight + 0.001f;
-      float width = ((float)params.width / mapWidth) - 0.002f;
-      float height = (float)params.height / mapHeight - 0.002f;
-
-      float uvs[] =
-	 {
-	    x, y + height,
-	    x + width, y + height,
-	    x, y,
-
-	    x + width, y + height,
-	    x + width, y,
-	    x, y,
-	 };
-
-      glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
-      glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, uvs);
-
-      width = (float)params.width * scale;
-      height = (float)params.height * scale;
-      float xoffset = (float)params.xoffset * scale;
-      float yoffset = ((float)params.yoffset * scale) - height;
-
-      float xpen = (xpos + xoffset);
-      float ypen = (ypos + yoffset);
-
-      float verts[] =
-	 {
-	    xpen, ypen,
-	    xpen + width, ypen,
-	    xpen, ypen + height,
-
-	    xpen + width, ypen,
-	    xpen + width, ypen + height,
-	    xpen, ypen + height,
-	 };
-
-      glBindBuffer(GL_ARRAY_BUFFER, textVbo);
-      glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, verts);
-
-      float xadvance = (float)params.xadvance;
-      xpos += xadvance * scale;
-            
-      glDrawArrays(GL_TRIANGLES, 0, 6);
-   }
-
-   glBindVertexArray(0);
-   glEnable(GL_DEPTH_TEST);
-}
-
 template <typename int_type> static __forceinline
 void IntToString(char *dest, int_type num)
 {
@@ -2385,187 +1121,10 @@ void IntToString(char *dest, int_type num)
    dest[count] = '\0';
 }
 
-i32 RenderTracks(GameState &state)
-{
-   BEGIN_TIME();
-   i32 rendered = 0;
-   for(i32 i = 0; i < state.tracks.capacity; ++i)
-   {	    
-      if(!(state.tracks.adjList[i].flags & Attribute::invisible) &&
-	 !(state.tracks.adjList[i].flags & Attribute::unused))
-      {	 
-	 if(state.tracks.adjList[i].flags & Attribute::reachable)
-	 {
-	    if(state.tracks.adjList[i].flags & Attribute::breaks)
-	    {
-	       RenderPushBreak(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
-	    }
-	    else
-	    {
-	       RenderPushObject(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
-	    }
-	 }
-	 else
-	 {
-	    if(state.tracks.adjList[i].flags & Attribute::breaks)
-	    {
-	       RenderPushBreak(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
-	    }
-	    else
-	    {
-	       RenderPushObject(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 0.0f, 1.0f));
-	    }
-	 }
-	 ++rendered;
-      }
-   }
-   END_TIME();
-   READ_TIME(state.TrackRenderTime);
-
-   return rendered;
-}
-
-#if 0
-static
-void SetReachable(TrackAttribute *attributes, i32 start, StackAllocator *allocator)
-{
-   u32 *stack = (u32 *)allocator->push(1024);
-   u32 top = 1;
-
-   stack[0] = start;
-
-   while(top > 0)
-   {
-      u32 index = stack[--top];
-
-      if(!(attributes[index].flags & TrackAttribute::reachable))
-      {
-	 attributes[index].flags |= TrackAttribute::reachable;
-
-	 if(attributes[index].hasLeft())
-	 {
-	    stack[top++] = attributes[index].getLeft();
-	 }
-
-	 if(attributes[index].hasRight())
-	 {
-	    stack[top++] = attributes[index].getRight();
-	 }
-      }
-   }
-
-   allocator->pop();
-}
-
-static
-void SetReachable(TrackAttribute *attributes, i32 track, StackAllocator *allocator)
-{
-   if(!(attributes[track].flags & TrackAttribute::reachable))
-   {
-      attributes[track].flags |= TrackAttribute::reachable
-
-	 if(attributes[track].hasLeft())
-	 {
-	    SetReachable(attributes, attributes[track].getLeft(), allocator);
-	 }
-
-      if(attributes[track].hasRight())
-      {
-	 SetReachable(attributes, attributes[track].getRight(), allocator);
-      }
-   }
-}
-#endif
-
-#if 0
-#define NotReachableVisible(flags) (flags & TrackAttribute::invisible) && !(flags & TrackAttribute::reachable)
-
-void SortTracks(TrackGraph *tracks, Player *player)
-{
-   u32 b = tracks->size-1;
-
-   for(u32 a = 0; a < (u32)tracks->size; ++a)
-   {
-      if(NotReachableVisible(tracks->adjList[a].flags))
-      {
-	 while(NotReachableVisible(tracks->adjList[b].flags))
-	 {
-	    tracks->RemoveTrack(b);
-	    --b;	    
-	    
-	    if(a > b)
-	    {
-	       return;
-	    }
-	 }
-
-	 tracks->RemoveTrack(a);
-
-	 if(tracks->adjList[b].hasLeft())
-	 {
-	    u32 left = tracks->adjList[b].getLeft();
-
-	    tracks->adjList[left].ReplaceAncestor(b, a);
-	 }
-	 
-	 if(tracks->adjList[b].hasRight())
-	 {
-	    u32 right = tracks->adjList[b].getRight();
-
-	    tracks->adjList[right].ReplaceAncestor(b, a);
-	 }
-	 
-	 for(u32 i = 0; i < tracks->adjList[b].ancestorCount(); ++i)
-	 {
-	    u32 ancestor = tracks->adjList[b].a[i];
-
-	    tracks->adjList[ancestor].ReplaceEdge(b, a);
-	 }
-
-	 tracks->adjList[a] = tracks->adjList[b];
-	 tracks->elements[a] = tracks->elements[b];
-
-	 if(player->trackIndex == (i32)b)
-	 {
-	    player->trackIndex = a;
-	 }
-	 
-	 --b;
-	 // --tracks->size;
-      }
-   }
-
-   DEBUG_DO(CheckGraph(*tracks));
-}
-
-void UpdateTracks(TrackGraph *tracks, Player *player, StackAllocator *allocator)
-{
-   // reset reachable flag
-   for(i32 i = 0; i < tracks->size; ++i)
-   {
-      tracks->adjList[i].flags &= ~TrackAttribute::reachable;
-   }
-   
-   SetReachable(tracks->adjList, player->trackIndex, allocator);
-
-   float cutoff = player->renderable.worldPos.y - (TRACK_SEGMENT_SIZE * 2.0f);
-
-   for(i32 i = 0; i < tracks->size; ++i)
-   {
-      if(tracks->elements[i].renderable.worldPos.y < cutoff)
-      {
-	 tracks->adjList[i].flags |= TrackAttribute::invisible;
-      }
-   }
-
-   SortTracks(tracks, player);
-   // if a track is invisible and unreachable,
-   // then we want to remove it from the graph   
-}
-#endif
-
 void GameLoop(GameState &state)
 {
+   BeginFrame(state);
+
    switch(state.state)
    { 
       case GameState::LOOP:
@@ -2645,14 +1204,15 @@ void GameLoop(GameState &state)
 	 assert(!"invalid state");
       }
    }
+
+   EndFrame(state);
 }
 
 void OnKeyDown(GameState &state)
 {
    GlobalActionPressed = 1;
 
-   if(state.state == GameState::LOOP &&
-      (state.sphereGuy.t <= 0.8f || !state.tracks.GetTrack(state.sphereGuy.trackIndex).isBranch()))
+   if(state.state == GameState::LOOP)
    {
       state.tracks.flags ^= NewTrackGraph::left;
 

@@ -40,11 +40,14 @@
 #pragma warning(pop)
 
 #include "branch_common.h"
+#include "map.h"
+#include "renderer.h"
 #include "main.h"
 
 #include "map.cpp"
 #include "vertinc.h"
 #include "win32.h"
+#include "Renderer.cpp"
 #include "main.cpp"
 
 #ifdef WIN32_BUILD

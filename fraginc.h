@@ -1,2 +1,3 @@
 
-#define MAIN_TEX 1
+#define DEFAULT_COLOR 0
+#define BRIGHTNESS 1

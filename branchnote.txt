@@ -1,37 +1,6 @@
 
-We don't want IDs that are greater than the maximum capacity of the track graph.
-So Keep a queue of available IDs and when you need an ID pop one off
-
-Each track has an id that is not necassarily the track's index into the adjacency list,
-this is so that when the track is re-ordered we don't have to try to change
-its location information in the hashtable and 
-
-init:
-place straight track into queue (id = 0)
-goto proc2
-
-proc1:
-place a track, create links to ancestors
-put into the queue that tracks index, and its type (branched or straight)
-if branched, also put in a side (left or right)
-
-proc2:
-while ids are available
-if queue is not empty
-pop item from the queue
-else
-goto end
-if can fit item into space, goto proc1
-else
-create links to ancestors
-
-end:
-
-
-SortProc:
-for each track attribute
-if it is invisible and unreachable
-remove from graph, remove links to this track.
-
-How to delete things from the HashTable:
-Whenever we delete something, we could just search the table until we find it and delete it.
+Multithreading
+Asset management
+Music (Fuckkkkk)
+Background
+flashing X texture on break
