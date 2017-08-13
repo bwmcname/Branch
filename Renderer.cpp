@@ -10,6 +10,13 @@ static GLuint textVao;
 static GLuint textUVVbo;
 static GLuint textVbo;
 
+static MeshObject Sphere;
+static MeshObject LinearTrack;
+static MeshObject BranchTrack;
+static MeshObject BreakTrack;
+
+static ShaderProgram DefaultShader;
+
 static float RectangleUVs[] =
 {
    0.0f, 0.0f,
@@ -44,6 +51,168 @@ static float ScreenVerts[] =
    1.0f, 1.0f,
    -1.0f, 1.0f
 };
+
+inline static
+TrackFrustum CreateTrackFrustum(m4 worldToClip)
+{
+   TrackFrustum result;
+   v4 a = V4(worldToClip.e2[0][0],
+	     worldToClip.e2[1][0],
+	     worldToClip.e2[2][0],
+	     worldToClip.e2[3][0]);
+   v4 b = V4(worldToClip.e2[0][3],
+	     worldToClip.e2[1][3],
+	     worldToClip.e2[2][3],
+	     worldToClip.e2[3][3]);
+
+   result.left = b + a;
+   result.right = b - a;
+
+   return result;
+}
+
+inline static
+bool TrackFrustumTest(v3 point, TrackFrustum frustum)
+{
+   v4 point4 = V4(point.x, point.y, point.z, 1.0f);
+   float left = dot(frustum.left, point4);
+
+   if(left >= 0.0f)
+   {
+      float right = dot(frustum.right, point4);
+
+      if(right >= 0.0f)
+      {
+	 return true;
+      }
+   }
+
+   return false;
+}
+
+CommandState InitCommandState()
+{
+   CommandState result;
+   result.currentProgram = 0;
+   result.count = 0;
+   result.first = 0;   
+   result.last = 0;
+
+   return result;
+}
+
+void
+CommandState::PushBindProgram(GLuint program, StackAllocator *allocator)
+{
+   if(currentProgram != program)
+   {
+      BindProgramCommand *command;
+      if(first)
+      {
+	 last->next = (CommandBase *)allocator->push(sizeof(BindProgramCommand));
+	 command = (BindProgramCommand *)last->next;
+      }
+      else
+      {
+	 first = (CommandBase *)allocator->push(sizeof(BindProgramCommand));
+	 command = (BindProgramCommand *)first;
+      }
+   
+      command->command = BindProgram;
+      command->next = 0;
+      last = command;
+      currentProgram = program;
+      ++count;
+   }
+}
+
+void
+CommandState::PushDrawLinear(Object obj, StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawLinearCommand));
+   DrawLinearCommand *command = (DrawLinearCommand *)last->next;
+   command->command = DrawLinear;
+   command->obj = obj;
+   last = command;
+   ++count;
+}
+
+void
+CommandState::PushDrawBranch(Object obj, StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawBranchCommand));
+   DrawBranchCommand *command = (DrawBranchCommand *)last->next;
+   command->command = DrawBranch;
+   command->obj = obj;
+   last = command;
+   ++count;
+}
+
+void
+CommandState::PushDrawBreak(Object obj, StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawBreakCommand));
+   DrawBreakCommand *command = (DrawBreakCommand *)last->next;
+   command->command = DrawBreak;
+   command->obj = obj;
+   last = command;
+   ++count;
+}
+
+
+void
+CommandState::PushDrawMesh(MeshObject mesh, v3 position, v3 scale, quat orientation, StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawMeshCommand));
+   DrawMeshCommand *command = (DrawMeshCommand *)last->next;
+   command->command = DrawMesh;
+   command->mesh = mesh;
+   command->position = position;
+   command->scale = scale;
+   command->orientation = orientation;
+   last = command;
+   ++count;
+}
+
+void
+CommandState::PushDrawBreakTexture(v3 position, v3 scale, quat orientation, StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawBreakTextureCommand));
+   DrawBreakTextureCommand *command = (DrawBreakTextureCommand *)last->next;
+   command->command = DrawBreakTexture;
+   command->position = position;
+   command->scale = scale;
+   command->orientation = orientation;
+   last = command;
+   ++count;
+}
+
+void
+CommandState::Clean(StackAllocator *allocator)
+{
+   while(count--)
+   {
+      allocator->pop();
+   }
+   currentProgram = 0;
+   first = 0;
+   last = 0;
+}
 
 static void
 LoadProgramFiles(char *vert, char *frag,
@@ -231,7 +400,7 @@ RenderState InitRenderState(StackAllocator *stack)
       GLuint fragHandle;
 
       LoadProgramFiles("assets\\ScreenTexture.vertp", "assets\\ScreenTexture.fragp",
-			&vertSize, &fragSize, &vertSource, &fragSource, stack);
+		       &vertSize, &fragSize, &vertSource, &fragSource, stack);
 
       result.fullScreenProgram = MakeProgram(vertSource, vertSize, fragSource, fragSize,
 					     &vertHandle, &fragHandle);
@@ -249,7 +418,7 @@ RenderState InitRenderState(StackAllocator *stack)
       GLuint fragHandle;
 
       LoadProgramFiles("assets\\ApplyBlur.vertp", "assets\\ApplyBlur.fragp",
-			&vertSize, &fragSize, &vertSource, &fragSource, stack);
+		       &vertSize, &fragSize, &vertSource, &fragSource, stack);
 
       result.blurProgram = MakeProgram(vertSource, vertSize, fragSource, fragSize,
 				       &vertHandle, &fragHandle);
@@ -258,6 +427,7 @@ RenderState InitRenderState(StackAllocator *stack)
       stack->pop();
    }
 
+   result.commands = InitCommandState();
    
    return result;
 }
@@ -330,21 +500,21 @@ void EndFrame(GameState &state)
 {
    //apply blur
    /*glUseProgram(state.renderer.blurProgram);
-   glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, state.renderer.blurTexture);
-   glUniform1i(glGetUniformLocation(state.renderer.blurProgram, "tex"), 0);
-   glUniform1f(glGetUniformLocation(state.renderer.blurProgram, "xstep"), 1.0f / (float)(SCREEN_WIDTH >> 2));
-   glUniform1f(glGetUniformLocation(state.renderer.blurProgram, "ystep"), 0.0f);
-   glEnableVertexAttribArray(UV_LOCATION);
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
-   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
-   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-   glDisable(GL_DEPTH_TEST);
-   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-   glDisable(GL_DEPTH_TEST);
-   glUseProgram(0);
+     glActiveTexture(GL_TEXTURE0);
+     glBindTexture(GL_TEXTURE_2D, state.renderer.blurTexture);
+     glUniform1i(glGetUniformLocation(state.renderer.blurProgram, "tex"), 0);
+     glUniform1f(glGetUniformLocation(state.renderer.blurProgram, "xstep"), 1.0f / (float)(SCREEN_WIDTH >> 2));
+     glUniform1f(glGetUniformLocation(state.renderer.blurProgram, "ystep"), 0.0f);
+     glEnableVertexAttribArray(UV_LOCATION);
+     glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
+     glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+     glEnableVertexAttribArray(VERTEX_LOCATION);
+     glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
+     glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+     glDisable(GL_DEPTH_TEST);
+     glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
+     glDisable(GL_DEPTH_TEST);
+     glUseProgram(0);
    */
    // blit buffer
    glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.horizontalFbo);
@@ -413,7 +583,7 @@ void EndFrame(GameState &state)
    glUseProgram(0);
 }
 
-void RenderPushMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
+void RenderMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
 {
    glUseProgram(p.programHandle);
 
@@ -436,7 +606,7 @@ void RenderPushMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 l
 }
 
 static
-void RenderPushObject(Object &obj, m4 &camera, v3 lightPos, v3 diffuseColor)
+void RenderObject(Object &obj, MeshObject buffers, ShaderProgram program, m4 &camera, v3 lightPos, v3 diffuseColor)
 {
    m4 orientation = M4(obj.orientation);
    m4 scale = Scale(obj.scale);
@@ -444,20 +614,32 @@ void RenderPushObject(Object &obj, m4 &camera, v3 lightPos, v3 diffuseColor)
    
    m4 transform = translation * scale * orientation;
    
-   RenderPushMesh(*obj.p, obj.meshBuffers, transform, camera, lightPos, diffuseColor);
+   RenderMesh(program, buffers, transform, camera, lightPos, diffuseColor);
 }
 
 static
-void RenderPushBreak(Object &obj, m4 &camera, v3 lightPos, v3 diffuseColor)
+void RenderBranch(DrawBranchCommand *command, Camera &camera, v3 lightPos)
 {
-   RenderPushObject(obj, camera, lightPos, diffuseColor);
+   RenderObject(command->obj, BranchTrack, DefaultShader, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
+}
 
-   m4 translation = Translate(V3(obj.worldPos.x, obj.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, obj.worldPos.z));
+static
+void RenderLinear(DrawLinearCommand *command, Camera &camera, v3 lightPos)
+{
+   RenderObject(command->obj, LinearTrack, DefaultShader, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
+}
+
+static
+void RenderBreak(DrawBreakCommand *command, Camera &camera, v3 lightPos)
+{
+   RenderObject(command->obj, BreakTrack, DefaultShader, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
+
+   m4 translation = Translate(V3(command->obj.worldPos.x, command->obj.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, command->obj.worldPos.z));
    m4 orientation = M4(Rotation(V3(-1.0f, 0.0f, 0.0f), 1.5708f));
    m4 scale = Scale(V3(5.0f, 5.0f, 5.0f));
 
    m4 model = translation * orientation * scale;
-   m4 mvp = InfiniteProjection * camera * model;
+   m4 mvp = InfiniteProjection * camera.view * model;
 
    glBindBuffer(GL_ARRAY_BUFFER, RectangleVertBuffer);
    glEnableVertexAttribArray(VERTEX_LOCATION);
@@ -746,29 +928,89 @@ MeshObject InitMeshObject(char *filename, StackAllocator *allocator)
    return result;
 }
 
-
-i32 RenderTracks(GameState &state)
+void
+CommandState::ExecuteCommands(Camera &camera, v3 lightPos)
 {
-   BEGIN_TIME();
+   CommandBase *current = first;
+   for(u32 i = 0; i < count; ++i)
+   {
+      switch(current->command)
+      {
+	 case DrawLinear:
+	 {
+	    RenderLinear((DrawLinearCommand *)current, camera, lightPos);
+	 }break;
+
+	 case DrawBranch:
+	 {
+	    RenderBranch((DrawBranchCommand *)current, camera, lightPos);
+	 }break;
+
+	 case DrawBreak:
+	 {
+	    RenderBreak((DrawBreakCommand *)current, camera, lightPos);
+	 }break;
+
+	 case BindProgram:
+	 {
+	    BindProgramCommand *programCommand = (BindProgramCommand *)current;
+	    glUseProgram(programCommand->program);
+	 }break;
+#ifdef DEBUG
+	 default:
+	 {
+	    assert(false);
+	 }break;
+#endif
+      }
+      current = current->next;
+   }
+}
+
+i32 RenderTracks(GameState &state, StackAllocator *allocator)
+{
+   BEGIN_TIME();   
    i32 rendered = 0;
+
+   TrackFrustum frustum = CreateTrackFrustum(InfiniteProjection * state.camera.view);
+
+   // @temporary
+   state.renderer.commands.PushBindProgram(1, allocator);
    for(i32 i = 0; i < state.tracks.capacity; ++i)
    {	    
       if(!(state.tracks.adjList[i].flags & Attribute::invisible) &&
 	 !(state.tracks.adjList[i].flags & Attribute::unused))
-      {	 
+      {
+	 if(TrackFrustumTest(state.tracks.elements[i].renderable.worldPos, frustum))
 	 {
+	    
 	    if(state.tracks.adjList[i].flags & Attribute::breaks)
+	    {	       
+	       // RenderBreak(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
+	       state.renderer.commands.PushDrawBreak(state.tracks.elements[i].renderable, allocator);
+	    }
+	    else if(state.tracks.adjList[i].flags & Attribute::branch)
 	    {
-	       RenderPushBreak(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
+	       // RenderBranch(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
+	       state.renderer.commands.PushDrawBranch(state.tracks.elements[i].renderable, allocator);
+	    }
+	    else if(state.tracks.adjList[i].flags & Attribute::linear)
+	    {	       
+	       // RenderLinear(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
+	       state.renderer.commands.PushDrawLinear(state.tracks.elements[i].renderable, allocator);
 	    }
 	    else
 	    {
-	       RenderPushObject(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
+	       assert(false);
 	    }
-	 }
-	 ++rendered;
+	    ++rendered;
+	 }	 
       }
    }
+
+   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos);
+   state.renderer.commands.Clean(allocator);
+   
    END_TIME();
    READ_TIME(state.TrackRenderTime);
 

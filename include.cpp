@@ -40,6 +40,7 @@
 #pragma warning(pop)
 
 #include "branch_common.h"
+#include "Allocator.h"
 #include "map.h"
 #include "renderer.h"
 #include "main.h"

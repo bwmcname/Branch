@@ -1,67 +1,6 @@
 #define TRACK_SEGMENT_SIZE 12.0f
 static float delta;
 
-struct Arena
-{
-   size_t size;
-   u8 *base;
-   u8 *current;
-};
-
-struct StackAllocator
-{
-   struct Chunk
-   {
-      Chunk *last;
-      u8 *base;
-      size_t size;
-   };
-
-   Chunk *last;
-   u8 *base;
-   u32 allocs;
-   
-   u8 *push(size_t size);
-   void pop();
-};
-
-struct Camera
-{
-   enum
-   {
-      lerping,
-   };
-
-   quat orientation;
-   v3 position;
-
-   u32 flags;
-   float t;
-
-   m4 view;
-};
-
-struct Mesh
-{
-   float *vertices;
-   i32 vcount;
-
-   v3 *normals;
-};
-
-struct MeshBuffers
-{
-   GLuint vbo;
-   GLuint nbo;
-   GLuint vao;
-};
-
-struct MeshObject
-{
-   Mesh mesh;
-   MeshBuffers handles;
-};
-
 struct ShaderProgram
 {
    GLuint programHandle;
@@ -80,16 +19,6 @@ struct ShaderProgram
    GLint normalAttrib;
 
    GLint texUniform;
-};
-
-// Higher level Game Object abstraction
-struct Object
-{
-   v3 worldPos;
-   v3 scale;
-   quat orientation;
-   MeshObject meshBuffers;
-   ShaderProgram *p;
 };
 
 union tri2
@@ -261,7 +190,9 @@ struct NewTrackGraph
    CircularQueue<u16> availableIDs;
    CircularQueue<NewTrackOrder> orders;
    VirtualCoordHashTable taken;
+
    u16 *IDtable;
+   u16 *reverseIDtable;
    u8 flags;
 
    float switchDelta;
@@ -270,9 +201,15 @@ struct NewTrackGraph
 
    void RemoveTrackActual(u16 id);
    inline Attribute &GetTrack(u16 id);
+   inline void Swap2(u16 a, u16 b);
+   inline void Move(u16 src, u16 dst);
+   inline void SetID(u16 virt, u16 actual);
+   inline u16 GetActualID(u16 virt);
+   inline u16 GetVirtualID(u16 actual);
 
 #ifdef DEBUG
    void VerifyGraph();
+   void VerifyIDTables();
 #endif
 };
 
@@ -281,6 +218,7 @@ struct Player
    Object renderable;
    u16 trackIndex;
    float t;
+   MeshObject mesh;
 };
 
 struct stbFont

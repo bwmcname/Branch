@@ -28,6 +28,6 @@ start /b ap shader ScreenTexture.frag
 start /b ap shader ApplyBlur.frag
 start /b ap shader ApplyBlur.vert
 
-cl -Zi -DWIN32_BUILD -DDEBUG -DTIMERS -FS -Wall -WX -wd4505 -wd4623 -wd4365 -wd4244 -wd4626 -wd5027 -wd4201 -wd4820 -wd4100 -wd4514 -wd4711 include.cpp -FeBranch_Debug opengl32.lib gdi32.lib user32.lib
+cl -Zi -DWIN32_BUILD -DDEBUG -DTIMERS -FS -Wall -WX -wd4061 -wd4062 -wd4505 -wd4623 -wd4365 -wd4244 -wd4626 -wd5027 -wd4201 -wd4820 -wd4100 -wd4514 -wd4711 include.cpp -FeBranch_Debug opengl32.lib gdi32.lib user32.lib
 
-cl -Zi -DWIN32_BUILD -DTIMERS -Ox -FS -Wall -WX -wd4505 -wd4623 -wd4365 -wd4244 -wd4626 -wd5027 -wd4201 -wd4820 -wd4100 -wd4514 -wd4711 include.cpp -FeBranch_Release opengl32.lib gdi32.lib user32.lib
+cl -Zi -DWIN32_BUILD -DTIMERS -Ox -FS -Wall -WX -wd4061 -wd4062 -wd4505 -wd4623 -wd4365 -wd4244 -wd4626 -wd5027 -wd4201 -wd4820 -wd4100 -wd4514 -wd4711 include.cpp -FeBranch_Release opengl32.lib gdi32.lib user32.lib

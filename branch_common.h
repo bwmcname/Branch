@@ -319,7 +319,21 @@ union v4
 
    inline v4 operator+(float c);
    inline v4 operator+(v4 b);
+   inline v4 operator-(v4 b);
 };
+
+inline
+v4 v4::operator-(v4 b)
+{
+   v4 result;
+
+   result.x = x - b.x;
+   result.y = y - b.y;
+   result.z = z - b.z;
+   result.w = w - b.w;
+
+   return result;
+}
 
 inline
 v4 v4::operator+(float c)
@@ -857,4 +871,12 @@ struct VirtualCoord
 {
    i32 x;
    i32 y;
+};
+
+// Higher level Game Object abstraction
+struct Object
+{
+   v3 worldPos;
+   v3 scale;
+   quat orientation;   
 };
