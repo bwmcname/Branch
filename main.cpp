@@ -1132,7 +1132,7 @@ void GameInit(GameState &state)
 }
 
 template <typename int_type> static __forceinline
-void IntToString(char *dest, int_type num)
+int_type IntToString(char *dest, int_type num)
 {
    static char table[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
@@ -1140,7 +1140,7 @@ void IntToString(char *dest, int_type num)
    {
       dest[0] = '0';
       dest[1] = '\0';
-      return;
+      return 1;
    }
    
    int_type count = 0;
@@ -1158,6 +1158,8 @@ void IntToString(char *dest, int_type num)
    }
 
    dest[count] = '\0';
+
+   return count;
 }
 
 void GameLoop(GameState &state)
@@ -1188,22 +1190,27 @@ void GameLoop(GameState &state)
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
 
 	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
-
+	 
 #ifdef TIMERS
 	 static char framerate[8];
 	 static float time = 120.0f;
 	 time += delta;
+	 static i32 count = 0;
 	 if(time > 30.0f)
 	 {
 	    time = 0.0f;
-	    IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
+	    count = IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
 	 }
-	 RenderText_stb(framerate, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
+	 // RenderText_stb(framerate, count, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
+	 state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
 
 	 static char renderTimeSting[19];
-	 IntToString(renderTimeSting, state.TrackRenderTime);
-	 RenderText_stb(renderTimeSting, -0.8f, 0.75f, state.bitmapFont, state.bitmapFontProgram);	 
+	 size_t renderTimeCount = IntToString(renderTimeSting, state.TrackRenderTime);
+	 // RenderText_stb(renderTimeSting, (u32)renderTimeCount, -0.8f, 0.75f, state.bitmapFont, state.bitmapFontProgram);
+	 state.renderer.commands.PushRenderText(renderTimeSting, (u32)renderTimeCount, V2(-0.8f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
 #endif
+
+	 state.renderer.commands.PushRenderBlur(((StackAllocator *)state.mainArena.base));
       }break;
 
       case GameState::RESET:
@@ -1244,7 +1251,8 @@ void GameLoop(GameState &state)
       }
    }
 
-   EndFrame(state);
+   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer);
+   state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }
 
 void OnKeyDown(GameState &state)

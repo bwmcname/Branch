@@ -36,6 +36,18 @@ struct MeshObject
    MeshBuffers handles;
 };
 
+struct TextProgram
+{
+   GLuint programHandle;
+   GLuint vertexHandle;
+   GLuint fragmentHandle;
+
+   GLint transformUniform;
+   GLint texUniform;
+   GLint vertexAttrib;
+   GLint normalAttrib;   
+};
+
 enum RenderCommand
 {
    BindProgram,
@@ -44,6 +56,8 @@ enum RenderCommand
    DrawLinear,
    DrawBranch,
    DrawBreak,
+   DrawString, //DrawText is taken :(
+   DrawBlur,
 };
 
 struct CommandBase
@@ -72,6 +86,7 @@ struct DrawBreakTextureCommand : public CommandBase
    quat orientation;
 };
 
+// lol
 struct DrawLinearCommand : public CommandBase
 {
    Object obj;
@@ -87,12 +102,27 @@ struct DrawBreakCommand : public CommandBase
    Object obj;
 };
 
+struct DrawTextCommand : public CommandBase
+{
+   u32 textSize;
+   v2 position;
+   v2 scale;
+   v3 color;
+
+   inline char *GetString()
+   {
+      return (char *)(this) + sizeof(DrawTextCommand);
+   }
+};
+
 /*
 Different command we need.
 BindProgram
 Draw Mesh
 Draw Bright break thing
  */
+
+struct RenderState;
 
 struct CommandState
 {
@@ -107,7 +137,9 @@ struct CommandState
    void PushDrawLinear(Object obj, StackAllocator *allocator);
    void PushDrawBranch(Object obj, StackAllocator *allocator);
    void PushDrawBreak(Object obj, StackAllocator *allocator);
-   void ExecuteCommands(Camera &camera, v3 lightPos);
+   void PushRenderBlur(StackAllocator *allocator);
+   void PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator);
+   void ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer);
    void Clean(StackAllocator *allocator);
 };
 

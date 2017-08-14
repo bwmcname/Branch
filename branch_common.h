@@ -26,6 +26,17 @@ typedef uint64_t u64;
 typedef int8_t b8;
 typedef int32_t b32;
 
+struct stbFont
+{
+   u8 *rawFile; // @: We might not have to keep this around.
+   stbtt_fontinfo info;
+   stbtt_packedchar *chars;
+   u8 *map;
+   u32 width;
+   u32 height;
+   GLuint textureHandle;
+};
+
 // typedef size_t size;
 union m2
 {

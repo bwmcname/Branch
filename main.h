@@ -221,29 +221,6 @@ struct Player
    MeshObject mesh;
 };
 
-struct stbFont
-{
-   u8 *rawFile; // @: We might not have to keep this around.
-   stbtt_fontinfo info;
-   stbtt_packedchar *chars;
-   u8 *map;
-   u32 width;
-   u32 height;
-   GLuint textureHandle;
-};
-
-struct TextProgram
-{
-   GLuint programHandle;
-   GLuint vertexHandle;
-   GLuint fragmentHandle;
-
-   GLint transformUniform;
-   GLint texUniform;
-   GLint vertexAttrib;
-   GLint normalAttrib;   
-};
-
 struct GameState
 {
    RenderState renderer;

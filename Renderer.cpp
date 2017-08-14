@@ -203,6 +203,43 @@ CommandState::PushDrawBreakTexture(v3 position, v3 scale, quat orientation, Stac
 }
 
 void
+CommandState::PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawTextCommand) + textSize);
+   DrawTextCommand *command = (DrawTextCommand *)last->next;
+   command->command = DrawString;
+   command->textSize = textSize;
+   command->position = position;
+   command->scale = scale;
+   command->color = color;
+
+   // copy string into the end of the command
+   char *string = command->GetString();
+   for(u32 i = 0; i < textSize; ++i)
+   {
+      string[i] = text[i];
+   }
+
+   last = command;
+   ++count;
+}
+
+void
+CommandState::PushRenderBlur(StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(CommandBase));
+   last->next->command = DrawBlur;
+   last = last->next;
+   ++count;
+}
+
+void
 CommandState::Clean(StackAllocator *allocator)
 {
    while(count--)
@@ -212,6 +249,7 @@ CommandState::Clean(StackAllocator *allocator)
    currentProgram = 0;
    first = 0;
    last = 0;
+   count = 0;
 }
 
 static void
@@ -496,30 +534,11 @@ void BeginFrame(GameState &state)
    glEnable(GL_DEPTH_TEST);
 }
 
-void EndFrame(GameState &state)
+void RenderBlur(RenderState &renderer)
 {
-   //apply blur
-   /*glUseProgram(state.renderer.blurProgram);
-     glActiveTexture(GL_TEXTURE0);
-     glBindTexture(GL_TEXTURE_2D, state.renderer.blurTexture);
-     glUniform1i(glGetUniformLocation(state.renderer.blurProgram, "tex"), 0);
-     glUniform1f(glGetUniformLocation(state.renderer.blurProgram, "xstep"), 1.0f / (float)(SCREEN_WIDTH >> 2));
-     glUniform1f(glGetUniformLocation(state.renderer.blurProgram, "ystep"), 0.0f);
-     glEnableVertexAttribArray(UV_LOCATION);
-     glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
-     glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-     glEnableVertexAttribArray(VERTEX_LOCATION);
-     glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
-     glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-     glDisable(GL_DEPTH_TEST);
-     glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-     glDisable(GL_DEPTH_TEST);
-     glUseProgram(0);
-   */
-   // blit buffer
-   glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.horizontalFbo);
+   glBindFramebuffer(GL_FRAMEBUFFER, renderer.horizontalFbo);
    
-   glUseProgram(state.renderer.fullScreenProgram);
+   glUseProgram(renderer.fullScreenProgram);
    glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
@@ -529,15 +548,15 @@ void EndFrame(GameState &state)
    glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
    glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, state.renderer.blurTexture);
-   glUniform1i(glGetUniformLocation(state.renderer.fullScreenProgram, "image2"), 0);
+   glBindTexture(GL_TEXTURE_2D, renderer.blurTexture);
+   glUniform1i(glGetUniformLocation(renderer.fullScreenProgram, "image2"), 0);
 
-   glUniform1f(glGetUniformLocation(state.renderer.fullScreenProgram, "xstep"), 1.0f / (float)(SCREEN_WIDTH));
-   glUniform1f(glGetUniformLocation(state.renderer.fullScreenProgram, "ystep"), 0.0f);
+   glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "xstep"), 1.0f / (float)(SCREEN_WIDTH));
+   glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "ystep"), 0.0f);
 
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
 
-   glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.verticalFbo);
+   glBindFramebuffer(GL_FRAMEBUFFER, renderer.verticalFbo);
    glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
@@ -547,18 +566,18 @@ void EndFrame(GameState &state)
    glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
    glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, state.renderer.horizontalColorBuffer);
-   glUniform1i(glGetUniformLocation(state.renderer.fullScreenProgram, "image2"), 0);
+   glBindTexture(GL_TEXTURE_2D, renderer.horizontalColorBuffer);
+   glUniform1i(glGetUniformLocation(renderer.fullScreenProgram, "image2"), 0);
 
-   glUniform1f(glGetUniformLocation(state.renderer.fullScreenProgram, "xstep"), 0.0f);
-   glUniform1f(glGetUniformLocation(state.renderer.fullScreenProgram, "ystep"), 1.0f / (float)(SCREEN_HEIGHT));
+   glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "xstep"), 0.0f);
+   glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "ystep"), 1.0f / (float)(SCREEN_HEIGHT));
 
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
 
    // finally blit it to the screen
    // @should change programs!!!   
    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-   glUseProgram(state.renderer.blurProgram);
+   glUseProgram(renderer.blurProgram);
    glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
@@ -568,13 +587,13 @@ void EndFrame(GameState &state)
    glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
    glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, state.renderer.mainColorTexture);
+   glBindTexture(GL_TEXTURE_2D, renderer.mainColorTexture);
       
    glActiveTexture(GL_TEXTURE1);
-   glBindTexture(GL_TEXTURE_2D, state.renderer.verticalColorBuffer);
+   glBindTexture(GL_TEXTURE_2D, renderer.verticalColorBuffer);
 
-   glUniform1i(glGetUniformLocation(state.renderer.blurProgram, "scene"), 0);
-   glUniform1i(glGetUniformLocation(state.renderer.blurProgram, "blur"), 1);
+   glUniform1i(glGetUniformLocation(renderer.blurProgram, "scene"), 0);
+   glUniform1i(glGetUniformLocation(renderer.blurProgram, "blur"), 1);
 
    glEnable(GL_FRAMEBUFFER_SRGB);
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
@@ -676,7 +695,7 @@ void RenderTexture(GLuint texture, ShaderProgram &program)
 }
 
 static
-void RenderText_stb(char *string, float x, float y, stbFont &font, TextProgram &p)
+void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, TextProgram &p)
 {
    // convert clip coords to device coords
    x = ((x + 1.0f) * 0.5f) * (float)SCREEN_WIDTH;
@@ -696,7 +715,7 @@ void RenderText_stb(char *string, float x, float y, stbFont &font, TextProgram &
 
    stbtt_aligned_quad quad;
    
-   for(i32 i = 0; string[i]; ++i)
+   for(i32 i = 0; i < (i32)count; ++i)
    {
       char c = string[i];
       stbtt_GetPackedQuad(font.chars, font.width, font.height, c, &x, &y, &quad, 0);
@@ -734,6 +753,12 @@ void RenderText_stb(char *string, float x, float y, stbFont &font, TextProgram &
 
    glBindVertexArray(0);
    glEnable(GL_DEPTH_TEST);
+}
+
+static
+void RenderText(DrawTextCommand *command, stbFont &font, TextProgram &p)
+{
+   RenderText_stb(command->GetString(), command->textSize, command->position.x, command->position.y, font, p);
 }
 
 static
@@ -929,7 +954,7 @@ MeshObject InitMeshObject(char *filename, StackAllocator *allocator)
 }
 
 void
-CommandState::ExecuteCommands(Camera &camera, v3 lightPos)
+CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer)
 {
    CommandBase *current = first;
    for(u32 i = 0; i < count; ++i)
@@ -955,6 +980,16 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos)
 	 {
 	    BindProgramCommand *programCommand = (BindProgramCommand *)current;
 	    glUseProgram(programCommand->program);
+	 }break;
+
+	 case DrawString:
+	 {
+	    RenderText((DrawTextCommand *)current, font, p);
+	 }break;
+
+	 case DrawBlur:
+	 {
+	    RenderBlur(renderer);
 	 }break;
 #ifdef DEBUG
 	 default:
@@ -1008,8 +1043,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
       }
    }
 
-   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos);
-   state.renderer.commands.Clean(allocator);
+   state.renderer.commands.PushRenderBlur(allocator);   
    
    END_TIME();
    READ_TIME(state.TrackRenderTime);
