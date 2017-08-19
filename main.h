@@ -21,6 +21,12 @@ struct ShaderProgram
    GLint texUniform;
 };
 
+struct BBox
+{
+   v3 position;
+   v3 magnitude;
+};
+
 union tri2
 {
    v2 e[3];
@@ -43,6 +49,10 @@ union Curve
  
    v4 lerpables[2];
 };
+
+static Curve GlobalLinearCurve;
+static Curve GlobalBranchCurve;
+static Curve GlobalBreakCurve;
 
 enum KeyState
 {

@@ -72,7 +72,7 @@ TrackFrustum CreateTrackFrustum(m4 worldToClip)
 }
 
 inline static
-bool TrackFrustumTest(v3 point, TrackFrustum frustum)
+bool PointFrustumTest(v3 point, TrackFrustum frustum)
 {
    v4 point4 = V4(point.x, point.y, point.z, 1.0f);
    float left = dot(frustum.left, point4);
@@ -87,6 +87,48 @@ bool TrackFrustumTest(v3 point, TrackFrustum frustum)
       }
    }
 
+   return false;
+}
+
+//@ NEEDS TO BE TESTED!!
+static inline
+BBox BranchBBox(Curve &c, v3 beginPoint)
+{
+   BBox result;
+
+   v3 endPoint = V3(c.p4.x, c.p4.y, 0.0f);
+   v3 midPoint = beginPoint + (0.5f * (endPoint - beginPoint));
+   v3 magnitude = endPoint - midPoint;
+
+   result.position = midPoint;
+   result.magnitude = magnitude;
+
+   return result;
+}
+
+static inline
+BBox LinearBBox(v3 beginPoint)
+{
+   BBox result;
+
+   v3 endPoint = V3(beginPoint.x, beginPoint.y + TRACK_SEGMENT_SIZE, 0.0f);
+   v3 midPoint = beginPoint + (0.5f * (endPoint - beginPoint));
+   v3 magnitude = endPoint - midPoint;
+
+   result.position = midPoint;
+   result.magnitude = magnitude;
+
+   return result;
+}
+
+static
+bool BBoxFrustumTest(TrackFrustum &f, BBox &b)
+{
+   if(PointFrustumTest(b.position + b.magnitude, f)) return true;
+   if(PointFrustumTest(b.position - b.magnitude, f)) return true;
+   v3 diag = V3(b.magnitude.y, b.magnitude.x, 0.0f);
+   if(PointFrustumTest(b.position + diag, f)) return true;
+   if(PointFrustumTest(b.position + diag, f)) return true;
    return false;
 }
 
@@ -1016,23 +1058,28 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
       if(!(state.tracks.adjList[i].flags & Attribute::invisible) &&
 	 !(state.tracks.adjList[i].flags & Attribute::unused))
       {
-	 if(TrackFrustumTest(state.tracks.elements[i].renderable.worldPos, frustum))
+	 if(state.tracks.adjList[i].flags & Attribute::branch)
 	 {
-	    
+	    BBox box = BranchBBox(GlobalBranchCurve, state.tracks.elements[i].renderable.worldPos);
+	    if(BBoxFrustumTest(frustum, box))
+	    {
+	       state.renderer.commands.PushDrawBranch(state.tracks.elements[i].renderable, allocator);
+	    }
+	 }
+	 else if(state.tracks.adjList[i].flags & Attribute::linear)
+	 {
+	    BBox box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
+	    if(BBoxFrustumTest(frustum, box))
+	    {
+	       state.renderer.commands.PushDrawLinear(state.tracks.elements[i].renderable, allocator);
+	    }	    
+	 }
+	 else if(PointFrustumTest(state.tracks.elements[i].renderable.worldPos, frustum))
+	 {	    
 	    if(state.tracks.adjList[i].flags & Attribute::breaks)
 	    {	       
 	       // RenderBreak(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
 	       state.renderer.commands.PushDrawBreak(state.tracks.elements[i].renderable, allocator);
-	    }
-	    else if(state.tracks.adjList[i].flags & Attribute::branch)
-	    {
-	       // RenderBranch(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
-	       state.renderer.commands.PushDrawBranch(state.tracks.elements[i].renderable, allocator);
-	    }
-	    else if(state.tracks.adjList[i].flags & Attribute::linear)
-	    {	       
-	       // RenderLinear(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
-	       state.renderer.commands.PushDrawLinear(state.tracks.elements[i].renderable, allocator);
 	    }
 	    else
 	    {

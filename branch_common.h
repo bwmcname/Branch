@@ -124,6 +124,12 @@ float dot(v3 a, v3 b)
    return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
+static inline
+v3 operator*(float c, v3 v)
+{
+   return V3(c * v.x, c * v.y, c * v.z);
+}
+
 union v3i
 {
    i32 e[3];

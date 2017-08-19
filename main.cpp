@@ -53,10 +53,6 @@ v3 V3(v2 a, float z)
    return {a.x, a.y, z}; 
 }
 
-static Curve GlobalLinearCurve;
-static Curve GlobalBranchCurve;
-static Curve GlobalBreakCurve;
-
 static inline
 Curve InvertX(Curve c)
 {
@@ -228,7 +224,6 @@ Curve BranchCurve(i32 x1, i32 y1,
 
    v2 direction = end - begin;
 
-   // right now, just a straight line
    Curve result;
    result.p1 = V2(0.0f, 0.0f);
    result.p2 = V2(0.0f, direction.y * 0.666667f);
@@ -714,8 +709,6 @@ void NewUpdateTrackGraph(NewTrackGraph &graph, StackAllocator &allocator, Player
    NewSetReachable(graph, allocator, player.trackIndex);
 
    float cutoff = player.renderable.worldPos.y - (TRACK_SEGMENT_SIZE * 2.0f);
-
-   TrackFrustum frustum = CreateTrackFrustum(InfiniteProjection * camera.view);
 
    for(u16 i = 0; i < graph.capacity; ++i)
    {
