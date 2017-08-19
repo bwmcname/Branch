@@ -700,6 +700,7 @@ void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator, v3 cameraPos
    }
 
    allocator.pop();
+   allocator.pop();
 }
 
 void NewUpdateTrackGraph(NewTrackGraph &graph, StackAllocator &allocator, Player &player, Camera &camera)
@@ -1208,9 +1209,9 @@ void GameLoop(GameState &state)
 	 size_t renderTimeCount = IntToString(renderTimeSting, state.TrackRenderTime);
 	 // RenderText_stb(renderTimeSting, (u32)renderTimeCount, -0.8f, 0.75f, state.bitmapFont, state.bitmapFontProgram);
 	 state.renderer.commands.PushRenderText(renderTimeSting, (u32)renderTimeCount, V2(-0.8f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
-#endif
 
-	 state.renderer.commands.PushRenderBlur(((StackAllocator *)state.mainArena.base));
+	 state.renderer.commands.PushRenderText("welp", 4, V2(-0.8f, 0.70f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
+#endif	 
       }break;
 
       case GameState::RESET:
@@ -1251,6 +1252,7 @@ void GameLoop(GameState &state)
       }
    }
 
+   state.renderer.commands.PushRenderBlur(((StackAllocator *)state.mainArena.base));
    state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer);
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }

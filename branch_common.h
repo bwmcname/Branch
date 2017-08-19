@@ -34,7 +34,7 @@ struct stbFont
    u8 *map;
    u32 width;
    u32 height;
-   GLuint textureHandle;
+   u32 textureHandle;
 };
 
 // typedef size_t size;

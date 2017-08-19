@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "stb_truetype.h"
 #include "branch_common.h"
 
 #define STB_IMAGE_IMPLEMENTATION

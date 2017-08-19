@@ -502,8 +502,8 @@ static inline
 m3 TextProjection(float screenWidth, float screenHeight)
 {
    return {2.0f / screenWidth, 0.0f, 0.0f,
-	 0.0f, 2.0f / screenHeight, 0.0f,
-	 -1.0f, -1.0f, 1.0f};
+	 0.0f, -2.0f / screenHeight, 0.0f,
+	 -1.0f, 1.0f, 1.0f};
 }
 
 void RenderBackground(GameState &state)
@@ -698,8 +698,8 @@ static
 void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, TextProgram &p)
 {
    // convert clip coords to device coords
-   x = ((x + 1.0f) * 0.5f) * (float)SCREEN_WIDTH;
-   y = ((y + 1.0f) * 0.5f) * (float)SCREEN_HEIGHT;
+   x = (x + 1.0f) * ((float)SCREEN_WIDTH / 2.0f);
+   y = (y - 1.0f) * -((float)SCREEN_HEIGHT / 2.0f);
    
    glDisable(GL_DEPTH_TEST);
 
@@ -722,24 +722,24 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
 
       float uvs[] =
 	 {
+	    quad.s0, quad.t0,
+	    quad.s0, quad.t1,
+	    quad.s1, quad.t0,
+
+	    quad.s1, quad.t0,
 	    quad.s0, quad.t1,
 	    quad.s1, quad.t1,
-	    quad.s0, quad.t0,
-
-	    quad.s1, quad.t1,
-	    quad.s1, quad.t0,
-	    quad.s0, quad.t0,
 	 };
       
       float verts[] =
 	 {
 	    quad.x0, quad.y0,
-	    quad.x1, quad.y0,
 	    quad.x0, quad.y1,
+	    quad.x1, quad.y0,
 
 	    quad.x1, quad.y0,
-	    quad.x1, quad.y1,
 	    quad.x0, quad.y1,
+	    quad.x1, quad.y1,
 	 };
 
       glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
