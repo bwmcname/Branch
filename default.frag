@@ -14,9 +14,8 @@ void main()
    vec3 lightDir = normalize(lightPos - fragPos);
    float power = max(dot(norm, lightDir), 0.05); 
    color = vec4((power * 2.0) * diffuseColor, 1.0);
-
    
-   if(power > 0.8)
+   if(power > 0.9)
    {
       color2 = color;
    }
@@ -25,7 +24,6 @@ void main()
       color2 = vec4(0.0, 0.0, 0.0, 0.0);
    }
    
-
    //color = vec4(diffuseColor, 1.0);
    //color = vec4(1.0f, 0.0f, 0.0f, 1.0f);
 }

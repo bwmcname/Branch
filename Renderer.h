@@ -148,6 +148,7 @@ struct RenderState
    GLuint fbo;
    GLuint mainColorTexture;
    GLuint blurTexture;
+   GLuint normalTexture;
    GLuint depthBuffer;
 
    GLuint fullScreenProgram;

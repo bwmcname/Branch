@@ -96,12 +96,21 @@ BBox BranchBBox(Curve &c, v3 beginPoint)
 {
    BBox result;
 
-   v3 endPoint = V3(c.p4.x, c.p4.y, 0.0f);
+   float radius = 0.5f;
+   if(c.p4.x > 0.0f)
+   {
+      radius = -radius;
+   }
+   
+   v3 endPoint = V3(beginPoint.x + c.p4.x - radius, beginPoint.y + c.p4.y, -radius);
+   beginPoint.x += radius;
+   beginPoint.z += radius;
    v3 midPoint = beginPoint + (0.5f * (endPoint - beginPoint));
    v3 magnitude = endPoint - midPoint;
 
    result.position = midPoint;
    result.magnitude = magnitude;
+   
 
    return result;
 }
@@ -111,10 +120,33 @@ BBox LinearBBox(v3 beginPoint)
 {
    BBox result;
 
+   float radius = 0.5f;
+
    v3 endPoint = V3(beginPoint.x, beginPoint.y + TRACK_SEGMENT_SIZE, 0.0f);
    v3 midPoint = beginPoint + (0.5f * (endPoint - beginPoint));
    v3 magnitude = endPoint - midPoint;
 
+   result.position = midPoint;
+   result.magnitude = magnitude;
+   result.magnitude.x += radius;
+   result.magnitude.z += radius;
+
+   return result;
+}
+
+static inline
+BBox BreakBBox(v3 beginPoint)
+{
+   BBox result;
+
+   float radius = 2.5f;
+   
+   v3 endPoint = V3(beginPoint.x, beginPoint.y + (0.5f * TRACK_SEGMENT_SIZE), 0.0f);
+   v3 midPoint = beginPoint + (0.5f * (endPoint - beginPoint));
+   v3 magnitude = endPoint - midPoint;
+
+   magnitude.x += radius;
+   magnitude.z += radius;
    result.position = midPoint;
    result.magnitude = magnitude;
 
@@ -124,11 +156,15 @@ BBox LinearBBox(v3 beginPoint)
 static
 bool BBoxFrustumTest(TrackFrustum &f, BBox &b)
 {
-   if(PointFrustumTest(b.position + b.magnitude, f)) return true;
-   if(PointFrustumTest(b.position - b.magnitude, f)) return true;
-   v3 diag = V3(b.magnitude.y, b.magnitude.x, 0.0f);
-   if(PointFrustumTest(b.position + diag, f)) return true;
-   if(PointFrustumTest(b.position + diag, f)) return true;
+   if(PointFrustumTest(V3(b.position.x + b.magnitude.x, b.position.y + b.magnitude.y, b.position.z + b.magnitude.z), f)) return true;
+   if(PointFrustumTest(V3(b.position.x - b.magnitude.x, b.position.y + b.magnitude.y, b.position.z + b.magnitude.z), f)) return true;
+   if(PointFrustumTest(V3(b.position.x - b.magnitude.x, b.position.y - b.magnitude.y, b.position.z + b.magnitude.z), f)) return true;
+   if(PointFrustumTest(V3(b.position.x + b.magnitude.x, b.position.y - b.magnitude.y, b.position.z + b.magnitude.z), f)) return true;
+   if(PointFrustumTest(V3(b.position.x + b.magnitude.x, b.position.y + b.magnitude.y, b.position.z - b.magnitude.z), f)) return true;
+   if(PointFrustumTest(V3(b.position.x - b.magnitude.x, b.position.y + b.magnitude.y, b.position.z - b.magnitude.z), f)) return true;
+   if(PointFrustumTest(V3(b.position.x - b.magnitude.x, b.position.y - b.magnitude.y, b.position.z - b.magnitude.z), f)) return true;
+   if(PointFrustumTest(V3(b.position.x + b.magnitude.x, b.position.y - b.magnitude.y, b.position.z - b.magnitude.z), f)) return true;
+   
    return false;
 }
 
@@ -429,7 +465,6 @@ RenderState InitRenderState(StackAllocator *stack)
    glBindTexture(GL_TEXTURE_2D, result.mainColorTexture);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   
    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
    glBindTexture(GL_TEXTURE_2D, 0);
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.mainColorTexture, 0);
@@ -443,9 +478,17 @@ RenderState InitRenderState(StackAllocator *stack)
    glBindTexture(GL_TEXTURE_2D, result.blurTexture);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);    
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, result.blurTexture, 0);
    glBindTexture(GL_TEXTURE_2D, 0);
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, result.blurTexture, 0);         
+
+   glGenTextures(1, &result.normalTexture);
+   glBindTexture(GL_TEXTURE_2D, result.normalTexture);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, result.normalTexture, 0);
+   glBindTexture(GL_TEXTURE_2D, 0);
    
    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
    //glBindFramebuffer(GL_FRAMEBUFFER, 0);   
@@ -566,14 +609,12 @@ void RenderBackground(GameState &state)
 void BeginFrame(GameState &state)
 {
    glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo);
-   GLuint  attachments[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};   
-   glDrawBuffers(2, attachments);
+   GLuint attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};   
+   glDrawBuffers(3, attachments);
 
    // @we really only need to clear the color of the secondary buffer, can we do this?
-   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-   glDisable(GL_DEPTH_TEST);
+   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);   
    RenderBackground(state);
-   glEnable(GL_DEPTH_TEST);
 }
 
 void RenderBlur(RenderState &renderer)
@@ -640,8 +681,6 @@ void RenderBlur(RenderState &renderer)
    glEnable(GL_FRAMEBUFFER_SRGB);
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glDisable(GL_FRAMEBUFFER_SRGB);
-
-   glUseProgram(0);
 }
 
 void RenderMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
@@ -995,6 +1034,64 @@ MeshObject InitMeshObject(char *filename, StackAllocator *allocator)
    return result;
 }
 
+#ifdef DEBUG
+void RenderBBoxes(GameState &state)
+{  
+   glLoadMatrixf((InfiniteProjection * state.camera.view).e);
+   glLineWidth(1.0f);
+
+   for(u32 i = 0; i < state.tracks.capacity; ++i)
+   {
+      BBox box;
+
+      if(state.tracks.adjList[i].flags & Attribute::branch)
+      {
+	 box = BranchBBox(GlobalBranchCurve, state.tracks.elements[i].renderable.worldPos);
+      }
+      else if(state.tracks.adjList[i].flags & Attribute::linear)
+      {
+	 box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
+      }
+      else if(state.tracks.adjList[i].flags & Attribute::breaks)
+      {
+	 box = BreakBBox(state.tracks.elements[i].renderable.worldPos);
+      }
+      else
+      {
+	 continue;
+      }
+      
+      glBegin(GL_LINE_LOOP);
+      glVertex3f(box.position.x + box.magnitude.x, box.position.y + box.magnitude.y, box.position.z + box.magnitude.z);
+      glVertex3f(box.position.x - box.magnitude.x, box.position.y + box.magnitude.y, box.position.z + box.magnitude.z);
+      glVertex3f(box.position.x - box.magnitude.x, box.position.y - box.magnitude.y, box.position.z + box.magnitude.z);
+      glVertex3f(box.position.x + box.magnitude.x, box.position.y - box.magnitude.y, box.position.z + box.magnitude.z);
+      glEnd();
+
+      glBegin(GL_LINE_LOOP);
+      glVertex3f(box.position.x + box.magnitude.x, box.position.y + box.magnitude.y, box.position.z - box.magnitude.z);
+      glVertex3f(box.position.x - box.magnitude.x, box.position.y + box.magnitude.y, box.position.z - box.magnitude.z);
+      glVertex3f(box.position.x - box.magnitude.x, box.position.y - box.magnitude.y, box.position.z - box.magnitude.z);
+      glVertex3f(box.position.x + box.magnitude.x, box.position.y - box.magnitude.y, box.position.z - box.magnitude.z);
+      glEnd();
+
+      glBegin(GL_LINES);
+      glVertex3f(box.position.x + box.magnitude.x, box.position.y + box.magnitude.y, box.position.z + box.magnitude.z);
+      glVertex3f(box.position.x + box.magnitude.x, box.position.y + box.magnitude.y, box.position.z - box.magnitude.z);
+
+      glVertex3f(box.position.x - box.magnitude.x, box.position.y + box.magnitude.y, box.position.z + box.magnitude.z);
+      glVertex3f(box.position.x - box.magnitude.x, box.position.y + box.magnitude.y, box.position.z - box.magnitude.z);
+
+      glVertex3f(box.position.x - box.magnitude.x, box.position.y - box.magnitude.y, box.position.z + box.magnitude.z);
+      glVertex3f(box.position.x - box.magnitude.x, box.position.y - box.magnitude.y, box.position.z - box.magnitude.z);
+      
+      glVertex3f(box.position.x + box.magnitude.x, box.position.y - box.magnitude.y, box.position.z + box.magnitude.z);
+      glVertex3f(box.position.x + box.magnitude.x, box.position.y - box.magnitude.y, box.position.z - box.magnitude.z);
+      glEnd();
+   }   
+}
+#endif
+
 void
 CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer)
 {
@@ -1020,8 +1117,8 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
 	 case BindProgram:
 	 {
-	    BindProgramCommand *programCommand = (BindProgramCommand *)current;
-	    glUseProgram(programCommand->program);
+	    // BindProgramCommand *programCommand = (BindProgramCommand *)current;
+	    // glUseProgram(programCommand->program);
 	 }break;
 
 	 case DrawString:
@@ -1041,7 +1138,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 #endif
       }
       current = current->next;
-   }
+   }   
 }
 
 i32 RenderTracks(GameState &state, StackAllocator *allocator)
@@ -1051,8 +1148,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 
    TrackFrustum frustum = CreateTrackFrustum(InfiniteProjection * state.camera.view);
 
-   // @temporary
-   state.renderer.commands.PushBindProgram(1, allocator);
+   state.renderer.commands.PushBindProgram(DefaultShader.programHandle, allocator);
    for(i32 i = 0; i < state.tracks.capacity; ++i)
    {	    
       if(!(state.tracks.adjList[i].flags & Attribute::invisible) &&
@@ -1073,25 +1169,30 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	    {
 	       state.renderer.commands.PushDrawLinear(state.tracks.elements[i].renderable, allocator);
 	    }	    
-	 }
-	 else if(PointFrustumTest(state.tracks.elements[i].renderable.worldPos, frustum))
-	 {	    
-	    if(state.tracks.adjList[i].flags & Attribute::breaks)
-	    {	       
-	       // RenderBreak(state.tracks.elements[i].renderable, state.camera.view, state.lightPos, V3(0.0f, 1.0f, 0.0f));
+	 }	    
+	 else if(state.tracks.adjList[i].flags & Attribute::breaks)
+	 {	       
+	    BBox box = BreakBBox(state.tracks.elements[i].renderable.worldPos);
+	    if(BBoxFrustumTest(frustum, box))
+	    {
 	       state.renderer.commands.PushDrawBreak(state.tracks.elements[i].renderable, allocator);
 	    }
-	    else
-	    {
-	       assert(false);
-	    }
-	    ++rendered;
+	 }
+	 else
+	 {
+	    assert(false);
 	 }	 
-      }
+      }	 
    }
 
-   state.renderer.commands.PushRenderBlur(allocator);   
-   
+   #ifdef DEBUG
+   GLuint bufs[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+   glDrawBuffers(1, bufs);
+   RenderBBoxes(state);
+   glDrawBuffers(2, bufs);
+   #endif
+
+   state.renderer.commands.PushRenderBlur(allocator);
    END_TIME();
    READ_TIME(state.TrackRenderTime);
 

@@ -1232,7 +1232,7 @@ void GameLoop(GameState &state)
 
 	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
 
-	 DistanceRenderText("Butts", 0, (sinf(position) * 0.6f) - 0.35f, 0.0f, 0.5f, state.tempFontData, state.fontProgram, state.fontTextureHandle);
+	 // DistanceRenderText("Butts", 0, (sinf(position) * 0.6f) - 0.35f, 0.0f, 0.5f, state.tempFontData, state.fontProgram, state.fontTextureHandle);
       }break;      
       
       case GameState::INITGAME:
@@ -1245,8 +1245,8 @@ void GameLoop(GameState &state)
       }
    }
 
-   state.renderer.commands.PushRenderBlur(((StackAllocator *)state.mainArena.base));
-   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer);
+   state.renderer.commands.PushRenderBlur(((StackAllocator *)state.mainArena.base));   
+   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer);   
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }
 

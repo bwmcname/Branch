@@ -1,3 +1,4 @@
+#include <share.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,36 @@
 #define VERTEX 1
 #define UV (1 << 1)
 #define NORMAL (1 << 2)
+
+FILE *OpenForRead(char *file)
+{
+   FILE *result = _fsopen(file, "rb", _SH_DENYWR);
+
+   if(result)
+   {
+      return result;
+   }
+   else
+   {
+      printf("unable to open: %s\n", file);
+      exit(0);
+   }
+}
+
+FILE *OpenForWrite(char *file)
+{
+   FILE *result = _fsopen(file, "wb", _SH_DENYRW);
+
+   if(result)
+   {
+      return result;
+   }
+   else
+   {
+      printf("unable to open: %s\n", file);
+      exit(0);
+   }
+}
 
 struct index
 {
@@ -320,7 +351,7 @@ MeshBuilder ParseObj(char *obj, size_t size)
 
 void Model(char *filename)
 {
-   FILE *file = fopen("filename", "rb");
+   FILE *file = OpenForRead("filename");
 
    if(!file)
    {
@@ -345,7 +376,7 @@ void Model(char *filename)
       begin[i] = b.vertices[b.indices[i].e[0]];
    }
 
-   file = fopen("assets/sphere.brian", "wb");
+   file = OpenForWrite("assets/sphere.brian");
    fwrite(writebuffer, writeSize, 1, file);
    fclose(file);
 
@@ -406,7 +437,7 @@ char *ProcessShader(char *buffer, long fileSize, long *outSize)
 	       fileName[fileNameSize] = '\0';
 	       memcpy(fileName, begin, fileNameSize);
 
-	       FILE *file = fopen(fileName, "rb");
+	       FILE *file = OpenForRead(fileName);
 	       
 	       if(!file)
 	       {
@@ -450,7 +481,7 @@ char *ProcessShader(char *buffer, long fileSize, long *outSize)
 
 void Shader(char *filename)
 {
-   FILE *file = fopen(filename, "rb");
+   FILE *file = OpenForRead(filename);
 
    if(!file)
    {
@@ -471,7 +502,7 @@ void Shader(char *filename)
    {
       char path[64];
       sprintf(path, "assets/%sp", filename);
-      file = fopen(path, "wb");
+      file = OpenForWrite(path);
       fwrite(outBuffer, outSize, 1, file);
       fclose(file);
       free(outBuffer);
@@ -487,7 +518,7 @@ void Shader(char *filename)
 
 int Font(char *imgFileName, char *dataFileName)
 {
-   FILE *dataFile = fopen(dataFileName, "rb");
+   FILE *dataFile = OpenForRead(dataFileName);
    if(dataFileName)
    {
 
@@ -518,7 +549,7 @@ int Font(char *imgFileName, char *dataFileName)
       header->mapWidth = resultImage.x;
       header->mapHeight = resultImage.y;
 
-      FILE *fontFile = fopen("font_data.bf", "wb");
+      FILE *fontFile = OpenForWrite("font_data.bf");
       fwrite(header, fontDataSize, 1, fontFile);
       fclose(fontFile);
       free(header);      
@@ -535,7 +566,7 @@ int Font(char *imgFileName, char *dataFileName)
       *((ImageHeader *)outImage) = resultImage;
       memcpy((u8 *)outImage + sizeof(ImageHeader), image, resultImage.x * resultImage.y * resultImage.channels);
 
-      FILE *imageFile = fopen("distance_field.bi", "wb");
+      FILE *imageFile = OpenForWrite("distance_field.bi");
       fwrite(outImage, fileSize, 1, imageFile);
       fclose(imageFile);
       free(outImage);
@@ -551,7 +582,7 @@ int Font(char *imgFileName, char *dataFileName)
 
 int BFont(char *filename, int point, int width, int height)
 {
-   FILE *dataFile = fopen(filename, "rb");
+   FILE *dataFile = OpenForRead(filename);
 
    if(!dataFile)
    {
@@ -608,11 +639,11 @@ int BFont(char *filename, int point, int width, int height)
    memcpy(resultImage + 1, pixels, width * height);
    free(pixels);
 
-   FILE *output = fopen("bitmap_font.bi", "wb");
+   FILE *output = OpenForWrite("bitmap_font.bi");
    fwrite(resultImage, imageSize, 1, output);
    fclose(output);   
 
-   output = fopen("bitmap_font_data.bf", "wb");
+   output = OpenForWrite("bitmap_font_data.bf");
    fwrite(fontDataHeader, fontDataSize, 1, output);
    fclose(output);
    fclose(dataFile);
