@@ -4,7 +4,6 @@
 #define SCREEN_RIGHT 1.0f
 #define SCREEN_LEFT -1.0f
 
-#define LEVEL_LENGTH 0.5f
 static i32 GlobalActionPressed = 0;
 
 static
@@ -32,7 +31,9 @@ void InitCamera(Camera &camera)
 {
    camera.position = V3(0.0f, 0.0f, 10.0f);
    camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.0f);
-   camera.view = CameraMatrix(camera);   
+   camera.view = CameraMatrix(camera);
+   camera.t = 0.0f;
+   camera.lerping = false;
 };
 
 static inline
@@ -309,6 +310,18 @@ NewTrackGraph::GetVirtualID(u16 actual)
    return reverseIDtable[actual];
 }
 
+inline u16
+NewTrackGraph::HasLinearAncestor(u16 actual)
+{
+   for(u16 i = 0; i < adjList[actual].ancestorCount; ++i)
+   {
+      u16 ancestorActual = GetActualID(adjList[actual].ancestors[i]);
+      if(adjList[ancestorActual].flags & Attribute::linear) return true;
+   }
+
+   return false;
+}
+
 inline void
 NewTrackGraph::Move(u16 src, u16 dst)
 {
@@ -393,6 +406,7 @@ NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
 
    g.availableIDs = InitCircularQueue<u16>(1024, allocator); //@ could be smaller?
    g.orders = InitCircularQueue<NewTrackOrder>(1024, allocator); //@ could be smaller
+   g.newBranches = InitCircularQueue<u16>(256, allocator);
    g.taken = InitVirtualCoordHashTable(1024, allocator);
    g.IDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
    g.reverseIDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
@@ -487,8 +501,13 @@ void FillGraph(NewTrackGraph &graph)
 	    graph.elements[breakActual] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
 						      &GlobalBreakCurve);
 	    flags |= Attribute::breaks;
+	    graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
 	 }
-	 else if(roll % 5 == 0 && !(item.flags & NewTrackOrder::dontBranch))
+	 else if(roll % 5 == 0 && !(item.flags & NewTrackOrder::dontBranch) &&
+		 !graph.taken.get({item.x+1, item.y+1}).hasBranch() &&
+		 !graph.taken.get({item.x-1, item.y+1}).hasBranch() &&
+		 !graph.taken.get({item.x+1, item.y-1}).hasBranch() &&
+		 !graph.taken.get({item.x-1, item.y-1}).hasBranch())
 	 {
 	    u16 branchActual = graph.GetActualID(edgeID);
 	    graph.elements[branchActual] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
@@ -498,19 +517,21 @@ void FillGraph(NewTrackGraph &graph)
 	    flags |= Attribute::branch;
 	    
 	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBranch, item.x - 1, item.y + 1});
-
 	    graph.orders.Push({edgeID, NewTrackOrder::right | NewTrackOrder::dontBranch, item.x + 1, item.y + 1});
-	 }	 
-	 else
+
+	    graph.taken.put({item.x, item.y}, LocationInfo::track | LocationInfo::branch, edgeID);
+	    graph.newBranches.Push(edgeID);
+	 }
+	 else // push linear track (and speedups)
 	 {
 	    graph.elements[graph.GetActualID(edgeID)] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
-								&GlobalLinearCurve);
+								    &GlobalLinearCurve);
 
 	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});
 	    flags |= Attribute::linear;
-	 }
-
-	 graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
+	    graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
+	 
+	 }	 
       }
 
       u16 ancestorID = item.ancestorID;
@@ -536,7 +557,53 @@ void FillGraph(NewTrackGraph &graph)
       graph.adjList[actualEdge].flags &= ~Attribute::unused;
       DEBUG_DO(graph.VerifyGraph());
       DEBUG_DO(graph.VerifyIDTables());
-   }   
+   }
+
+   // check all new branches, if any of them have linear tracks on both sides, make one side speedups.
+   i32 end = graph.newBranches.end;
+   for(i32 i = graph.newBranches.begin; i != end; i = graph.newBranches.IncrementIndex(i))
+   {
+      u16 virt = graph.newBranches.Pop();
+      u16 actual = graph.GetActualID(virt);
+
+      if(graph.adjList[actual].hasLeft() && graph.adjList[actual].hasRight())
+      {
+	 u16 leftActual = graph.GetActualID(graph.adjList[actual].leftEdge());
+	 u16 rightActual = graph.GetActualID(graph.adjList[actual].rightEdge());
+
+	 if(graph.adjList[leftActual].flags & Attribute::linear &&
+	    graph.adjList[rightActual].flags & Attribute::linear)
+	 {
+	    i32 side = rand() & 1;
+	    u16 speedupActual;
+
+	    if(side == 0)
+	    {
+	       speedupActual = leftActual;
+	    }
+	    else
+	    {
+	       speedupActual = rightActual;
+	    }	    
+	    
+	    do
+	    {
+	       if(graph.adjList[speedupActual].ancestorCount > 1) break;
+
+	       // change the track from a linear track to a speeduptrack
+	       graph.adjList[speedupActual].flags &= ~Attribute::linear;
+	       graph.adjList[speedupActual].flags |= Attribute::speedup;
+	       side = 0; // make side to left since all linear tracks only have a left child
+	       speedupActual = graph.GetActualID(graph.adjList[speedupActual].edges[0]);
+	    } while(graph.adjList[speedupActual].flags & Attribute::linear);
+	 }	 
+      }
+      else
+      {
+	 // children of branch haven't been generated yet, take care of later
+	 graph.newBranches.Push(virt);
+      }      
+   }
 }
 
 void NewSetReachable(NewTrackGraph &graph, StackAllocator &allocator, u16 start)
@@ -787,21 +854,42 @@ v3 GetPositionOnTrack(Track &track, float t)
 
 void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 {
-   Track *currentTrack = &tracks.elements[tracks.GetActualID(player.trackIndex)];
+   // current track physical ID
+   u16 actualID = tracks.GetActualID(player.trackIndex);
+   Track *currentTrack = &tracks.elements[actualID];
+   
+   player.t += player.velocity * delta;
 
-   player.t += 0.15f * delta;
+   // don't drag if on speedup
+   if(!(tracks.adjList[actualID].flags & Attribute::speedup))
+   {
+      player.velocity = max(player.velocity - (0.00005f * delta), 0.15f); // drag
+   }
+
+   // if the player has just left the current track
    if(player.t > 1.0f)
    {
       player.t -= 1.0f;      
 
-      if((tracks.flags & NewTrackGraph::left) || (currentTrack->flags & Track::branch) == 0)
+      if((tracks.flags & NewTrackGraph::left) || (currentTrack->flags & Track::branch) == 0 ||
+	 player.forceDirection & Player::Force_Left)
       {
 	 u16 trackActual = tracks.GetActualID(player.trackIndex);
 	 if(tracks.adjList[trackActual].hasLeft())
 	 {
 	    u16 newIndex = tracks.adjList[trackActual].leftEdge();
-	    currentTrack = &tracks.elements[tracks.GetActualID(newIndex)];
+	    actualID = tracks.GetActualID(newIndex);
+	    currentTrack = &tracks.elements[actualID];
 	    player.trackIndex = newIndex;
+
+	    if(tracks.adjList[actualID].flags & Attribute::speedup)
+	    {
+	       player.velocity = min(player.velocity + 0.01f, 0.25f);
+	    }
+	    else if(tracks.adjList[actualID].flags & Attribute::branch)
+	    {
+	       state.camera.BeginTrackSwitchEase();
+	    }
 	 }
 	 else
 	 {
@@ -815,8 +903,18 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	 if(tracks.adjList[trackActual].hasRight())
 	 {
 	    u16 newIndex = tracks.adjList[tracks.GetActualID(player.trackIndex)].rightEdge();
-	    currentTrack = &tracks.elements[tracks.GetActualID(newIndex)];
-	    player.trackIndex = newIndex;
+	    actualID = tracks.GetActualID(newIndex);
+	    currentTrack = &tracks.elements[actualID];
+	    player.trackIndex = newIndex;	    
+
+	    if(tracks.adjList[actualID].flags & Attribute::speedup)
+	    {
+	       player.velocity = min(player.velocity + 0.01f, 0.25f);
+	    }
+	    else if(tracks.adjList[actualID].flags & Attribute::branch)
+	    {
+	       state.camera.BeginTrackSwitchEase();
+	    }
 	 }
 	 else
 	 {
@@ -824,17 +922,40 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	    state.state = GameState::RESET;
 	 }
       }
+
+      player.forceDirection = 0;
    }   
 
    player.renderable.worldPos = GetPositionOnTrack(*currentTrack, player.t);   
 }
 
-void UpdateCamera(Camera &camera, const Player &player)
+inline void
+Camera::BeginTrackSwitchEase()
+{
+   lerping = true;
+   t = 0.0f;
+}
+
+void UpdateCamera(Camera &camera, Player &player, NewTrackGraph &graph)
 {
    v3 playerPosition = player.renderable.worldPos;
-   camera.position.y = playerPosition.y - 5.0f;
-   camera.position.x = playerPosition.x;
 
+   if(camera.lerping)
+   {
+      camera.t = min(camera.t + (delta * 0.02f), 1.0f);
+      camera.position.x = lerp(camera.position.x, player.renderable.worldPos.x, camera.t);
+
+      if(camera.t >= 1.0f)
+      {
+	 camera.lerping = false;
+      }
+   }
+   else
+   {      
+      camera.position.x = playerPosition.x;
+   }
+
+   camera.position.y = playerPosition.y - 10.0f;
    camera.view = CameraMatrix(camera);
 }
 
@@ -1034,6 +1155,24 @@ stbFont InitFont_stb(char *fontFile, u32 width, u32 height, StackAllocator *allo
    return result;
 }
 
+inline
+Player InitPlayer()
+{
+   Player result;
+   result.renderable = SpherePrimitive(V3(0.0f, -2.0f, 5.0f),
+				       V3(1.0f, 1.0f, 1.0f),
+				       Quat(1.0f, 0.0f, 0.0f, 0.0f));
+
+   result.mesh = Sphere;   
+   result.velocity = 0.15f;
+   result.t = 0.0f;   
+   result.trackIndex = 0;
+
+   result.forceDirection = 0;
+
+   return result;
+}
+
 void GameInit(GameState &state)
 {
    state.mainArena.base = AllocateSystemMemory(GIGABYTES(2), &state.mainArena.size);
@@ -1112,15 +1251,8 @@ void GameInit(GameState &state)
    InitTextBuffers();
    
    state.lightPos = state.camera.position;
-   
-   state.sphereGuy.renderable = SpherePrimitive(V3(0.0f, -2.0f, 5.0f),
-						V3(1.0f, 1.0f, 1.0f),
-						Quat(1.0f, 0.0f, 0.0f, 0.0f));
 
-   state.sphereGuy.mesh = Sphere;   
-
-   state.sphereGuy.t = 0.0f;   
-   state.sphereGuy.trackIndex = 0;
+   state.sphereGuy = InitPlayer();
 
    FillGraph(state.tracks);
 }
@@ -1167,6 +1299,7 @@ void GameLoop(GameState &state)
 	 if(state.tracks.flags & NewTrackGraph::switching)
 	 {
 	    state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
+
 	    GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, state.tracks.switchDelta);
 	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
 
@@ -1178,8 +1311,8 @@ void GameLoop(GameState &state)
 
 	 NewUpdateTrackGraph(state.tracks, *((StackAllocator *)state.mainArena.base), state.sphereGuy, state.camera);
 	 UpdatePlayer(state.sphereGuy, state.tracks, state);
-	 UpdateCamera(state.camera, state.sphereGuy);	 
-	 state.lightPos = state.camera.position;
+	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);	 
+	 state.lightPos = state.sphereGuy.renderable.worldPos;
    
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
 
@@ -1204,6 +1337,11 @@ void GameLoop(GameState &state)
 	 state.renderer.commands.PushRenderText(renderTimeSting, (u32)renderTimeCount, V2(-0.8f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
 
 	 state.renderer.commands.PushRenderText("welp", 4, V2(-0.8f, 0.70f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
+
+	 if(state.camera.lerping)
+	 {
+	    state.renderer.commands.PushRenderText("Lerping", 7, V2(-0.8f, 0.65f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
+	 }
 #endif	 
       }break;
 
@@ -1244,8 +1382,7 @@ void GameLoop(GameState &state)
 	 assert(!"invalid state");
       }
    }
-
-   state.renderer.commands.PushRenderBlur(((StackAllocator *)state.mainArena.base));   
+   
    state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer);   
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }
@@ -1256,24 +1393,40 @@ void OnKeyDown(GameState &state)
 
    if(state.state == GameState::LOOP)
    {
-      state.tracks.flags ^= NewTrackGraph::left;
-
-      // if already lerping
-      if(state.tracks.flags & NewTrackGraph::switching)
+      if(state.sphereGuy.OnSwitch(state.tracks) && state.sphereGuy.t > 0.5f)
       {
-	 state.tracks.beginLerp = state.tracks.endLerp;
-	 state.tracks.endLerp = InvertX(state.tracks.beginLerp);
-	 state.tracks.switchDelta = 1.0f - state.tracks.switchDelta;
+	 if(state.tracks.flags & NewTrackGraph::left)
+	 {
+	    state.sphereGuy.forceDirection = Player::Force_Left;
+	 }
+	 else
+	 {
+	    state.sphereGuy.forceDirection = Player::Force_Right;
+	 }
       }
-      else
-      {
-	 state.tracks.flags |= NewTrackGraph::switching;
 
-	 state.tracks.beginLerp = GlobalBranchCurve;
-	 state.tracks.endLerp = InvertX(GlobalBranchCurve);
-	 state.tracks.switchDelta = 0.0f;
+      {
+	 // toggle direction
+	 state.tracks.flags ^= NewTrackGraph::left;
+
+	 // if already lerping
+	 if(state.tracks.flags & NewTrackGraph::switching)
+	 {
+	    state.tracks.beginLerp = state.tracks.endLerp;
+	    state.tracks.endLerp = InvertX(state.tracks.beginLerp);
+	    state.tracks.switchDelta = 1.0f - state.tracks.switchDelta;	 
+	 }
+	 else
+	 {
+	    state.tracks.flags |= NewTrackGraph::switching;
+
+	    state.tracks.beginLerp = GlobalBranchCurve;
+	    state.tracks.endLerp = InvertX(GlobalBranchCurve);
+	    state.tracks.switchDelta = 0.0f;
+	 }
       }
-   }
+      
+   }   
 }
 
 void OnKeyUp(GameState &state)
@@ -1400,7 +1553,8 @@ NewTrackGraph::VerifyGraph()
 	    assert(good);
 	    */
 	 }
-	 else if(adjList[i].flags & Attribute::linear)
+	 else if(adjList[i].flags & Attribute::linear ||
+		 adjList[i].flags & Attribute::speedup)
 	 {
 	    if(!adjList[i].hasLeft() && (adjList[i].flags & Attribute::reachable))
 	    {

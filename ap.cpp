@@ -353,12 +353,6 @@ void Model(char *filename)
 {
    FILE *file = OpenForRead("filename");
 
-   if(!file)
-   {
-      printf("Remember to close win32.exe and stop visual studio before processing\n");
-      return;
-   }
-
    long fileSize = FileSize(file);
    char *buffer = (char *)malloc(fileSize);
    fread(buffer, fileSize, 1, file);

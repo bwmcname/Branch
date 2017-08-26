@@ -1,6 +1,6 @@
 
 static m4 Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
-static m4 InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 60.0f);
+static m4 InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
 
 static ShaderProgram BreakBlockProgram;
 
@@ -213,6 +213,19 @@ CommandState::PushDrawLinear(Object obj, StackAllocator *allocator)
    last->next = (CommandBase *)allocator->push(sizeof(DrawLinearCommand));
    DrawLinearCommand *command = (DrawLinearCommand *)last->next;
    command->command = DrawLinear;
+   command->obj = obj;
+   last = command;
+   ++count;
+}
+
+void CommandState::PushDrawSpeedup(Object obj, StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawSpeedupCommand));
+   DrawSpeedupCommand *command = (DrawSpeedupCommand *)last->next;
+   command->command = DrawSpeedup;
    command->obj = obj;
    last = command;
    ++count;
@@ -570,7 +583,7 @@ v3 *Normals(float *vertices, v3 *result, i32 count)
       result[(i * 3)] = normal;
       result[(i * 3) + 1] = normal;
       result[(i * 3) + 2] = normal;
-   }
+   }   
 
    return result;
 }
@@ -727,6 +740,12 @@ static
 void RenderLinear(DrawLinearCommand *command, Camera &camera, v3 lightPos)
 {
    RenderObject(command->obj, LinearTrack, DefaultShader, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
+}
+
+static
+void RenderSpeedup(DrawSpeedupCommand *command, Camera &camera, v3 lightPos)
+{
+   RenderObject(command->obj, LinearTrack, DefaultShader, camera.view, lightPos, V3(3.0f, 0.0f, 0.0f));
 }
 
 static
@@ -1048,7 +1067,8 @@ void RenderBBoxes(GameState &state)
       {
 	 box = BranchBBox(GlobalBranchCurve, state.tracks.elements[i].renderable.worldPos);
       }
-      else if(state.tracks.adjList[i].flags & Attribute::linear)
+      else if(state.tracks.adjList[i].flags & Attribute::linear ||
+	      state.tracks.adjList[i].flags & Attribute::speedup)
       {
 	 box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
       }
@@ -1108,6 +1128,11 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 case DrawBranch:
 	 {
 	    RenderBranch((DrawBranchCommand *)current, camera, lightPos);
+	 }break;
+
+	 case DrawSpeedup:
+	 {
+	    RenderSpeedup((DrawSpeedupCommand *)current, camera, lightPos);
 	 }break;
 
 	 case DrawBreak:
@@ -1178,6 +1203,14 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	       state.renderer.commands.PushDrawBreak(state.tracks.elements[i].renderable, allocator);
 	    }
 	 }
+	 else if(state.tracks.adjList[i].flags & Attribute::speedup)
+	 {
+	    BBox box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
+	    if(BBoxFrustumTest(frustum, box))
+	    {
+	       state.renderer.commands.PushDrawSpeedup(state.tracks.elements[i].renderable, allocator);
+	    }
+	 }
 	 else
 	 {
 	    assert(false);
@@ -1185,11 +1218,11 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
       }	 
    }
 
-   #ifdef DEBUG
-   GLuint bufs[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+   #if 0
+   GLuint bufs[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
    glDrawBuffers(1, bufs);
    RenderBBoxes(state);
-   glDrawBuffers(2, bufs);
+   glDrawBuffers(3, bufs);
    #endif
 
    state.renderer.commands.PushRenderBlur(allocator);

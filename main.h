@@ -1,6 +1,19 @@
 #define TRACK_SEGMENT_SIZE 12.0f
 static float delta;
 
+struct Camera
+{
+   quat orientation;
+   v3 position;
+
+   u32 lerping;
+   float t;
+
+   m4 view;
+
+   inline void BeginTrackSwitchEase();
+};
+
 struct ShaderProgram
 {
    GLuint programHandle;
@@ -123,6 +136,7 @@ struct Attribute
       breaks = 0x20,
       branch = 0x40,
       linear = 0x80,
+      speedup = 0x100
    };
 
    u16 id;
@@ -172,6 +186,7 @@ struct NewTrackOrder
       sideMask = 0x3,
       dontBranch = 0x4,
       dontBreak = 0x8,
+      speedup = 0x10
    };
 
    u16 ancestorID;
@@ -198,6 +213,7 @@ struct NewTrackGraph
    Attribute *adjList;
    Track *elements;
    CircularQueue<u16> availableIDs;
+   CircularQueue<u16> newBranches;
    CircularQueue<NewTrackOrder> orders;
    VirtualCoordHashTable taken;
 
@@ -216,6 +232,7 @@ struct NewTrackGraph
    inline void SetID(u16 virt, u16 actual);
    inline u16 GetActualID(u16 virt);
    inline u16 GetVirtualID(u16 actual);
+   inline u16 HasLinearAncestor(u16 actual);
 
 #ifdef DEBUG
    void VerifyGraph();
@@ -225,11 +242,27 @@ struct NewTrackGraph
 
 struct Player
 {
+   enum
+   {
+      Force_Left = 0x1,
+      Force_Right = 0x2,
+   };
+
    Object renderable;
    u16 trackIndex;
    float t;
+   float velocity;
    MeshObject mesh;
+   u8 forceDirection;
+
+   inline bool OnSwitch(NewTrackGraph &tracks);
 };
+
+inline bool
+Player::OnSwitch(NewTrackGraph &tracks)
+{
+   return tracks.adjList[tracks.GetActualID(trackIndex)].flags & Attribute::branch;
+}
 
 struct GameState
 {

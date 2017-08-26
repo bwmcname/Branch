@@ -810,6 +810,12 @@ v4 lerp(v4 a, v4 b, float t)
 }
 
 static inline
+v3 lerp(v3 a, v3 b, float t)
+{
+   return (1.0f - t) * a + (t * b);
+}
+
+static inline
 float lerp(float a, float b, float t)
 {
    return (1.0f - t) * a + (t * b);

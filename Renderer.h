@@ -1,22 +1,7 @@
 
-struct Camera
-{
-   enum
-   {
-      lerping,
-   };
-
-   quat orientation;
-   v3 position;
-
-   u32 flags;
-   float t;
-
-   m4 view;
-};
-
 struct Mesh
 {
+   v3i faces;
    float *vertices;
    i32 vcount;
 
@@ -54,6 +39,7 @@ enum RenderCommand
    DrawMesh,
    DrawBreakTexture,
    DrawLinear,
+   DrawSpeedup,
    DrawBranch,
    DrawBreak,
    DrawString, //DrawText is taken :(
@@ -92,6 +78,11 @@ struct DrawLinearCommand : public CommandBase
    Object obj;
 };
 
+struct DrawSpeedupCommand : public CommandBase
+{
+   Object obj;
+};
+
 struct DrawBranchCommand : public CommandBase
 {
    Object obj;
@@ -123,6 +114,7 @@ Draw Bright break thing
  */
 
 struct RenderState;
+struct Camera;
 
 struct CommandState
 {
@@ -135,6 +127,7 @@ struct CommandState
    void PushDrawMesh(MeshObject mesh, v3 position, v3 scale, quat orientation, StackAllocator *allocator);
    void PushDrawBreakTexture(v3 position, v3 scale, quat orientation, StackAllocator *allocator);
    void PushDrawLinear(Object obj, StackAllocator *allocator);
+   void PushDrawSpeedup(Object obj, StackAllocator *allocator);
    void PushDrawBranch(Object obj, StackAllocator *allocator);
    void PushDrawBreak(Object obj, StackAllocator *allocator);
    void PushRenderBlur(StackAllocator *allocator);

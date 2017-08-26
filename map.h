@@ -3,6 +3,7 @@ struct LocationInfo
    enum
    {
       track = 0x1,
+      branch = 0x2,
    };
    u8 flags;
    u16 ID;
@@ -10,6 +11,11 @@ struct LocationInfo
    inline u8 hasTrack()
    {
       return flags & track;
+   }
+
+   inline u8 hasBranch()
+   {
+      return flags & branch;
    }
 };
 
