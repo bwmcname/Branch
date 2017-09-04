@@ -1,8 +1,9 @@
 
 #define ErrorDialogue(str) MessageBoxEx(0, (LPCTSTR)(str), 0, MB_ICONEXCLAMATION, 0)
 
+// only read right now
 static
-size_t WinFileSize(char *filename)
+HANDLE Win32FileOpen(char *filename)
 {
    HANDLE FileHandle = CreateFile(filename,
 				  GENERIC_READ,
@@ -11,6 +12,14 @@ size_t WinFileSize(char *filename)
 				  OPEN_EXISTING,
 				  FILE_ATTRIBUTE_NORMAL,
 				  0);
+
+   return FileHandle;
+}
+
+static
+size_t WinFileSize(char *filename)
+{
+   HANDLE FileHandle = Win32FileOpen(filename);
 
    if(FileHandle)
    {
@@ -27,19 +36,13 @@ size_t WinFileSize(char *filename)
 }
 
 static
-b32 WinReadFile(char *filename, u8 *buffer, size_t fileSize)
+b32 WinReadFileHandle(HANDLE FileHandle, u8 *buffer, size_t fileSize, size_t offset)
 {
-   HANDLE FileHandle = CreateFile(filename,
-				  GENERIC_READ,
-				  FILE_SHARE_READ,
-				  0,
-				  OPEN_EXISTING,
-				  FILE_ATTRIBUTE_NORMAL,
-				  0);
-
-
    if(FileHandle)
    {
+      LARGE_INTEGER lOffset;
+      lOffset.QuadPart = offset;
+      SetFilePointerEx(FileHandle, lOffset, 0, FILE_BEGIN);
       b32 result = ReadFile(FileHandle,
 			    buffer,
 			    (DWORD)fileSize,
@@ -52,6 +55,20 @@ b32 WinReadFile(char *filename, u8 *buffer, size_t fileSize)
    {
       return false;
    }   
+}
+
+static
+b32 WinReadFile(char *filename, u8 *buffer, size_t fileSize, size_t offset)
+{
+   HANDLE FileHandle = CreateFile(filename,
+				  GENERIC_READ,
+				  FILE_SHARE_READ,
+				  0,
+				  OPEN_EXISTING,
+				  FILE_ATTRIBUTE_NORMAL,
+				  0);
+
+   return WinReadFileHandle(FileHandle, buffer, fileSize, offset);
 }
 
 static
@@ -327,6 +344,7 @@ int CALLBACK WinMain(HINSTANCE Instance,
    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
    
    GameState state;
+   state.input = {};
    GameInit(state);
    
    MSG Message = {};
@@ -340,6 +358,13 @@ int CALLBACK WinMain(HINSTANCE Instance,
    while(running)
    {
       QueryPerformanceCounter(&Begin);
+
+      if(state.input.flags & Win32_Input_State::clickDown)
+      {
+	 state.input.flags &= ~Win32_Input_State::clickDown;
+	 state.input.flags |= Win32_Input_State::clickHold;
+      }
+
       while(PeekMessage(&Message, WindowHandle, 0, 0, PM_REMOVE))
       {
 	 switch(Message.message)
@@ -367,7 +392,10 @@ int CALLBACK WinMain(HINSTANCE Instance,
 	       {
 		  case VK_SPACE:
 		  {
-		     OnKeyDown(state);
+		     if(!(state.input.flags & Win32_Input_State::clickHold))
+		     {
+			state.input.flags |= Win32_Input_State::clickDown;
+		     }		     
 		  }break;
 	       }
 	    }break;
@@ -378,12 +406,15 @@ int CALLBACK WinMain(HINSTANCE Instance,
 	       {
 		  case VK_SPACE:
 		  {
-		     OnKeyUp(state);
+		     assert(state.input.flags & (Win32_Input_State::clickDown | Win32_Input_State::clickHold));
+		     state.input.flags &= ~(Win32_Input_State::clickDown | Win32_Input_State::clickHold);
+		     state.input.flags |= Win32_Input_State::clickUp;
+		     
 		  }break;
 	       }
 	    }break;
 	 }
-      }
+      }           
 
       GameLoop(state);
       SwapBuffers(hdc);

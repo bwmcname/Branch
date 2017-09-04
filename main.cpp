@@ -80,7 +80,7 @@ v2 CubicBezier(v2 p1, v2 p2, v2 p3, v2 p4, float t)
    // uses the quicker non matrix form of the equation
    v2 result;   
 
-   float degree1 = 1 - t;   
+   float degree1 = 1.0f - t;   
    float degree2 = degree1 * degree1; // (1 - t)^2
    float degree3 = degree2 * degree1; // (1 - t)^3
    float squared = t * t;   
@@ -495,7 +495,8 @@ void FillGraph(NewTrackGraph &graph)
 	 if(roll % 2 == 0 &&
 	    !(item.flags & NewTrackOrder::dontBreak) &&
 	    !graph.taken.get({item.x, item.y-1}).hasTrack() &&
-	    !OtherSideOfBranchHasBreak(graph, item.ancestorID, item.flags))
+	    !OtherSideOfBranchHasBreak(graph, item.ancestorID, item.flags) &&
+	    graph.adjList[graph.GetActualID(edgeID)].ancestorCount == 0)
 	 {
 	    u16 breakActual = graph.GetActualID(edgeID);
 	    graph.elements[breakActual] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
@@ -522,7 +523,16 @@ void FillGraph(NewTrackGraph &graph)
 	    graph.taken.put({item.x, item.y}, LocationInfo::track | LocationInfo::branch, edgeID);
 	    graph.newBranches.Push(edgeID);
 	 }
-	 else // push linear track (and speedups)
+	 // if(item.flags & NewTrackOrder::speedup)
+	 // {
+	 //    graph.elements[graph.GetActualID(edgeID)] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
+	 // 							    &GlobalLinearCurve);
+
+	 //    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});
+	 //    flags |= Attribute::speedup;
+	 //    graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
+	 // }
+ 	 else // push linear track (and speedups)
 	 {
 	    graph.elements[graph.GetActualID(edgeID)] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
 								    &GlobalLinearCurve);
@@ -530,7 +540,6 @@ void FillGraph(NewTrackGraph &graph)
 	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});
 	    flags |= Attribute::linear;
 	    graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
-	 
 	 }	 
       }
 
@@ -560,8 +569,9 @@ void FillGraph(NewTrackGraph &graph)
    }
 
    // check all new branches, if any of them have linear tracks on both sides, make one side speedups.
-   i32 end = graph.newBranches.end;
-   for(i32 i = graph.newBranches.begin; i != end; i = graph.newBranches.IncrementIndex(i))
+   // only do 1/2, so that tracks can form around the latest pushed branches
+   i32 length = graph.newBranches.size >> 1;
+   for(i32 i = 0; i < length; ++i)
    {
       u16 virt = graph.newBranches.Pop();
       u16 actual = graph.GetActualID(virt);
@@ -1173,6 +1183,32 @@ Player InitPlayer()
    return result;
 }
 
+static inline
+Branch_Image_Header *LoadImageFromAsset(Asset &asset)
+{
+   return (Branch_Image_Header *)asset.mem;
+}
+
+Branch_Image_Header *LoadImageFromFileName(char *name, StackAllocator *allocator)
+{
+   size_t fileSize = FileSize(name);
+   Branch_Image_Header *buffer = (Branch_Image_Header *)allocator->push(fileSize);
+   WinReadFile(name, (u8 *)buffer, fileSize);
+   return buffer;
+}
+
+GLuint LoadImageIntoTexture(Branch_Image_Header *header)
+{
+   GLuint result;
+   glGenTextures(1, &result);
+   glBindTexture(GL_TEXTURE_2D, result);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, header->width, header->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (void *)(header + 1));
+   glBindTexture(GL_TEXTURE_2D, 0);
+   return result;
+}
+
 void GameInit(GameState &state)
 {
    state.mainArena.base = AllocateSystemMemory(GIGABYTES(2), &state.mainArena.size);
@@ -1180,7 +1216,8 @@ void GameInit(GameState &state)
    InitStackAllocator((StackAllocator *)state.mainArena.base);
    StackAllocator *stack = (StackAllocator *)state.mainArena.base;
 
-   state.renderer = InitRenderState(stack);   
+   state.assetManager.Init(stack);
+   state.renderer = InitRenderState(stack, state.assetManager);   
 
    state.state = GameState::START;
 
@@ -1198,26 +1235,29 @@ void GameInit(GameState &state)
 
    InitCamera(state.camera);   
 
-   DefaultShader = LoadFilesAndCreateProgram("assets\\default.vertp", "assets\\default.fragp",
-					     stack);
-   state.fontProgram = LoadFilesAndCreateTextProgram("assets\\text.vertp", "assets\\text.fragp",
-						     stack);
-   state.bitmapFontProgram = LoadFilesAndCreateTextProgram("assets\\bitmap_font.vertp", "assets\\bitmap_font.fragp",
-							   stack);
-   BreakBlockProgram = LoadFilesAndCreateProgram("assets\\BreakerBlock.vertp", "assets\\BreakerBlock.fragp",
-						   stack);
+   Asset &defaultVirt = state.assetManager.LoadStacked(AssetHeader::default_vert_ID);
+   Asset &defaultFrag = state.assetManager.LoadStacked(AssetHeader::default_frag_ID);
+   DefaultShader = CreateProgramFromAssets(defaultVirt, defaultFrag);
+   state.assetManager.PopStacked(AssetHeader::default_frag_ID);
+   state.assetManager.PopStacked(AssetHeader::default_vert_ID);
 
-   size_t vertSize;
-   size_t fragSize;
-   char *backgroundVert;
-   char *backgroundFrag;
-   GLuint vertHandle;
-   GLuint fragHandle;
+   state.fontProgram = CreateTextProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::text_vert_ID),
+						   state.assetManager.LoadStacked(AssetHeader::text_frag_ID));
+
+   state.bitmapFontProgram = CreateTextProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::bitmap_font_vert_ID),
+							 state.assetManager.LoadStacked(AssetHeader::bitmap_font_frag_ID));
    
-   LoadProgramFiles("assets\\Background.vertp", "assets\\Background.fragp",
-		    &vertSize, &fragSize, &backgroundVert, &backgroundFrag, stack);
-   state.backgroundProgram = MakeProgram(backgroundVert, vertSize, backgroundFrag, fragSize,
-					 &vertHandle, &fragHandle);
+   BreakBlockProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::BreakerBlock_vert_ID),
+					       state.assetManager.LoadStacked(AssetHeader::BreakerBlock_frag_ID));
+
+   ButtonProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Button_vert_ID),
+					   state.assetManager.LoadStacked(AssetHeader::Button_frag_ID));
+
+   Branch_Image_Header *buttonHeader = LoadImageFromAsset(state.assetManager.LoadStacked(AssetHeader::button_ID));
+   LoadImageIntoTexture(buttonHeader);
+
+   state.backgroundProgram = CreateSimpleProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Background_vert_ID),
+							   state.assetManager.LoadStacked(AssetHeader::Background_frag_ID));
 
    stack->pop();
    stack->pop();
@@ -1288,9 +1328,59 @@ int_type IntToString(char *dest, int_type num)
    return count;
 }
 
+void ProcessInput(GameState &state)
+{
+   if(state.input.Touched())
+   {
+      GlobalActionPressed = 1;
+
+      if(state.state == GameState::LOOP)
+      {
+	 if(state.sphereGuy.OnSwitch(state.tracks) && state.sphereGuy.t > 0.5f)
+	 {
+	    if(state.tracks.flags & NewTrackGraph::left)
+	    {
+	       state.sphereGuy.forceDirection = Player::Force_Left;
+	    }
+	    else
+	    {
+	       state.sphereGuy.forceDirection = Player::Force_Right;
+	    }
+	 }
+
+	 {
+	    // toggle direction
+	    state.tracks.flags ^= NewTrackGraph::left;
+
+	    // if already lerping
+	    if(state.tracks.flags & NewTrackGraph::switching)
+	    {
+	       state.tracks.beginLerp = state.tracks.endLerp;
+	       state.tracks.endLerp = InvertX(state.tracks.beginLerp);
+	       state.tracks.switchDelta = 1.0f - state.tracks.switchDelta;	 
+	    }
+	    else
+	    {
+	       state.tracks.flags |= NewTrackGraph::switching;
+
+	       state.tracks.beginLerp = GlobalBranchCurve;
+	       state.tracks.endLerp = InvertX(GlobalBranchCurve);
+	       state.tracks.switchDelta = 0.0f;
+	    }
+	 }
+      }  
+   }
+   else
+   {
+      GlobalActionPressed = 0;
+   }
+}
+
 void GameLoop(GameState &state)
 {
    BeginFrame(state);
+
+   ProcessInput(state);
 
    switch(state.state)
    { 
@@ -1385,53 +1475,6 @@ void GameLoop(GameState &state)
    
    state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer);   
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
-}
-
-void OnKeyDown(GameState &state)
-{
-   GlobalActionPressed = 1;
-
-   if(state.state == GameState::LOOP)
-   {
-      if(state.sphereGuy.OnSwitch(state.tracks) && state.sphereGuy.t > 0.5f)
-      {
-	 if(state.tracks.flags & NewTrackGraph::left)
-	 {
-	    state.sphereGuy.forceDirection = Player::Force_Left;
-	 }
-	 else
-	 {
-	    state.sphereGuy.forceDirection = Player::Force_Right;
-	 }
-      }
-
-      {
-	 // toggle direction
-	 state.tracks.flags ^= NewTrackGraph::left;
-
-	 // if already lerping
-	 if(state.tracks.flags & NewTrackGraph::switching)
-	 {
-	    state.tracks.beginLerp = state.tracks.endLerp;
-	    state.tracks.endLerp = InvertX(state.tracks.beginLerp);
-	    state.tracks.switchDelta = 1.0f - state.tracks.switchDelta;	 
-	 }
-	 else
-	 {
-	    state.tracks.flags |= NewTrackGraph::switching;
-
-	    state.tracks.beginLerp = GlobalBranchCurve;
-	    state.tracks.endLerp = InvertX(GlobalBranchCurve);
-	    state.tracks.switchDelta = 0.0f;
-	 }
-      }
-      
-   }   
-}
-
-void OnKeyUp(GameState &state)
-{
-   GlobalActionPressed = 0;
 }
    
 void GameEnd(GameState &state)

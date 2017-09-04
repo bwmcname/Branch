@@ -903,3 +903,13 @@ struct Object
    v3 scale;
    quat orientation;   
 };
+
+#pragma pack(push, 1)
+struct Branch_Image_Header
+{
+   u32 size;
+   u32 width, height;
+   u32 channels;
+   // pixels tagged onto the end
+};
+#pragma pack(pop)

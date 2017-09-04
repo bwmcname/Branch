@@ -19,6 +19,7 @@
 #define UV (1 << 1)
 #define NORMAL (1 << 2)
 
+
 FILE *OpenForRead(char *file)
 {
    FILE *result = _fsopen(file, "rb", _SH_DENYWR);
@@ -188,6 +189,18 @@ long FileSize(FILE *file)
    fseek(file, 0, SEEK_SET);
 
    return fileSize;
+}
+
+char *LoadIntoBuffer(char *fileName, size_t *outSize)
+{
+   FILE *file = OpenForRead(fileName);
+
+   *outSize = FileSize(file);
+
+   char *buffer = (char *)malloc(*outSize);
+   fread(buffer, *outSize, 1, file);
+   fclose(file);
+   return buffer;
 }
 
 MeshBuilder ParseObj(char *obj, size_t size)
@@ -646,6 +659,137 @@ int BFont(char *filename, int point, int width, int height)
    return 1;
 }
 
+void Image(char *fileName)
+{
+   size_t size;
+   unsigned char *buffer = (unsigned char *)LoadIntoBuffer(fileName, &size);
+
+   int width, height;
+   int channels;
+   unsigned char *pixels;
+   Branch_Image_Header header;
+   if(pixels = stbi_load_from_memory(buffer, (int)size, &width, &height, &channels, 4))
+   {
+      header.size = size;
+      header.width = width;
+      header.height = height;
+      header.channels = 4;
+
+      size_t pixelsSize = (width * height * header.channels);
+
+      Branch_Image_Header *result = (Branch_Image_Header *)malloc(sizeof(Branch_Image_Header) + pixelsSize);
+      *result = header;
+      memcpy(result + 1, pixels, pixelsSize);
+
+      int nameLength = strlen(fileName);
+      for(int i = 0; i < nameLength; ++i)
+      {
+	 if(fileName[i] == '.')
+	 {
+	    fileName[i] = '\0';
+	    break;
+	 }
+      }
+
+      char outname[32];
+      sprintf(outname, "assets/%s", fileName);
+
+      FILE *outFile = OpenForWrite(outname);
+      fwrite(result, sizeof(Branch_Image_Header) + pixelsSize, 1, outFile);
+   }
+   else
+   {
+      printf("stb image conversion failed\n");
+      exit(0);
+   }
+}
+
+void Build(int count, char **arguments)
+{
+   FILE *header = OpenForWrite("AssetHeader.h");
+   FILE *packed = OpenForWrite("Assets/Packed.assets");
+
+   char head[] = "//BUILT BY AP.EXE, DO NOT EDIT\nstruct AssetHeader\n{\n";
+   fwrite(head, strlen(head), 1, header);
+
+   u32 *offsets = (u32 *)malloc(count * sizeof(u32));
+   u32 *sizes = (u32 *)malloc(count * sizeof(u32));
+
+   size_t currentOffset = 0;
+   char *path = (char *)malloc(64);
+   char *entry = (char *)malloc(128);
+   for(int i = 0; i < count; ++i)
+   {
+      sprintf(path, "Assets/%s", arguments[i]);
+      FILE *asset = OpenForRead(path);
+      size_t size = FileSize(asset);
+      sizes[i] = size;
+
+      void *buffer = malloc(size);
+      fread(buffer, size, 1, asset);
+      fwrite(buffer, size, 1, packed);
+      fclose(asset);
+      free(buffer);
+
+      char *c = arguments[i];
+      while(*c != '.' && *c != '\0') ++c;
+      *c = '\0';
+
+      sprintf(entry, "   static const u32 %s_ID = %d;\n",
+	      arguments[i], i+1, arguments[i], currentOffset);
+      
+      fwrite(entry, strlen(entry), 1, header);
+
+      offsets[i] = currentOffset;
+      currentOffset += size;
+   }
+
+   char arrayBegin[32];
+   sprintf(arrayBegin, "   static const u32 offsetTable[];\n");
+   fwrite(arrayBegin, strlen(arrayBegin), 1, header);
+
+   sprintf(arrayBegin, "   static const u32 sizeTable[];\n");
+   fwrite(arrayBegin, strlen(arrayBegin), 1, header);
+
+   sprintf(entry, "   static const u32 entries = %d;\n", count);
+   fwrite(entry, strlen(entry), 1, header);
+
+   char end[] = "};\n";
+   fwrite(end, strlen(end), 1, header);
+
+   sprintf(arrayBegin, "const u32 AssetHeader::offsetTable[] = {");
+   fwrite(arrayBegin, strlen(arrayBegin), 1, header);   
+
+   for(u32 i = 0; i < count; ++i)
+   {
+      char num[16];
+      sprintf(num, "%d,", offsets[i]);
+      fwrite(num, strlen(num), 1, header);
+   }   
+
+   char arrayEnd[] = "};\n";      
+   fwrite(arrayEnd, strlen(arrayEnd), 1, header);
+
+   sprintf(arrayBegin, "const u32 AssetHeader::sizeTable[] = {");
+   fwrite(arrayBegin, strlen(arrayBegin), 1, header);
+
+   for(u32 i = 0; i < count; ++i)
+   {
+      char num[16];
+      sprintf(num, "%d,", sizes[i]);
+      fwrite(num, strlen(num), 1, header);
+   }
+
+   fwrite(arrayEnd, strlen(arrayEnd), 1, header);
+
+   fclose(header);
+   fclose(packed);
+   free(path);
+   free(entry);
+   free(offsets);
+   printf("Assets Packed\n");
+}
+
 void main(int argc, char **argv)
 {
    if(argc > 1)
@@ -714,6 +858,38 @@ void main(int argc, char **argv)
 		     printf("Incorrect argument format");
 		  }		     
 	       }
+	       else
+	       {
+		  int image = strcmp(parse, "image");
+
+		  if(image == 0)
+		  {
+		     if(argc == 3)
+		     {
+			Image(argv[2]);
+		     }
+		     else
+		     {
+			printf("Incorrect argument format");
+		     }
+		  }
+		  else
+		  {
+		     int build = strcmp(parse, "build");
+
+		     if(build == 0)
+		     {
+			if(argc > 2)
+			{
+			   Build(argc - 2, &argv[2]);
+			}
+			else
+			{
+			   printf("No Assets specified to build");
+			}
+		     }
+		  }
+	       }
 	    }
 	 }
       }
@@ -725,5 +901,7 @@ void main(int argc, char **argv)
       printf("   PreProcesses a shader\n\n");
       printf("ap model <filename>\n");
       printf("   Converts an obj model to a binary format\n");
+      printf("ap image <filename>\n");
+      printf("   Converts png to my format\n");
    }
 }

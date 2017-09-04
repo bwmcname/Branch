@@ -44,6 +44,7 @@ enum RenderCommand
    DrawBreak,
    DrawString, //DrawText is taken :(
    DrawBlur,
+   DrawButton,
 };
 
 struct CommandBase
@@ -104,6 +105,14 @@ struct DrawTextCommand : public CommandBase
    {
       return (char *)(this) + sizeof(DrawTextCommand);
    }
+};
+
+struct DrawButtonCommand : public CommandBase
+{
+   v2 clip;
+   v2 dimensions;
+   GLuint textureUp;
+   GLuint textureDown;
 };
 
 /*

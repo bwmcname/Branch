@@ -18,7 +18,7 @@ struct StackAllocator
    u8 *base;
    u32 allocs;
    
-   u8 *push(size_t size);
+   inline u8 *push(size_t size);
    void pop();
 };
 

@@ -3,8 +3,6 @@
 
 #pragma warning(push, 0)
 
-#include "platformAPI.h"
-
 #ifdef WIN32_BUILD
 #include <windows.h>
 #include <GL/GL.h>
@@ -40,17 +38,21 @@
 #pragma warning(pop)
 
 #include "branch_common.h"
+#include "platformAPI.h"
+#include "AssetHeader.h"
 #include "Allocator.h"
 #include "map.h"
 #include "renderer.h"
+#include "Assets.h"
+
+#ifdef WIN32_BUILD
+#include "win32.h"
 #include "main.h"
+#include "win32.cpp"
+#endif
 
 #include "map.cpp"
 #include "vertinc.h"
-#include "win32.h"
+#include "Assets.cpp"
 #include "Renderer.cpp"
 #include "main.cpp"
-
-#ifdef WIN32_BUILD
-#include "win32.cpp"
-#endif

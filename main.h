@@ -267,12 +267,14 @@ Player::OnSwitch(NewTrackGraph &tracks)
 struct GameState
 {
    RenderState renderer;
+   Platform_Input_State input;
 
    Camera camera;
    Player sphereGuy;
    KeyState keyState;
    NewTrackGraph tracks;
    Arena mainArena;
+   AssetManager assetManager;
 
    v3 lightPos;
 
@@ -303,3 +305,8 @@ struct GameState
    u64 GameLoopTime;
    #endif
 };
+
+void GameLoop(GameState &state);
+void GameInit(GameState &state);
+void GameEnd(GameState &state);
+

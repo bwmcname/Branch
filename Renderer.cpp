@@ -3,6 +3,7 @@ static m4 Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 
 static m4 InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
 
 static ShaderProgram BreakBlockProgram;
+static ShaderProgram ButtonProgram;
 
 static const u32 RectangleAttribCount = 6;
 static GLuint RectangleUVBuffer;
@@ -379,6 +380,15 @@ MakeProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize
    return result;
 }
 
+static __forceinline
+GLuint CreateSimpleProgramFromAssets(Asset &vert, Asset &frag)
+{
+   GLuint dummyVert;
+   GLuint dummyFrag;
+   return MakeProgram((char *)vert.mem, vert.size, (char *)frag.mem, frag.size,
+		      &dummyVert, &dummyFrag);
+}
+
 ShaderProgram
 CreateProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize)
 {
@@ -397,6 +407,17 @@ CreateProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsi
 
    result.vertexAttrib = 1;
    result.normalAttrib = 2;
+
+   return result;
+}
+
+static __forceinline
+ShaderProgram CreateProgramFromAssets(Asset &vert, Asset &frag)
+{
+   ShaderProgram result = CreateProgram((char *)vert.mem, vert.size,
+					(char *)frag.mem, frag.size);
+   vert.flags |= Asset::OnGpu;
+   frag.flags |= Asset::OnGpu;
 
    return result;
 }
@@ -447,6 +468,17 @@ CreateTextProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t
    return result;
 }
 
+static __forceinline
+TextProgram CreateTextProgramFromAssets(Asset &vert, Asset &frag)
+{
+   TextProgram result = CreateTextProgram((char *)vert.mem, vert.size,
+					  (char *)frag.mem, frag.size);
+
+   vert.flags |= Asset::OnGpu;
+   frag.flags |= Asset::OnGpu;
+
+   return result;
+}
 
 static
 TextProgram LoadFilesAndCreateTextProgram(char *vertex, char *fragment, StackAllocator *allocator)
@@ -467,7 +499,7 @@ TextProgram LoadFilesAndCreateTextProgram(char *vertex, char *fragment, StackAll
 }
 
 static
-RenderState InitRenderState(StackAllocator *stack)
+RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
 {
    RenderState result;   
    // init scene framebuffer with light attachment
@@ -528,39 +560,20 @@ RenderState InitRenderState(StackAllocator *stack)
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.verticalColorBuffer, 0);         
 
    {
-      size_t vertSize;
-      size_t fragSize;
-      char *vertSource;
-      char *fragSource;
-      GLuint vertHandle;
-      GLuint fragHandle;
 
-      LoadProgramFiles("assets\\ScreenTexture.vertp", "assets\\ScreenTexture.fragp",
-		       &vertSize, &fragSize, &vertSource, &fragSource, stack);
+      result.fullScreenProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
+							       assetManager.LoadStacked(AssetHeader::ScreenTexture_frag_ID));
 
-      result.fullScreenProgram = MakeProgram(vertSource, vertSize, fragSource, fragSize,
-					     &vertHandle, &fragHandle);
-
-      stack->pop();
-      stack->pop();
+      assetManager.PopStacked(AssetHeader::ScreenTexture_vert_ID);
+      assetManager.PopStacked(AssetHeader::ScreenTexture_frag_ID);
    }
 
    {
-      size_t vertSize;
-      size_t fragSize;
-      char *vertSource;
-      char *fragSource;
-      GLuint vertHandle;
-      GLuint fragHandle;
+      result.blurProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ApplyBlur_vert_ID),
+							 assetManager.LoadStacked(AssetHeader::ApplyBlur_frag_ID));
 
-      LoadProgramFiles("assets\\ApplyBlur.vertp", "assets\\ApplyBlur.fragp",
-		       &vertSize, &fragSize, &vertSource, &fragSource, stack);
-
-      result.blurProgram = MakeProgram(vertSource, vertSize, fragSource, fragSize,
-				       &vertHandle, &fragHandle);
-
-      stack->pop();
-      stack->pop();
+      assetManager.PopStacked(AssetHeader::ApplyBlur_vert_ID);
+      assetManager.PopStacked(AssetHeader::ApplyBlur_frag_ID);
    }
 
    result.commands = InitCommandState();
@@ -769,6 +782,12 @@ void RenderBreak(DrawBreakCommand *command, Camera &camera, v3 lightPos)
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glBindBuffer(GL_ARRAY_BUFFER, 0);
    glUseProgram(0);
+}
+
+static
+void RenderButton(DrawButtonCommand *command)
+{
+   
 }
 
 void RenderTexture(GLuint texture, ShaderProgram &program)
@@ -1154,6 +1173,11 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 case DrawBlur:
 	 {
 	    RenderBlur(renderer);
+	 }break;
+
+	 case DrawButton:
+	 {
+	    RenderButton((DrawButtonCommand *)current);
 	 }break;
 #ifdef DEBUG
 	 default:

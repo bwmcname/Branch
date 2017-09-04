@@ -156,6 +156,10 @@ HMODULE glDll = 0;
 
 
 static size_t WinFileSize(char *);
-static b32 WinReadFile(char *, u8 *, size_t);
+static b32 WinReadFile(char *, u8 *, size_t, size_t offset = 0);
 static u8 *Win32AllocateMemory(size_t, size_t*);
 static b32 Win32FreeMemory(u8 *);
+static b32 WinReadFileHandle(HANDLE FileHandle, u8 *buffer, size_t fileSize, size_t offset);
+static HANDLE Win32FileOpen(char *filename);
+
+struct GameState;
