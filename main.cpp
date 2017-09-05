@@ -172,6 +172,9 @@ void CircularQueue<T>::IncrementEnd()
 template <typename T>
 void CircularQueue<T>::ClearToZero()
 {
+   size = 0;
+   begin = 0;
+   end = 0;
    memset(elements, 0, max * sizeof(T));
 }
 
@@ -394,24 +397,8 @@ CircularQueue<T> InitCircularQueue(u32 size, StackAllocator *allocator)
    return q;
 }
 
-NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
+void StartTracks(NewTrackGraph &g)
 {
-   NewTrackGraph g;
-   g.adjList = (Attribute *)allocator->push(sizeof(Attribute) * 1024);
-
-   for(u32 i = 0; i < g.capacity; ++i)
-   {
-      g.adjList[i] = {0, Attribute::unused, 0, 0, {}, {}};
-   }
-
-   g.availableIDs = InitCircularQueue<u16>(1024, allocator); //@ could be smaller?
-   g.orders = InitCircularQueue<NewTrackOrder>(1024, allocator); //@ could be smaller
-   g.newBranches = InitCircularQueue<u16>(256, allocator);
-   g.taken = InitVirtualCoordHashTable(1024, allocator);
-   g.IDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
-   g.reverseIDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
-   g.elements = (Track *)allocator->push(sizeof(Track) * 1024);
-
    g.IDtable[0] = 0;
    g.elements[0] = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve);
    g.elements[0].flags = Track::left;
@@ -440,8 +427,47 @@ NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
       g.IDtable[i] = i;
       g.reverseIDtable[i] = i;
    }
+}
+
+NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
+{
+   NewTrackGraph g;
+   g.adjList = (Attribute *)allocator->push(sizeof(Attribute) * 1024);
+
+   for(u32 i = 0; i < g.capacity; ++i)
+   {
+      g.adjList[i] = {0, Attribute::unused, 0, 0, {}, {}};
+   }
+
+   g.availableIDs = InitCircularQueue<u16>(1024, allocator); //@ could be smaller?
+   g.orders = InitCircularQueue<NewTrackOrder>(1024, allocator); //@ could be smaller
+   g.newBranches = InitCircularQueue<u16>(256, allocator);
+   g.taken = InitVirtualCoordHashTable(1024, allocator);
+   g.IDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
+   g.reverseIDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
+   g.elements = (Track *)allocator->push(sizeof(Track) * 1024);
+
+   StartTracks(g);
 
    return g;
+}
+
+void ResetGraph(NewTrackGraph &g)
+{
+   for(u32 i = 0; i < g.capacity; ++i)
+   {
+      g.adjList[i] = {0, Attribute::unused, 0, 0, {}, {}};
+   }
+
+   g.availableIDs.ClearToZero();
+   g.newBranches.ClearToZero();
+   g.orders.ClearToZero();
+   g.taken.ClearToZero();
+
+   g.switchDelta = 0.0f;
+   g.flags = 0;
+
+   StartTracks(g);
 }
 
 static
@@ -862,20 +888,38 @@ v3 GetPositionOnTrack(Track &track, float t)
 	     track.renderable.worldPos.z);
 }
 
+inline
+void ResetPlayer(Player &player)
+{
+   player.trackIndex = 0;
+   player.t = 0.0f;
+   player.velocity = 0.15f;
+   player.forceDirection = 0;
+}
+
 void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 {
    // current track physical ID
    u16 actualID = tracks.GetActualID(player.trackIndex);
    Track *currentTrack = &tracks.elements[actualID];
-   
-   player.t += player.velocity * delta;
 
-   // don't drag if on speedup
-   if(!(tracks.adjList[actualID].flags & Attribute::speedup))
+   static bool paused = false;
+   
+   if(state.input.UnEscaped())
    {
-      player.velocity = max(player.velocity - (0.00005f * delta), 0.15f); // drag
+      paused = !paused;
    }
 
+   if(!paused)
+   {
+      player.t += player.velocity * delta;
+   
+      // don't drag if on speedup
+      if(!(tracks.adjList[actualID].flags & Attribute::speedup))
+      {
+	 player.velocity = max(player.velocity - (0.00005f * delta), 0.15f); // drag
+      }
+   }
    // if the player has just left the current track
    if(player.t > 1.0f)
    {
@@ -1235,11 +1279,19 @@ void GameInit(GameState &state)
 
    InitCamera(state.camera);   
 
-   Asset &defaultVirt = state.assetManager.LoadStacked(AssetHeader::default_vert_ID);
+   Asset &defaultVert = state.assetManager.LoadStacked(AssetHeader::default_vert_ID);
    Asset &defaultFrag = state.assetManager.LoadStacked(AssetHeader::default_frag_ID);
-   DefaultShader = CreateProgramFromAssets(defaultVirt, defaultFrag);
+   DefaultShader = CreateProgramFromAssets(defaultVert, defaultFrag);
+
    state.assetManager.PopStacked(AssetHeader::default_frag_ID);
    state.assetManager.PopStacked(AssetHeader::default_vert_ID);
+
+   Asset &defaultInstancedVirt = state.assetManager.LoadStacked(AssetHeader::Default_Instance_vert_ID);
+   Asset &defaultInstancedFrag = state.assetManager.LoadStacked(AssetHeader::Default_Instance_frag_ID);
+   DefaultInstanced = CreateProgramFromAssets(defaultInstancedVirt, defaultInstancedFrag);
+
+   state.assetManager.PopStacked(AssetHeader::Default_Instance_frag_ID);
+   state.assetManager.PopStacked(AssetHeader::Default_Instance_vert_ID);
 
    state.fontProgram = CreateTextProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::text_vert_ID),
 						   state.assetManager.LoadStacked(AssetHeader::text_frag_ID));
@@ -1254,7 +1306,7 @@ void GameInit(GameState &state)
 					   state.assetManager.LoadStacked(AssetHeader::Button_frag_ID));
 
    Branch_Image_Header *buttonHeader = LoadImageFromAsset(state.assetManager.LoadStacked(AssetHeader::button_ID));
-   LoadImageIntoTexture(buttonHeader);
+   state.buttonTex = LoadImageIntoTexture(buttonHeader);
 
    state.backgroundProgram = CreateSimpleProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Background_vert_ID),
 							   state.assetManager.LoadStacked(AssetHeader::Background_frag_ID));
@@ -1328,6 +1380,19 @@ int_type IntToString(char *dest, int_type num)
    return count;
 }
 
+inline
+v2 ScreenToClip(v2i screen)
+{
+   float x = (float)screen.x;
+   float y = (float)screen.y;
+
+   v2 result;
+   result.x = (2.0f * x / (float)SCREEN_WIDTH) - 1.0f;
+   result.y = -((2.0f * y / (float)SCREEN_HEIGHT) - 1.0f);
+
+   return result;
+}
+
 void ProcessInput(GameState &state)
 {
    if(state.input.Touched())
@@ -1370,7 +1435,7 @@ void ProcessInput(GameState &state)
 	 }
       }  
    }
-   else
+   else if(state.input.UnTouched())
    {
       GlobalActionPressed = 0;
    }
@@ -1403,8 +1468,10 @@ void GameLoop(GameState &state)
 	 UpdatePlayer(state.sphereGuy, state.tracks, state);
 	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);	 
 	 state.lightPos = state.sphereGuy.renderable.worldPos;
-   
-	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+
+	 glUseProgram(DefaultShader.programHandle); 
+	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+	 glUseProgram(0);
 
 	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
 	 
@@ -1419,25 +1486,32 @@ void GameLoop(GameState &state)
 	    count = IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
 	 }
 	 // RenderText_stb(framerate, count, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
-	 state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
-
+	 state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));	 
 	 static char renderTimeSting[19];
 	 size_t renderTimeCount = IntToString(renderTimeSting, state.TrackRenderTime);
 	 // RenderText_stb(renderTimeSting, (u32)renderTimeCount, -0.8f, 0.75f, state.bitmapFont, state.bitmapFontProgram);
 	 state.renderer.commands.PushRenderText(renderTimeSting, (u32)renderTimeCount, V2(-0.8f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
 
-	 state.renderer.commands.PushRenderText("welp", 4, V2(-0.8f, 0.70f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
-
-	 if(state.camera.lerping)
-	 {
-	    state.renderer.commands.PushRenderText("Lerping", 7, V2(-0.8f, 0.65f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
-	 }
+#ifdef DEBUG
+#pragma warning(push, 0)
+	 v2 clip = ScreenToClip(state.input.TouchPoint());
+	 static char PointString[32];
+	 sprintf_s(PointString, 32, "Mouse: (%f, %f)", clip.x, clip.y);
+	 state.renderer.commands.PushRenderText(PointString, (u32)strlen(PointString), V2(-0.8f, 0.7f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
+#pragma warning(pop)
+#endif
 #endif	 
       }break;
 
       case GameState::RESET:
       {	 
 	 state.state = GameState::START;
+
+	 ResetPlayer(state.sphereGuy);
+	 state.camera.position.y = state.sphereGuy.renderable.worldPos.y - 10.0f;
+	 state.camera.position.x = 0.0f;
+
+	 ResetGraph(state.tracks);
 	 FillGraph(state.tracks);
       }break;
 
@@ -1446,7 +1520,7 @@ void GameLoop(GameState &state)
 	 static float position = 0.0f;
 	 position += delta * 0.01f;	 
 
-	 if(GlobalActionPressed)
+	 if(ButtonUpdate(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.input) == Clicked)
 	 {
 	    state.state = GameState::LOOP;	    
 	    state.sphereGuy.trackIndex = 0;
@@ -1459,8 +1533,8 @@ void GameLoop(GameState &state)
 	 }
 
 	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
-
-	 // DistanceRenderText("Butts", 0, (sinf(position) * 0.6f) - 0.35f, 0.0f, 0.5f, state.tempFontData, state.fontProgram, state.fontTextureHandle);
+	 
+	 state.renderer.commands.PushDrawButton(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.buttonTex, ((StackAllocator *)state.mainArena.base));
       }break;      
       
       case GameState::INITGAME:
@@ -1473,7 +1547,7 @@ void GameLoop(GameState &state)
       }
    }
    
-   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer);   
+   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));   
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }
    
@@ -1622,3 +1696,4 @@ NewTrackGraph::VerifyGraph()
    }
 }
 #endif
+#pragma warning(push, 0) // to shut up the compiler about sprintf_s

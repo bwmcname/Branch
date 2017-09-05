@@ -4,6 +4,10 @@
 #define NORMAL_LOCATION 2
 #define UV_LOCATION 4
 
+#define MATRIX1_LOCATION 5 // AND 6 7 8
+
+#define MATRIX2_LOCATION 9 // AND 10 11 12
+
 
 layout(location=VERTEX_LOCATION) in vec2 vert;
 layout(location=UV_LOCATION) in vec2 uv;

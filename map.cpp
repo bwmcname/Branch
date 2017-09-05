@@ -95,3 +95,14 @@ LocationInfo VirtualCoordHashTable::get(VirtualCoord k)
    
    return {0};
 }
+
+inline void
+VirtualCoordHashTable::ClearToZero()
+{
+   for(u32 i = 0; i < capacity; ++i)
+   {
+      e[i] = {};
+   }
+
+   size = 0;
+}

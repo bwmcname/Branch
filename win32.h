@@ -21,6 +21,7 @@
 #define GL_ARRAY_BUFFER 0x8892
 #define GL_STATIC_DRAW 0x88E4
 #define GL_DYNAMIC_DRAW 0x88E8
+#define GL_STREAM_DRAW 0x88E0
 
 #define GL_TEXTURE_BUFFER 0x8C2A
 #define GL_CLAMP_TO_EDGE 0x812F
@@ -104,6 +105,7 @@ typedef void (*glBindRenderbuffer_t) (GLenum, GLuint);
 typedef void (*glRenderbufferStorage_t) (GLenum, GLenum, GLsizei, GLsizei); 
 typedef void (*glFramebufferRenderbuffer_t) (GLenum, GLenum, GLenum, GLuint);
 typedef void (*glDrawBuffers_t) (GLsizei, const GLenum *);
+typedef void (*glDrawArraysInstanced_t) (GLenum, GLint, GLsizei, GLsizei);
 
 wglChoosePixelFormatARB_t wglChoosePixelFormatARB;
 glCreateProgram_t glCreateProgram;
@@ -144,6 +146,7 @@ glBindRenderbuffer_t glBindRenderbuffer;
 glRenderbufferStorage_t glRenderbufferStorage;
 glFramebufferRenderbuffer_t glFramebufferRenderbuffer;
 glDrawBuffers_t glDrawBuffers;
+glDrawArraysInstanced_t glDrawArraysInstanced;
 
 HMODULE glDll = 0;
 

@@ -14,7 +14,10 @@ struct Win32_Input_State
    {
       clickDown = 0x1,
       clickHold = 0x2,
-      clickUp = 0x3,
+      clickUp = 0x4,
+      escapeDown = 0x8,
+      escapeHeld = 0x10,
+      escapeUp = 0x20
    };
 
    u32 flags;
@@ -23,6 +26,31 @@ struct Win32_Input_State
    inline u32 Touched()
    {
       return flags & clickDown;
+   }
+
+   inline u32 UnTouched()
+   {
+      return flags & clickUp;
+   }
+
+   inline v2i TouchPoint()
+   {
+      return clickCoords;
+   }
+
+   inline u32 Escaped()
+   {
+      return flags & escapeDown;
+   }
+
+   inline u32 UnEscaped()
+   {
+      return flags & escapeUp;
+   }
+
+   inline u32 EscapeHeld()
+   {
+      return flags & escapeHeld;
    }
 };
 

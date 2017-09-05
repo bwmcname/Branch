@@ -1,4 +1,4 @@
-
+ 
 static m4 Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
 static m4 InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
 
@@ -17,6 +17,7 @@ static MeshObject BranchTrack;
 static MeshObject BreakTrack;
 
 static ShaderProgram DefaultShader;
+static ShaderProgram DefaultInstanced;
 
 static float RectangleUVs[] =
 {
@@ -169,19 +170,65 @@ bool BBoxFrustumTest(TrackFrustum &f, BBox &b)
    return false;
 }
 
-CommandState InitCommandState()
+CommandState InitCommandState(StackAllocator *allocator)
 {
    CommandState result;
    result.currentProgram = 0;
    result.count = 0;
    result.first = 0;   
    result.last = 0;
+   // 1024 for now, but we may be able to find tighter bounds!
+   result.linearInstances = (LinearInstance *)allocator->push(sizeof(LinearInstance) * 1024);
+   result.linearInstanceCount = 0;
+
+   glGenBuffers(1, &result.instanceMVPBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_STREAM_DRAW);
+
+   glGenBuffers(1, &result.instanceModelMatrixBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceModelMatrixBuffer);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_STREAM_DRAW);
+
+   glGenBuffers(1, &result.instanceColorBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceColorBuffer);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(v3) * 1024, 0, GL_STREAM_DRAW);
+
+   glGenVertexArrays(1, &result.instanceVao);
+   glBindVertexArray(result.instanceVao);
+   glBindBuffer(GL_ARRAY_BUFFER, LinearTrack.handles.vbo);
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glVertexAttribPointer(VERTEX_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+   glBindBuffer(GL_ARRAY_BUFFER, LinearTrack.handles.nbo);
+   glEnableVertexAttribArray(NORMAL_LOCATION);
+   glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
+   glEnableVertexAttribArray(MATRIX1_LOCATION);
+   glVertexAttribPointer(MATRIX1_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 1);
+   glVertexAttribPointer(MATRIX1_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 2);
+   glVertexAttribPointer(MATRIX1_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 3);
+   glVertexAttribPointer(MATRIX1_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
+
+
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceModelMatrixBuffer);
+   glEnableVertexAttribArray(MATRIX2_LOCATION);
+   glVertexAttribPointer(MATRIX2_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
+   glEnableVertexAttribArray(MATRIX2_LOCATION + 1);
+   glVertexAttribPointer(MATRIX2_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
+   glEnableVertexAttribArray(MATRIX2_LOCATION + 2);
+   glVertexAttribPointer(MATRIX2_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
+   glEnableVertexAttribArray(MATRIX2_LOCATION + 3);
+   glVertexAttribPointer(MATRIX2_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
+   glBindVertexArray(0);   
 
    return result;
 }
 
 void
-CommandState::PushBindProgram(GLuint program, StackAllocator *allocator)
+CommandState::PushBindProgram(ProgramBase *program, StackAllocator *allocator)
 {
    if(currentProgram != program)
    {
@@ -198,6 +245,7 @@ CommandState::PushBindProgram(GLuint program, StackAllocator *allocator)
       }
    
       command->command = BindProgram;
+      command->program = program;
       command->next = 0;
       last = command;
       currentProgram = program;
@@ -215,6 +263,32 @@ CommandState::PushDrawLinear(Object obj, StackAllocator *allocator)
    DrawLinearCommand *command = (DrawLinearCommand *)last->next;
    command->command = DrawLinear;
    command->obj = obj;
+   last = command;
+   ++count;
+}
+
+inline
+void CommandState::PushLinearInstance(Object obj, v3 color)
+{
+   assert(linearInstanceCount < 1024);
+   linearInstances[linearInstanceCount++] = {obj.worldPos,
+					     obj.orientation,
+					     obj.scale,
+					     color};
+}
+
+void
+CommandState::PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawButtonCommand));
+   DrawButtonCommand *command = (DrawButtonCommand *)last->next;
+   command->command = DrawButton;
+   command->position = position;
+   command->scale = scale;
+   command->texture = texture;
    last = command;
    ++count;
 }
@@ -576,7 +650,11 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
       assetManager.PopStacked(AssetHeader::ApplyBlur_frag_ID);
    }
 
-   result.commands = InitCommandState();
+   glGenBuffers(1, &result.buttonVbo);
+   glBindBuffer(GL_ARRAY_BUFFER, result.buttonVbo);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(v2) * 6, 0, GL_DYNAMIC_DRAW);
+
+   result.commands = InitCommandState(stack);
    
    return result;
 }
@@ -709,10 +787,8 @@ void RenderBlur(RenderState &renderer)
    glDisable(GL_FRAMEBUFFER_SRGB);
 }
 
-void RenderMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
+void RenderMesh(ShaderProgram *p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
 {
-   glUseProgram(p.programHandle);
-
    static float time = 0.0f;
    time += delta;
 
@@ -720,19 +796,18 @@ void RenderMesh(ShaderProgram p, MeshObject b, m4 &transform, m4 &view, v3 light
    m4 projection = InfiniteProjection;
    m4 mvp = projection * view * transform;
    
-   glUniformMatrix4fv(p.MVPUniform, 1, GL_FALSE, mvp.e);
-   glUniformMatrix4fv(p.modelUniform, 1, GL_FALSE, transform.e);
-   glUniformMatrix4fv(p.viewUniform, 1, GL_FALSE, view.e);
-   glUniform3fv(p.diffuseUniform, 1, diffuseColor.e);
-   glUniform3fv(p.lightPosUniform, 1, lightPos.e);
+   glUniformMatrix4fv(p->MVPUniform, 1, GL_FALSE, mvp.e);
+   glUniformMatrix4fv(p->modelUniform, 1, GL_FALSE, transform.e);
+   glUniformMatrix4fv(p->viewUniform, 1, GL_FALSE, view.e);
+   glUniform3fv(p->diffuseUniform, 1, diffuseColor.e);
+   glUniform3fv(p->lightPosUniform, 1, lightPos.e);
    glBindVertexArray(b.handles.vao);
    glDrawArrays(GL_TRIANGLES, 0, b.mesh.vcount);
    glBindVertexArray(0);
-   glUseProgram(0);
 }
 
 static
-void RenderObject(Object &obj, MeshObject buffers, ShaderProgram program, m4 &camera, v3 lightPos, v3 diffuseColor)
+void RenderObject(Object &obj, MeshObject buffers, ShaderProgram *program, m4 &camera, v3 lightPos, v3 diffuseColor)
 {
    m4 orientation = M4(obj.orientation);
    m4 scale = Scale(obj.scale);
@@ -744,27 +819,27 @@ void RenderObject(Object &obj, MeshObject buffers, ShaderProgram program, m4 &ca
 }
 
 static
-void RenderBranch(DrawBranchCommand *command, Camera &camera, v3 lightPos)
+void RenderBranch(DrawBranchCommand *command, Camera &camera, v3 lightPos, ProgramBase *program)
 {
-   RenderObject(command->obj, BranchTrack, DefaultShader, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
+   RenderObject(command->obj, BranchTrack, (ShaderProgram *)program, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
 }
 
 static
-void RenderLinear(DrawLinearCommand *command, Camera &camera, v3 lightPos)
+void RenderLinear(DrawLinearCommand *command, Camera &camera, v3 lightPos, ProgramBase *current)
 {
-   RenderObject(command->obj, LinearTrack, DefaultShader, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
+   RenderObject(command->obj, LinearTrack, (ShaderProgram *)current, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
 }
 
 static
-void RenderSpeedup(DrawSpeedupCommand *command, Camera &camera, v3 lightPos)
+void RenderSpeedup(DrawSpeedupCommand *command, Camera &camera, v3 lightPos, ProgramBase *program)
 {
-   RenderObject(command->obj, LinearTrack, DefaultShader, camera.view, lightPos, V3(3.0f, 0.0f, 0.0f));
+   RenderObject(command->obj, LinearTrack, (ShaderProgram *)program, camera.view, lightPos, V3(3.0f, 0.0f, 0.0f));
 }
 
 static
-void RenderBreak(DrawBreakCommand *command, Camera &camera, v3 lightPos)
+void RenderBreak(DrawBreakCommand *command, Camera &camera, v3 lightPos, ProgramBase *currentProgram)
 {
-   RenderObject(command->obj, BreakTrack, DefaultShader, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
+   RenderObject(command->obj, BreakTrack, (ShaderProgram *)currentProgram, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
 
    m4 translation = Translate(V3(command->obj.worldPos.x, command->obj.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, command->obj.worldPos.z));
    m4 orientation = M4(Rotation(V3(-1.0f, 0.0f, 0.0f), 1.5708f));
@@ -782,12 +857,49 @@ void RenderBreak(DrawBreakCommand *command, Camera &camera, v3 lightPos)
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glBindBuffer(GL_ARRAY_BUFFER, 0);
    glUseProgram(0);
+
+   glUseProgram(currentProgram->programHandle);
 }
 
 static
-void RenderButton(DrawButtonCommand *command)
+void RenderButton(DrawButtonCommand *command, GLuint vbo, GLuint program)
 {
+   glDisable(GL_DEPTH_TEST);
+   glUseProgram(ButtonProgram.programHandle);
+
+   float left = command->position.x - command->scale.x;
+   float right = command->position.x + command->scale.x;
+   float bottom = command->position.y - command->scale.y;
+   float top = command->position.y + command->scale.y;
    
+   float verts[] =
+   {
+      left, bottom,
+      right, bottom,
+      left, top,
+
+      right, bottom,
+      right, top,
+      left, top
+   };
+
+   glBindBuffer(GL_ARRAY_BUFFER, vbo);
+   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 12, verts);
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
+   glEnableVertexAttribArray(UV_LOCATION);
+   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glActiveTexture(GL_TEXTURE0);
+   glBindTexture(GL_TEXTURE_2D, command->texture);
+   glUniform1i(glGetUniformLocation(program, "tex"), 0);
+   glDrawArrays(GL_TRIANGLES, 0, 6);
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+   glBindTexture(GL_TEXTURE_2D, 0);
+   glUseProgram(0);
+   glEnable(GL_DEPTH_TEST);
 }
 
 void RenderTexture(GLuint texture, ShaderProgram &program)
@@ -1132,7 +1244,7 @@ void RenderBBoxes(GameState &state)
 #endif
 
 void
-CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer)
+CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer, StackAllocator *allocator)
 {
    CommandBase *current = first;
    for(u32 i = 0; i < count; ++i)
@@ -1141,28 +1253,28 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
       {
 	 case DrawLinear:
 	 {
-	    RenderLinear((DrawLinearCommand *)current, camera, lightPos);
+	    RenderLinear((DrawLinearCommand *)current, camera, lightPos, currentProgram);
 	 }break;
 
 	 case DrawBranch:
 	 {
-	    RenderBranch((DrawBranchCommand *)current, camera, lightPos);
+	    RenderBranch((DrawBranchCommand *)current, camera, lightPos, currentProgram);
 	 }break;
 
 	 case DrawSpeedup:
 	 {
-	    RenderSpeedup((DrawSpeedupCommand *)current, camera, lightPos);
+	    RenderSpeedup((DrawSpeedupCommand *)current, camera, lightPos, currentProgram);
 	 }break;
 
 	 case DrawBreak:
 	 {
-	    RenderBreak((DrawBreakCommand *)current, camera, lightPos);
+	    RenderBreak((DrawBreakCommand *)current, camera, lightPos, currentProgram);
 	 }break;
 
 	 case BindProgram:
 	 {
-	    // BindProgramCommand *programCommand = (BindProgramCommand *)current;
-	    // glUseProgram(programCommand->program);
+	    BindProgramCommand *programCommand = (BindProgramCommand *)current;
+	    glUseProgram(programCommand->program->programHandle);
 	 }break;
 
 	 case DrawString:
@@ -1177,7 +1289,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
 	 case DrawButton:
 	 {
-	    RenderButton((DrawButtonCommand *)current);
+	    RenderButton((DrawButtonCommand *)current, renderer.buttonVbo, currentProgram->programHandle);
 	 }break;
 #ifdef DEBUG
 	 default:
@@ -1187,7 +1299,52 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 #endif
       }
       current = current->next;
-   }   
+   }
+
+   RenderLinearInstances(allocator, lightPos, camera.view);
+}
+
+void CommandState::RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view)
+{
+   glUseProgram(DefaultInstanced.programHandle);
+
+   m4 *transforms = (m4 *)allocator->push(sizeof(m4) * linearInstanceCount);
+   m4 *MVPs = (m4 *)allocator->push(sizeof(m4) * linearInstanceCount);
+   v3 *color = (v3 *)allocator->push(sizeof(v3) * linearInstanceCount);
+
+   m4 vp = InfiniteProjection * view;
+
+   glUniform3fv(DefaultInstanced.lightPosUniform, 1, lightPos.e);
+   glUniformMatrix4fv(DefaultInstanced.viewUniform, 1, GL_FALSE, view.e);
+
+   for(u32 i = 0; i < linearInstanceCount; ++i)
+   {
+      color[i] = linearInstances[i].color;
+
+      m4 orientation = M4(linearInstances[i].rotation);
+      m4 scale = Scale(linearInstances[i].scale);
+      m4 translation = Translate(linearInstances[i].position);   
+
+      transforms[i] = (translation * scale * orientation);
+      MVPs[i] = vp * transforms[i];
+   }
+
+   glBindBuffer(GL_ARRAY_BUFFER, instanceMVPBuffer);
+   glBufferSubData(GL_ARRAY_BUFFER, 0, linearInstanceCount * sizeof(m4), MVPs);
+
+   glBindBuffer(GL_ARRAY_BUFFER, instanceModelMatrixBuffer);
+   glBufferSubData(GL_ARRAY_BUFFER, 0, linearInstanceCount * sizeof(m4), transforms);
+
+   glBindBuffer(GL_ARRAY_BUFFER, instanceColorBuffer);
+   glBufferSubData(GL_ARRAY_BUFFER, 0, linearInstanceCount * sizeof(v3),  color);
+
+   glBindVertexArray(instanceVao);
+   glDrawArraysInstanced(GL_TRIANGLES, 0, linearInstanceCount, LinearTrack.mesh.vcount);
+   glBindVertexArray(0);
+
+   allocator->pop();
+   allocator->pop();
+   allocator->pop();
 }
 
 i32 RenderTracks(GameState &state, StackAllocator *allocator)
@@ -1196,8 +1353,8 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
    i32 rendered = 0;
 
    TrackFrustum frustum = CreateTrackFrustum(InfiniteProjection * state.camera.view);
-
-   state.renderer.commands.PushBindProgram(DefaultShader.programHandle, allocator);
+ 
+   state.renderer.commands.PushBindProgram(&DefaultShader, allocator);
    for(i32 i = 0; i < state.tracks.capacity; ++i)
    {	    
       if(!(state.tracks.adjList[i].flags & Attribute::invisible) &&
@@ -1216,7 +1373,8 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	    BBox box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
 	    {
-	       state.renderer.commands.PushDrawLinear(state.tracks.elements[i].renderable, allocator);
+	       // state.renderer.commands.PushDrawLinear(state.tracks.elements[i].renderable, allocator);
+	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, V3(0.0f, 1.0f, 0.0f));
 	    }	    
 	 }	    
 	 else if(state.tracks.adjList[i].flags & Attribute::breaks)
@@ -1232,7 +1390,8 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	    BBox box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
 	    {
-	       state.renderer.commands.PushDrawSpeedup(state.tracks.elements[i].renderable, allocator);
+	       // state.renderer.commands.PushDrawSpeedup(state.tracks.elements[i].renderable, allocator);
+	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, V3(1.0f, 0.0f, 0.0f));
 	    }
 	 }
 	 else
@@ -1250,6 +1409,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
    #endif
 
    state.renderer.commands.PushRenderBlur(allocator);
+   state.renderer.commands.linearInstanceCount = 0;
    END_TIME();
    READ_TIME(state.TrackRenderTime);
 

@@ -282,6 +282,7 @@ int OpenglCreate(HWND WindowHandle)
    WinGetGlExtension(glFramebufferRenderbuffer);
    WinGetGlExtension(glRenderbufferStorage);
    WinGetGlExtension(glDrawBuffers);
+   WinGetGlExtension(glDrawArraysInstanced);
 
    glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
    return true;
@@ -302,6 +303,8 @@ int CALLBACK WinMain(HINSTANCE Instance,
 			     0, 0, 0, 0,
 			     "Branch Debug Window Class",
 			     0};
+
+   WindowClass.hCursor = LoadCursor(NULL, IDC_ARROW);
 
    if(!RegisterClassEx(&WindowClass))
    {
@@ -365,6 +368,20 @@ int CALLBACK WinMain(HINSTANCE Instance,
 	 state.input.flags |= Win32_Input_State::clickHold;
       }
 
+      if(state.input.flags & Win32_Input_State::escapeDown)
+      {
+	 state.input.flags &= ~Win32_Input_State::escapeDown;
+	 state.input.flags |= Win32_Input_State::escapeHeld;
+      }
+
+      state.input.flags &= ~(Win32_Input_State::clickUp | Win32_Input_State::escapeUp);
+
+      POINT p;			      
+      GetCursorPos(&p);
+      ScreenToClient(WindowHandle, &p);
+      state.input.clickCoords.x = p.x;
+      state.input.clickCoords.y = p.y;
+
       while(PeekMessage(&Message, WindowHandle, 0, 0, PM_REMOVE))
       {
 	 switch(Message.message)
@@ -394,9 +411,17 @@ int CALLBACK WinMain(HINSTANCE Instance,
 		  {
 		     if(!(state.input.flags & Win32_Input_State::clickHold))
 		     {
-			state.input.flags |= Win32_Input_State::clickDown;
-		     }		     
+			state.input.flags |= Win32_Input_State::clickDown;			
+		     }
 		  }break;
+
+		  case VK_ESCAPE:
+		  {
+		     if(!(state.input.flags & Win32_Input_State::escapeHeld))
+		     {
+			state.input.flags |= Win32_Input_State::escapeHeld;
+		     }
+		  }
 	       }
 	    }break;
 
@@ -405,13 +430,32 @@ int CALLBACK WinMain(HINSTANCE Instance,
 	       switch(Message.wParam)
 	       {
 		  case VK_SPACE:
-		  {
-		     assert(state.input.flags & (Win32_Input_State::clickDown | Win32_Input_State::clickHold));
+		  {		     
 		     state.input.flags &= ~(Win32_Input_State::clickDown | Win32_Input_State::clickHold);
-		     state.input.flags |= Win32_Input_State::clickUp;
-		     
+		     state.input.flags |= Win32_Input_State::clickUp;		     
+		  }break;
+
+		  case VK_ESCAPE:
+		  {
+		     state.input.flags &= ~(Win32_Input_State::escapeDown | Win32_Input_State::escapeHeld);
+		     state.input.flags |= Win32_Input_State::escapeUp;
 		  }break;
 	       }
+	    }break;
+
+	    case WM_LBUTTONDOWN:
+	    {
+	       if(!(state.input.flags & Win32_Input_State::clickHold))
+	       {
+		  state.input.flags |= Win32_Input_State::clickDown;
+	       }
+	    }break;
+
+	    case WM_LBUTTONUP:
+	    {
+	       assert(state.input.flags & (Win32_Input_State::clickDown | Win32_Input_State::clickHold));
+	       state.input.flags &= ~(Win32_Input_State::clickDown | Win32_Input_State::clickHold);
+	       state.input.flags |= Win32_Input_State::clickUp;
 	    }break;
 	 }
       }           

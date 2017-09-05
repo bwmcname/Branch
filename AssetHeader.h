@@ -20,9 +20,11 @@ struct AssetHeader
    static const u32 Button_vert_ID = 17;
    static const u32 Button_frag_ID = 18;
    static const u32 button_ID = 19;
+   static const u32 Default_Instance_vert_ID = 20;
+   static const u32 Default_Instance_frag_ID = 21;
    static const u32 offsetTable[];
    static const u32 sizeTable[];
-   static const u32 entries = 19;
+   static const u32 entries = 21;
 };
-const u32 AssetHeader::offsetTable[] = {0,528,972,1191,1473,1769,2060,2411,2568,2919,3228,3616,4002,4276,4913,5186,5521,5839,5977,};
-const u32 AssetHeader::sizeTable[] = {528,444,219,282,296,291,351,157,351,309,388,386,274,637,273,335,318,138,32784,};
+const u32 AssetHeader::offsetTable[] = {0,528,1061,1369,1651,1947,2327,2767,2924,3364,3673,4150,4536,4899,5536,5809,6144,6502,6632,39416,39996,};
+const u32 AssetHeader::sizeTable[] = {528,533,308,282,296,380,440,157,440,309,477,386,363,637,273,335,358,130,32784,580,383,};

@@ -14,8 +14,10 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
+// REMOVE!!!
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #ifdef DEBUG
 #define assert(x) ((x) ? 0 : *((char *)0) = 'x')
@@ -55,4 +57,5 @@
 #include "vertinc.h"
 #include "Assets.cpp"
 #include "Renderer.cpp"
+#include "Gui.cpp"
 #include "main.cpp"

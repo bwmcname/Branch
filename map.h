@@ -41,6 +41,7 @@ struct VirtualCoordHashTable
    
    void put(VirtualCoord k, u8 flags, u16 ID);
    LocationInfo get(VirtualCoord k);
+   inline void ClearToZero();
 
 private:
    inline u32 IncrementPointer(u32 ptr);

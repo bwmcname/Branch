@@ -14,26 +14,6 @@ struct Camera
    inline void BeginTrackSwitchEase();
 };
 
-struct ShaderProgram
-{
-   GLuint programHandle;
-   GLuint vertexHandle;
-   GLuint fragmentHandle;
-
-   GLint modelUniform;
-   GLint viewUniform;
-   GLint lightPosUniform;
-   GLint MVPUniform;
-   GLint VUniform;
-   GLint MUniform;
-   GLint diffuseUniform;
-   
-   GLint vertexAttrib;
-   GLint normalAttrib;
-
-   GLint texUniform;
-};
-
 struct BBox
 {
    v3 position;
@@ -288,6 +268,8 @@ struct GameState
 
    stbFont bitmapFont;   
 
+   GLuint buttonTex;
+
    enum
    {
       START,      
@@ -309,4 +291,4 @@ struct GameState
 void GameLoop(GameState &state);
 void GameInit(GameState &state);
 void GameEnd(GameState &state);
-
+inline v2 ScreenToClip(v2i input);

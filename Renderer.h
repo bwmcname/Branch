@@ -21,16 +21,35 @@ struct MeshObject
    MeshBuffers handles;
 };
 
-struct TextProgram
+struct ProgramBase
 {
    GLuint programHandle;
    GLuint vertexHandle;
    GLuint fragmentHandle;
+};
 
+struct TextProgram : ProgramBase
+{
    GLint transformUniform;
    GLint texUniform;
    GLint vertexAttrib;
    GLint normalAttrib;   
+};
+
+struct ShaderProgram : ProgramBase
+{
+   GLint modelUniform;
+   GLint viewUniform;
+   GLint lightPosUniform;
+   GLint MVPUniform;
+   GLint VUniform;
+   GLint MUniform;
+   GLint diffuseUniform;
+   
+   GLint vertexAttrib;
+   GLint normalAttrib;
+
+   GLint texUniform;
 };
 
 enum RenderCommand
@@ -55,7 +74,7 @@ struct CommandBase
 
 struct BindProgramCommand : public CommandBase
 {
-   GLuint program;   
+   ProgramBase *program;   
 };
 
 struct DrawMeshCommand : public CommandBase
@@ -73,10 +92,18 @@ struct DrawBreakTextureCommand : public CommandBase
    quat orientation;
 };
 
-// lol
+// trying to replace with instanced renderer
 struct DrawLinearCommand : public CommandBase
 {
    Object obj;
+};
+
+struct LinearInstance
+{
+   v3 position;
+   quat rotation;
+   v3 scale;
+   v3 color;
 };
 
 struct DrawSpeedupCommand : public CommandBase
@@ -109,10 +136,9 @@ struct DrawTextCommand : public CommandBase
 
 struct DrawButtonCommand : public CommandBase
 {
-   v2 clip;
-   v2 dimensions;
-   GLuint textureUp;
-   GLuint textureDown;
+   v2 position;
+   v2 scale;
+   GLuint texture;
 };
 
 /*
@@ -127,21 +153,31 @@ struct Camera;
 
 struct CommandState
 {
-   GLuint currentProgram;
+   ProgramBase *currentProgram;
    u32 count;
+
+   u32 linearInstanceCount;
+   LinearInstance *linearInstances;
+   GLuint instanceMVPBuffer;
+   GLuint instanceColorBuffer;
+   GLuint instanceModelMatrixBuffer;
+   GLuint instanceVao;
 
    CommandBase *first;
    CommandBase *last;
-   void PushBindProgram(GLuint program, StackAllocator *allocator);
+   void PushBindProgram(ProgramBase *base, StackAllocator *allocator);
    void PushDrawMesh(MeshObject mesh, v3 position, v3 scale, quat orientation, StackAllocator *allocator);
    void PushDrawBreakTexture(v3 position, v3 scale, quat orientation, StackAllocator *allocator);
    void PushDrawLinear(Object obj, StackAllocator *allocator);
+   inline void PushLinearInstance(Object obj, v3 color);
+   void RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view);
    void PushDrawSpeedup(Object obj, StackAllocator *allocator);
    void PushDrawBranch(Object obj, StackAllocator *allocator);
    void PushDrawBreak(Object obj, StackAllocator *allocator);
    void PushRenderBlur(StackAllocator *allocator);
    void PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator);
-   void ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer);
+   void PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocator *allocator);
+   void ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer, StackAllocator *allocator);
    void Clean(StackAllocator *allocator);
 };
 
@@ -152,6 +188,7 @@ struct RenderState
    GLuint blurTexture;
    GLuint normalTexture;
    GLuint depthBuffer;
+   GLuint buttonVbo;
 
    GLuint fullScreenProgram;
    GLuint blurProgram;
