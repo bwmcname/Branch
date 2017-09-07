@@ -283,6 +283,8 @@ int OpenglCreate(HWND WindowHandle)
    WinGetGlExtension(glRenderbufferStorage);
    WinGetGlExtension(glDrawBuffers);
    WinGetGlExtension(glDrawArraysInstanced);
+   WinGetGlExtension(glVertexAttribDivisor);
+   WinGetGlExtension(glDisableVertexAttribArray);
 
    glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
    return true;

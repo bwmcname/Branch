@@ -4,8 +4,6 @@
 #define SCREEN_RIGHT 1.0f
 #define SCREEN_LEFT -1.0f
 
-static i32 GlobalActionPressed = 0;
-
 static
 m4 CameraMatrix(Camera &camera)
 {
@@ -1261,6 +1259,12 @@ void GameInit(GameState &state)
    StackAllocator *stack = (StackAllocator *)state.mainArena.base;
 
    state.assetManager.Init(stack);
+
+      // @leak
+   LinearTrack = AllocateMeshObject(80 * 3, stack);
+   BranchTrack = AllocateMeshObject(80 * 3, stack);
+   BreakTrack = AllocateMeshObject(80 * 3, stack);
+
    state.renderer = InitRenderState(stack, state.assetManager);   
 
    state.state = GameState::START;
@@ -1321,11 +1325,6 @@ void GameInit(GameState &state)
    state.fontTextureHandle = UploadTexture(state.tempFontField);
    state.keyState = up;
    Sphere = InitMeshObject("assets\\sphere.brian", stack);
-
-   // @leak
-   LinearTrack = AllocateMeshObject(80 * 3, stack);
-   BranchTrack = AllocateMeshObject(80 * 3, stack);
-   BreakTrack = AllocateMeshObject(80 * 3, stack);
 
    GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
    GlobalBranchCurve = BranchCurve(0, 0,
@@ -1396,8 +1395,7 @@ v2 ScreenToClip(v2i screen)
 void ProcessInput(GameState &state)
 {
    if(state.input.Touched())
-   {
-      GlobalActionPressed = 1;
+   {      
 
       if(state.state == GameState::LOOP)
       {
@@ -1434,10 +1432,6 @@ void ProcessInput(GameState &state)
 	    }
 	 }
       }  
-   }
-   else if(state.input.UnTouched())
-   {
-      GlobalActionPressed = 0;
    }
 }
 

@@ -1,5 +1,9 @@
 #version 330 core
 
+#define DEFAULT_COLOR 0
+#define BRIGHTNESS 1
+
+
 in vec3 norm;
 in vec3 fragPos;
 in vec3 diffuseColor;

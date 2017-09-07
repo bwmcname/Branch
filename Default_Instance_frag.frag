@@ -1,4 +1,5 @@
 #version 330 core
+#include <fraginc.h>
 
 in vec3 norm;
 in vec3 fragPos;

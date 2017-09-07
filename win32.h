@@ -84,6 +84,7 @@ typedef void (*glGenBuffers_t)(GLsizei, GLuint *);
 typedef void (*glBindBuffer_t)(GLenum, GLuint);
 typedef void (*glBufferData_t)(GLenum, GLsizeiptr, const void *, GLenum);
 typedef void (*glEnableVertexAttribArray_t)(GLuint);
+typedef void (*glDisableVertexAttribArray_t)(GLuint);
 typedef void (*glUniform2ui_t)(GLint, GLuint, GLuint);
 typedef void (*glUniform2f_t)(GLint, GLfloat, GLfloat);
 typedef void (*glUniform3fv_t)(GLint, GLsizei, const GLfloat *);
@@ -106,6 +107,7 @@ typedef void (*glRenderbufferStorage_t) (GLenum, GLenum, GLsizei, GLsizei);
 typedef void (*glFramebufferRenderbuffer_t) (GLenum, GLenum, GLenum, GLuint);
 typedef void (*glDrawBuffers_t) (GLsizei, const GLenum *);
 typedef void (*glDrawArraysInstanced_t) (GLenum, GLint, GLsizei, GLsizei);
+typedef void (*glVertexAttribDivisor_t) (GLuint, GLuint);
 
 wglChoosePixelFormatARB_t wglChoosePixelFormatARB;
 glCreateProgram_t glCreateProgram;
@@ -125,6 +127,7 @@ glGenBuffers_t glGenBuffers;
 glBindBuffer_t glBindBuffer;
 glBufferData_t glBufferData;
 glEnableVertexAttribArray_t glEnableVertexAttribArray;
+glDisableVertexAttribArray_t glDisableVertexAttribArray;
 glUniform2ui_t glUniform2ui;
 glUniform2f_t glUniform2f;
 glUniform3fv_t glUniform3fv;
@@ -147,6 +150,7 @@ glRenderbufferStorage_t glRenderbufferStorage;
 glFramebufferRenderbuffer_t glFramebufferRenderbuffer;
 glDrawBuffers_t glDrawBuffers;
 glDrawArraysInstanced_t glDrawArraysInstanced;
+glVertexAttribDivisor_t glVertexAttribDivisor;
 
 HMODULE glDll = 0;
 

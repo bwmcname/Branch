@@ -195,13 +195,19 @@ CommandState InitCommandState(StackAllocator *allocator)
 
    glGenVertexArrays(1, &result.instanceVao);
    glBindVertexArray(result.instanceVao);
-   glBindBuffer(GL_ARRAY_BUFFER, LinearTrack.handles.vbo);
+   
    glEnableVertexAttribArray(VERTEX_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, LinearTrack.handles.vbo);
    glVertexAttribPointer(VERTEX_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
-   glBindBuffer(GL_ARRAY_BUFFER, LinearTrack.handles.nbo);
+   
    glEnableVertexAttribArray(NORMAL_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, LinearTrack.handles.nbo);
    glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
+      
+   glEnableVertexAttribArray(COLOR_INPUT_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceColorBuffer);
+   glVertexAttribPointer(COLOR_INPUT_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+   
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
    glEnableVertexAttribArray(MATRIX1_LOCATION);
    glVertexAttribPointer(MATRIX1_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
@@ -212,7 +218,6 @@ CommandState InitCommandState(StackAllocator *allocator)
    glEnableVertexAttribArray(MATRIX1_LOCATION + 3);
    glVertexAttribPointer(MATRIX1_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
 
-
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceModelMatrixBuffer);
    glEnableVertexAttribArray(MATRIX2_LOCATION);
    glVertexAttribPointer(MATRIX2_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
@@ -222,7 +227,20 @@ CommandState InitCommandState(StackAllocator *allocator)
    glVertexAttribPointer(MATRIX2_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
    glEnableVertexAttribArray(MATRIX2_LOCATION + 3);
    glVertexAttribPointer(MATRIX2_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
-   glBindVertexArray(0);   
+
+   glVertexAttribDivisor(VERTEX_LOCATION, 0);
+   glVertexAttribDivisor(NORMAL_LOCATION, 0);
+   glVertexAttribDivisor(COLOR_INPUT_LOCATION, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+1, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+2, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+3, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION+1, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION+2, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION+3, 1);   
+
+   glBindVertexArray(0);
 
    return result;
 }
@@ -601,16 +619,15 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, result.blurTexture, 0);
    glBindTexture(GL_TEXTURE_2D, 0);
 
-   glGenTextures(1, &result.normalTexture);
-   glBindTexture(GL_TEXTURE_2D, result.normalTexture);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, result.normalTexture, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
+   // glGenTextures(1, &result.normalTexture);
+   // glBindTexture(GL_TEXTURE_2D, result.normalTexture);
+   // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+   // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
+   // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
+   // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, result.normalTexture, 0);
+   // glBindTexture(GL_TEXTURE_2D, 0);
    
    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
-   //glBindFramebuffer(GL_FRAMEBUFFER, 0);   
 
    // init horizontal and vertical blur framebuffers
    glGenFramebuffers(1, &result.horizontalFbo);
@@ -652,7 +669,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
 
    glGenBuffers(1, &result.buttonVbo);
    glBindBuffer(GL_ARRAY_BUFFER, result.buttonVbo);
-   glBufferData(GL_ARRAY_BUFFER, sizeof(v2) * 6, 0, GL_DYNAMIC_DRAW);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(v2) * 6, 0, GL_STATIC_DRAW);
 
    result.commands = InitCommandState(stack);
    
@@ -1247,6 +1264,7 @@ void
 CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer, StackAllocator *allocator)
 {
    CommandBase *current = first;
+   RenderLinearInstances(allocator, lightPos, camera.view);
    for(u32 i = 0; i < count; ++i)
    {
       switch(current->command)
@@ -1299,9 +1317,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 #endif
       }
       current = current->next;
-   }
-
-   RenderLinearInstances(allocator, lightPos, camera.view);
+   }   
 }
 
 void CommandState::RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view)
@@ -1338,9 +1354,10 @@ void CommandState::RenderLinearInstances(StackAllocator *allocator, v3 lightPos,
    glBindBuffer(GL_ARRAY_BUFFER, instanceColorBuffer);
    glBufferSubData(GL_ARRAY_BUFFER, 0, linearInstanceCount * sizeof(v3),  color);
 
-   glBindVertexArray(instanceVao);
-   glDrawArraysInstanced(GL_TRIANGLES, 0, linearInstanceCount, LinearTrack.mesh.vcount);
+   glBindVertexArray(instanceVao);   
+   glDrawArraysInstanced(GL_TRIANGLES, 0, LinearTrack.mesh.vcount, linearInstanceCount);
    glBindVertexArray(0);
+   linearInstanceCount = 0;
 
    allocator->pop();
    allocator->pop();
@@ -1409,7 +1426,6 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
    #endif
 
    state.renderer.commands.PushRenderBlur(allocator);
-   state.renderer.commands.linearInstanceCount = 0;
    END_TIME();
    READ_TIME(state.TrackRenderTime);
 
