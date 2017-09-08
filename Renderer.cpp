@@ -245,7 +245,7 @@ CommandState InitCommandState(StackAllocator *allocator)
    return result;
 }
 
-void
+inline void
 CommandState::PushBindProgram(ProgramBase *program, StackAllocator *allocator)
 {
    if(currentProgram != program)
@@ -271,7 +271,7 @@ CommandState::PushBindProgram(ProgramBase *program, StackAllocator *allocator)
    }
 }
 
-void
+inline void
 CommandState::PushDrawLinear(Object obj, StackAllocator *allocator)
 {
    assert(first);
@@ -295,7 +295,7 @@ void CommandState::PushLinearInstance(Object obj, v3 color)
 					     color};
 }
 
-void
+inline void
 CommandState::PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocator *allocator)
 {
    assert(first);
@@ -311,7 +311,8 @@ CommandState::PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocat
    ++count;
 }
 
-void CommandState::PushDrawSpeedup(Object obj, StackAllocator *allocator)
+inline void
+CommandState::PushDrawSpeedup(Object obj, StackAllocator *allocator)
 {
    assert(first);
    assert(currentProgram);
@@ -324,7 +325,7 @@ void CommandState::PushDrawSpeedup(Object obj, StackAllocator *allocator)
    ++count;
 }
 
-void
+inline void
 CommandState::PushDrawBranch(Object obj, StackAllocator *allocator)
 {
    assert(first);
@@ -338,7 +339,7 @@ CommandState::PushDrawBranch(Object obj, StackAllocator *allocator)
    ++count;
 }
 
-void
+inline void
 CommandState::PushDrawBreak(Object obj, StackAllocator *allocator)
 {
    assert(first);
@@ -353,7 +354,7 @@ CommandState::PushDrawBreak(Object obj, StackAllocator *allocator)
 }
 
 
-void
+inline void
 CommandState::PushDrawMesh(MeshObject mesh, v3 position, v3 scale, quat orientation, StackAllocator *allocator)
 {
    assert(first);
@@ -370,7 +371,7 @@ CommandState::PushDrawMesh(MeshObject mesh, v3 position, v3 scale, quat orientat
    ++count;
 }
 
-void
+inline void
 CommandState::PushDrawBreakTexture(v3 position, v3 scale, quat orientation, StackAllocator *allocator)
 {
    assert(first);
@@ -386,7 +387,7 @@ CommandState::PushDrawBreakTexture(v3 position, v3 scale, quat orientation, Stac
    ++count;
 }
 
-void
+inline void
 CommandState::PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator)
 {
    assert(first);
@@ -411,7 +412,21 @@ CommandState::PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3
    ++count;
 }
 
-void
+inline void
+CommandState::PushRenderLinearInstances(StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawLinearInstancesCommand));
+   DrawLinearInstancesCommand *command = (DrawLinearInstancesCommand *)last->next;
+   command->command = DrawLinearInstances;
+
+   last = command;
+   ++count;
+}
+
+inline void
 CommandState::PushRenderBlur(StackAllocator *allocator)
 {
    assert(first);
@@ -423,7 +438,7 @@ CommandState::PushRenderBlur(StackAllocator *allocator)
    ++count;
 }
 
-void
+inline void
 CommandState::Clean(StackAllocator *allocator)
 {
    while(count--)
@@ -1264,7 +1279,6 @@ void
 CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer, StackAllocator *allocator)
 {
    CommandBase *current = first;
-   RenderLinearInstances(allocator, lightPos, camera.view);
    for(u32 i = 0; i < count; ++i)
    {
       switch(current->command)
@@ -1287,6 +1301,11 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 case DrawBreak:
 	 {
 	    RenderBreak((DrawBreakCommand *)current, camera, lightPos, currentProgram);
+	 }break;
+
+	 case DrawLinearInstances:
+	 {
+	    RenderLinearInstances(allocator, lightPos, camera.view);
 	 }break;
 
 	 case BindProgram:
@@ -1317,10 +1336,14 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 #endif
       }
       current = current->next;
-   }   
+   }
+
+   // if no DrawLinearInstances command was issued, then clean command list
+   linearInstanceCount = 0;
 }
 
-void CommandState::RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view)
+void
+CommandState::RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view)
 {
    glUseProgram(DefaultInstanced.programHandle);
 
@@ -1389,8 +1412,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	 {
 	    BBox box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
-	    {
-	       // state.renderer.commands.PushDrawLinear(state.tracks.elements[i].renderable, allocator);
+	    {	       
 	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, V3(0.0f, 1.0f, 0.0f));
 	    }	    
 	 }	    
@@ -1406,8 +1428,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	 {
 	    BBox box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
-	    {
-	       // state.renderer.commands.PushDrawSpeedup(state.tracks.elements[i].renderable, allocator);
+	    {	       
 	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, V3(1.0f, 0.0f, 0.0f));
 	    }
 	 }
@@ -1418,16 +1439,10 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
       }	 
    }
 
-   #if 0
-   GLuint bufs[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
-   glDrawBuffers(1, bufs);
-   RenderBBoxes(state);
-   glDrawBuffers(3, bufs);
-   #endif
-
-   state.renderer.commands.PushRenderBlur(allocator);
+   state.renderer.commands.PushRenderLinearInstances(allocator);   
    END_TIME();
    READ_TIME(state.TrackRenderTime);
 
    return rendered;
 }
+

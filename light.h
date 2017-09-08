@@ -1,23 +1,6 @@
-#version 330 core
-
-#define DEFAULT_COLOR 0
-#define BRIGHTNESS 1
-
 
 #define light(normal, fragPos, diffuseColor, lightPos, outColor) \
    float distance = length(lightPos - fragPos); \
    vec3 lightDir = normalize(lightPos - fragPos); \
    float power = max(dot(normal, lightDir), 0.0) / distance; \
    outColor = vec4((power * 2.0) * diffuseColor, 1.0) 
-
-
-in vec3 norm;
-in vec3 fragPos;
-in vec3 diffuseColor;
-layout(location=DEFAULT_COLOR) out vec4 color;
-uniform vec3 lightPos;
-
-void main()
-{
-   light(norm, fragPos, diffuseColor, lightPos, color);
-}

@@ -977,8 +977,8 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 
       player.forceDirection = 0;
    }   
-
-   player.renderable.worldPos = GetPositionOnTrack(*currentTrack, player.t);   
+   
+   player.renderable.worldPos = GetPositionOnTrack(*currentTrack, player.t);
 }
 
 inline void
@@ -1057,10 +1057,12 @@ void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier)
       
       i32 j = i * 8;
 
+      // good
       // top left side
       tris[j] = Tri(top1, left1, left2);
       tris[j+1] = Tri(top1, left2, top2);
 
+      
       // top right side
       tris[j+2] = Tri(top1, top2, right1);
       tris[j+3] = Tri(top2, right2, right1);
@@ -1341,7 +1343,7 @@ void GameInit(GameState &state)
 
    InitTextBuffers();
    
-   state.lightPos = state.camera.position;
+   // state.lightPos = state.camera.position;
 
    state.sphereGuy = InitPlayer();
 
@@ -1461,14 +1463,29 @@ void GameLoop(GameState &state)
 	 NewUpdateTrackGraph(state.tracks, *((StackAllocator *)state.mainArena.base), state.sphereGuy, state.camera);
 	 UpdatePlayer(state.sphereGuy, state.tracks, state);
 	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);	 
-	 state.lightPos = state.sphereGuy.renderable.worldPos;
+	 // state.lightPos = state.sphereGuy.renderable.worldPos;
 
 	 glUseProgram(DefaultShader.programHandle); 
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
 	 glUseProgram(0);
 
 	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
-	 
+
+	 static float rotation = 0;
+	 rotation += delta * 0.01f;
+
+	 quat rot1 = Rotation(V3(1.0f, 0.0f, 0.0f), 1.5708f);
+	 quat rot2 = Rotation(V3(0.0f, 0.0f, 1.0f), rotation);
+	 Object temp = {V3(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, state.sphereGuy.renderable.worldPos.z + 5.0f),
+			V3(1.0f, 1.0f, 1.0f),
+			CombineRotations(rot2, rot1)};
+
+	 // state.renderer.commands.PushBindProgram((ProgramBase *)&DefaultShader, (StackAllocator *)state.mainArena.base);
+	 glUseProgram(DefaultShader.programHandle);
+	 // state.renderer.commands.PushDrawLinear(temp, (StackAllocator *)state.mainArena.base);
+	 RenderObject(temp, LinearTrack, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 1.0f, 0.0));
+	 glUseProgram(0);
+
 #ifdef TIMERS
 	 static char framerate[8];
 	 static float time = 120.0f;
@@ -1540,6 +1557,23 @@ void GameLoop(GameState &state)
 	 assert(!"invalid state");
       }
    }
+
+   state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
+
+   static float angle = 0.0f;
+   angle += delta * 0.01f;
+
+   m4 lightTransform = Translate(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, 0.0f) * M4(Rotation(V3(0.0f, 1.0f, 0.0f), angle)) * Translate(5.0f, 0.0f, 0.0f);
+   state.lightPos = (lightTransform * V4(0.0f, 0.0f, 0.0f, 1.0f)).xyz;
+   Object lightRenderable;
+   lightRenderable.worldPos = state.lightPos;
+   lightRenderable.scale = V3(1.0f, 1.0f, 1.0f);
+   lightRenderable.orientation = {0};
+
+   glUseProgram(DefaultShader.programHandle); 
+   RenderObject(lightRenderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
+   glUseProgram(0);
+
    
    state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));   
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));

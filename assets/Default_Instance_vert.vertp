@@ -20,7 +20,8 @@ out vec3 diffuseColor;
 
 void main()
 {
-   norm = normalize(transpose(inverse(mat3(v) * mat3(am))) * normal);
+   // norm = normalize(transpose(inverse(mat3(v) * mat3(am))) * normal);
+   norm = transpose(inverse(mat3(am))) * normal;
    fragPos = (am * vertex).xyz;
    gl_Position = amvp * vertex;
    diffuseColor = aColor;

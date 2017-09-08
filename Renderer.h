@@ -64,6 +64,7 @@ enum RenderCommand
    DrawString, //DrawText is taken :(
    DrawBlur,
    DrawButton,
+   DrawLinearInstances,
 };
 
 struct CommandBase
@@ -141,6 +142,10 @@ struct DrawButtonCommand : public CommandBase
    GLuint texture;
 };
 
+struct DrawLinearInstancesCommand : public CommandBase
+{
+};
+
 /*
 Different command we need.
 BindProgram
@@ -165,20 +170,21 @@ struct CommandState
 
    CommandBase *first;
    CommandBase *last;
-   void PushBindProgram(ProgramBase *base, StackAllocator *allocator);
-   void PushDrawMesh(MeshObject mesh, v3 position, v3 scale, quat orientation, StackAllocator *allocator);
-   void PushDrawBreakTexture(v3 position, v3 scale, quat orientation, StackAllocator *allocator);
-   void PushDrawLinear(Object obj, StackAllocator *allocator);
+   inline void PushBindProgram(ProgramBase *base, StackAllocator *allocator);
+   inline void PushDrawMesh(MeshObject mesh, v3 position, v3 scale, quat orientation, StackAllocator *allocator);
+   inline void PushDrawBreakTexture(v3 position, v3 scale, quat orientation, StackAllocator *allocator);
+   inline void PushDrawLinear(Object obj, StackAllocator *allocator);
    inline void PushLinearInstance(Object obj, v3 color);
+   inline void PushRenderLinearInstances(StackAllocator *allocators);
    void RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view);
-   void PushDrawSpeedup(Object obj, StackAllocator *allocator);
-   void PushDrawBranch(Object obj, StackAllocator *allocator);
-   void PushDrawBreak(Object obj, StackAllocator *allocator);
-   void PushRenderBlur(StackAllocator *allocator);
-   void PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator);
-   void PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocator *allocator);
+   inline void PushDrawSpeedup(Object obj, StackAllocator *allocator);
+   inline void PushDrawBranch(Object obj, StackAllocator *allocator);
+   inline void PushDrawBreak(Object obj, StackAllocator *allocator);
+   inline void PushRenderBlur(StackAllocator *allocator);
+   inline void PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator);
+   inline void PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocator *allocator);
    void ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer, StackAllocator *allocator);
-   void Clean(StackAllocator *allocator);
+   inline void Clean(StackAllocator *allocator);
 };
 
 struct RenderState

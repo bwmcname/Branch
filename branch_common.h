@@ -418,12 +418,61 @@ union quat
    v4 V4;
 
    float e[4];
+
+   __forceinline quat operator*(quat other);
 };
 
 inline static
 quat Quat(float x, float y, float z, float w)
 {
    return {x, y, z, w};
+}
+
+__forceinline
+quat quat::operator*(quat other)
+{
+   return Quat(w * other.x + x * other.w + y * other.z - z * other.y,
+	       w * other.y + y * other.w + z * other.x - x * other.z,
+	       w * other.z + z * other.w + x * other.y - y * other.x,
+	       w * other.w - x * other.x - y * other.y - z * other.z);	       
+}
+
+inline static
+quat Conjugate(quat q)
+{
+   quat r;
+   r.x = -q.x;
+   r.y = -q.y;
+   r.z = -q.z;
+   r.w = -q.w;
+
+   return r;
+}
+
+inline static
+float Magnitude(quat q)
+{
+   return sqrtf(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z);
+}
+
+inline static
+quat Unit(quat q)
+{
+   quat result;
+   float mag = Magnitude(q);
+
+   result.w = q.w / mag;
+   result.x = q.x / mag;
+   result.y = q.y / mag;
+   result.z = q.z / mag;
+
+   return result;
+}
+
+inline static
+quat Inverse(quat q)
+{
+   return Conjugate(Unit(q));
 }
 
 inline static
@@ -442,6 +491,12 @@ quat Rotation(v3 axis, float angle)
    return result;
 }
 
+inline static
+quat CombineRotations(quat apply, quat to)
+{
+   return (to * apply) * Inverse(apply);
+}
+
 struct m4
 {
    union
@@ -450,8 +505,8 @@ struct m4
       float e2[4][4];
    };
 
-   m4 operator*(m4 &b);
-   v4 operator*(v4 &a);
+   m4 operator*(m4 b);
+   v4 operator*(v4 a);
 };
 
 static inline
@@ -598,7 +653,7 @@ m4 Translate(v3 pos)
 }
 
 m4
-m4::operator*(m4 &b)
+m4::operator*(m4 b)
 {
    m4 result;
 
@@ -627,7 +682,7 @@ m4::operator*(m4 &b)
 }
 
 v4
-m4::operator*(v4 &b)
+m4::operator*(v4 b)
 {
    v4 result;
 

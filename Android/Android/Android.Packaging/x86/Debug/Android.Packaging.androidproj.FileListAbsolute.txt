@@ -1,0 +1,12 @@
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Android.apk.recipe
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Android.apk.recipe.merged
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Package\libs\x86\libAndroid.so
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Package\libs\x86\gdbserver
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Package\libs\x86\libgnustl_static.a
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Package\res\values\strings.xml
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Package\AndroidManifest.xml
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Package\project.properties
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Package\build.xml
+W:\branch\Android\Android\Android.Packaging\x86\Debug\FileStringReplace.incremental
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Android.apk
+W:\branch\Android\Android\Android.Packaging\x86\Debug\Android.lastsuccessfuldeploy
