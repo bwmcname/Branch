@@ -89,7 +89,7 @@ static int engine_init_display(struct engine* engine) {
 
 	surface = eglCreateWindowSurface(display, config, engine->app->window, NULL);
 	context = eglCreateContext(display, config, NULL, NULL);
-
+	
 	if (eglMakeCurrent(display, surface, surface, context) == EGL_FALSE) {
 		LOGW("Unable to eglMakeCurrent");
 		return -1;

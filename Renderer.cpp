@@ -4,6 +4,7 @@ static m4 InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT,
 
 static ShaderProgram BreakBlockProgram;
 static ShaderProgram ButtonProgram;
+static ShaderProgram SuperBrightProgram;
 
 static const u32 RectangleAttribCount = 6;
 static GLuint RectangleUVBuffer;
@@ -429,9 +430,6 @@ CommandState::PushRenderLinearInstances(StackAllocator *allocator)
 inline void
 CommandState::PushRenderBlur(StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
-
    last->next = (CommandBase *)allocator->push(sizeof(CommandBase));
    last->next->command = DrawBlur;
    last = last->next;

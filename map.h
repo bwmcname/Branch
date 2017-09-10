@@ -1,9 +1,11 @@
 struct LocationInfo
 {
    enum
-   {
+   {      
       track = 0x1,
       branch = 0x2,
+      breaks = 0x4,
+      speedup = 0x8,
    };
    u8 flags;
    u16 ID;
@@ -16,6 +18,16 @@ struct LocationInfo
    inline u8 hasBranch()
    {
       return flags & branch;
+   }
+
+   inline u8 hasBreak()
+   {
+      return flags & breaks;
+   }
+
+   inline u8 hasSpeedup()
+   {
+      return flags & speedup;
    }
 };
 
@@ -40,7 +52,7 @@ struct VirtualCoordHashTable
    u32 accesses;
    
    void put(VirtualCoord k, u8 flags, u16 ID);
-   LocationInfo get(VirtualCoord k);
+   LocationInfo &get(VirtualCoord k);
    inline void ClearToZero();
 
 private:

@@ -1,0 +1,12 @@
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Android.apk.recipe
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Android.apk.recipe.merged
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Package\libs\armeabi-v7a\libAndroid.so
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Package\libs\armeabi-v7a\gdbserver
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Package\libs\armeabi-v7a\libgnustl_static.a
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Package\res\values\strings.xml
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Package\AndroidManifest.xml
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Package\project.properties
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Package\build.xml
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\FileStringReplace.incremental
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Android.apk
+W:\branch\Android\Android\Android.Packaging\ARM\Debug\Android.lastsuccessfuldeploy

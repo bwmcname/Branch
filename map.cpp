@@ -11,7 +11,6 @@ u32 HashFunction(VirtualCoord key)
    return key.x ^ key.y;
 }
 
-
 void VirtualCoordHashTable::Swap(u32 a, u32 b)
 {
    Element temp = e[a];
@@ -66,7 +65,9 @@ void VirtualCoordHashTable::put(VirtualCoord k, u8 flags, u16 ID)
    e[slot] = {k, value, Element::occupied};
 }
 
-LocationInfo VirtualCoordHashTable::get(VirtualCoord k)
+static LocationInfo nullLocation = {0};
+
+LocationInfo &VirtualCoordHashTable::get(VirtualCoord k)
 {
    ++accesses;
    i32 unbounded = HashFunction(k);
@@ -93,7 +94,7 @@ LocationInfo VirtualCoordHashTable::get(VirtualCoord k)
       ++misses;
    }
    
-   return {0};
+   return nullLocation;
 }
 
 inline void

@@ -526,7 +526,7 @@ void FillGraph(NewTrackGraph &graph)
 	    graph.elements[breakActual] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
 						      &GlobalBreakCurve);
 	    flags |= Attribute::breaks;
-	    graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
+	    graph.taken.put({item.x, item.y}, LocationInfo::track | LocationInfo::breaks, edgeID);
 	 }
 	 else if(roll % 5 == 0 && !(item.flags & NewTrackOrder::dontBranch) &&
 		 !graph.taken.get({item.x+1, item.y+1}).hasBranch() &&
@@ -547,23 +547,35 @@ void FillGraph(NewTrackGraph &graph)
 	    graph.taken.put({item.x, item.y}, LocationInfo::track | LocationInfo::branch, edgeID);
 	    graph.newBranches.Push(edgeID);
 	 }
-	 // if(item.flags & NewTrackOrder::speedup)
-	 // {
-	 //    graph.elements[graph.GetActualID(edgeID)] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
-	 // 							    &GlobalLinearCurve);
-
-	 //    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});
-	 //    flags |= Attribute::speedup;
-	 //    graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
-	 // }
  	 else // push linear track (and speedups)
 	 {
 	    graph.elements[graph.GetActualID(edgeID)] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
 								    &GlobalLinearCurve);
 
-	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});
-	    flags |= Attribute::linear;
-	    graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
+	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});	    
+	    LocationInfo &inFront = graph.taken.get({item.x, item.y+1});
+	    
+	    // Sometimes linear tracks lead up to an already place break.
+	    if(inFront.hasBreak())
+	    {
+	       u16 index = inFront.ID;
+	       u16 takenActual = graph.GetActualID(index);
+	       inFront.flags = LocationInfo::breaks | LocationInfo::track;
+
+	       graph.adjList[takenActual].flags = Attribute::linear | Attribute::reachable;
+	    }
+
+	    LocationInfo &behind = graph.taken.get({item.x, item.y});
+	    if(behind.hasSpeedup())
+	    {
+	       graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
+	       flags |= Attribute::speedup;	       
+	    }
+	    else
+	    {
+	       graph.taken.put({item.x, item.y}, LocationInfo::speedup | LocationInfo::track, edgeID);
+	       flags |= Attribute::linear;
+	    }
 	 }	 
       }
 
@@ -1255,6 +1267,7 @@ GLuint LoadImageIntoTexture(Branch_Image_Header *header)
 
 void GameInit(GameState &state)
 {
+   INIT_LOG();
    state.mainArena.base = AllocateSystemMemory(GIGABYTES(2), &state.mainArena.size);
    state.mainArena.current = state.mainArena.base;
    InitStackAllocator((StackAllocator *)state.mainArena.base);
@@ -1311,6 +1324,9 @@ void GameInit(GameState &state)
    ButtonProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Button_vert_ID),
 					   state.assetManager.LoadStacked(AssetHeader::Button_frag_ID));
 
+   SuperBrightProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Emissive_vert_ID),
+						state.assetManager.LoadStacked(AssetHeader::Emissive_frag_ID)); 
+
    Branch_Image_Header *buttonHeader = LoadImageFromAsset(state.assetManager.LoadStacked(AssetHeader::button_ID));
    state.buttonTex = LoadImageIntoTexture(buttonHeader);
 
@@ -1342,11 +1358,7 @@ void GameInit(GameState &state)
    ScreenVertBuffer = UploadVertices(ScreenVerts, 6, 2);
 
    InitTextBuffers();
-   
-   // state.lightPos = state.camera.position;
-
    state.sphereGuy = InitPlayer();
-
    FillGraph(state.tracks);
 }
 
@@ -1471,19 +1483,6 @@ void GameLoop(GameState &state)
 
 	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
 
-	 static float rotation = 0;
-	 rotation += delta * 0.01f;
-
-	 quat rot1 = Rotation(V3(1.0f, 0.0f, 0.0f), 1.5708f);
-	 quat rot2 = Rotation(V3(0.0f, 0.0f, 1.0f), rotation);
-	 Object temp = {V3(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, state.sphereGuy.renderable.worldPos.z + 5.0f),
-			V3(1.0f, 1.0f, 1.0f),
-			CombineRotations(rot2, rot1)};
-
-	 // state.renderer.commands.PushBindProgram((ProgramBase *)&DefaultShader, (StackAllocator *)state.mainArena.base);
-	 glUseProgram(DefaultShader.programHandle);
-	 // state.renderer.commands.PushDrawLinear(temp, (StackAllocator *)state.mainArena.base);
-	 RenderObject(temp, LinearTrack, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 1.0f, 0.0));
 	 glUseProgram(0);
 
 #ifdef TIMERS
@@ -1524,6 +1523,8 @@ void GameLoop(GameState &state)
 
 	 ResetGraph(state.tracks);
 	 FillGraph(state.tracks);
+
+	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
       }break;
 
       case GameState::START:
@@ -1556,24 +1557,25 @@ void GameLoop(GameState &state)
       {
 	 assert(!"invalid state");
       }
-   }
+   }   
 
-   state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
+   static float time = 0.0f;
+   time += delta * 0.1f;
 
-   static float angle = 0.0f;
-   angle += delta * 0.01f;
-
-   m4 lightTransform = Translate(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, 0.0f) * M4(Rotation(V3(0.0f, 1.0f, 0.0f), angle)) * Translate(5.0f, 0.0f, 0.0f);
-   state.lightPos = (lightTransform * V4(0.0f, 0.0f, 0.0f, 1.0f)).xyz;
+   // m4 lightTransform = Translate(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, 0.0f) * M4(Rotation(V3(0.0f, 1.0f, 0.0f), angle)) * Translate(5.0f, 0.0f, 0.0f);
+   // state.lightPos = (lightTransform * V4(0.0f, 0.0f, 0.0f, 1.0f)).xyz;
+   
+   state.lightPos = V3(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, 5.0f + (sinf(time)));
    Object lightRenderable;
    lightRenderable.worldPos = state.lightPos;
-   lightRenderable.scale = V3(1.0f, 1.0f, 1.0f);
+   lightRenderable.scale = V3(0.3f, 0.3f, 0.3f);
    lightRenderable.orientation = {0};
 
-   glUseProgram(DefaultShader.programHandle); 
-   RenderObject(lightRenderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
+   glUseProgram(SuperBrightProgram.programHandle); 
+   RenderObject(lightRenderable, state.sphereGuy.mesh, &SuperBrightProgram, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
    glUseProgram(0);
 
+   state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
    
    state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));   
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));

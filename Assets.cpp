@@ -44,6 +44,8 @@ AssetManager::LoadStacked(u32 id)
    assets[index].flags |= Asset::InMem;
    assets[index].size = size;
 
+   LOG_WRITE("Asset Loaded: %u\n", id);
+
    return assets[index];
 }
 
@@ -55,6 +57,8 @@ AssetManager::PopStacked(u32 id)
    u32 index = id-1;
    assets[index].flags &= ~Asset::InMem;
    allocator->pop();
+
+   LOG_WRITE("Asset Released: %u\n", id);
 }
 
 Asset &

@@ -39,6 +39,7 @@
 
 #pragma warning(pop)
 
+#include "log.h"
 #include "branch_common.h"
 #include "platformAPI.h"
 #include "AssetHeader.h"
