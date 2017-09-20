@@ -3,4 +3,5 @@
    float distance = length(lightPos - fragPos); \
    vec3 lightDir = normalize(lightPos - fragPos); \
    float power = max(dot(normal, lightDir), 0.0) / distance; \
-   outColor = vec4((power * 2.0) * diffuseColor, 1.0) 
+   vec3 ambient = 0.3 * diffuseColor; \
+   outColor = vec4(((power * 2.0) * diffuseColor) + ambient, 1.0) 

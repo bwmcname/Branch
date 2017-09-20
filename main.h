@@ -5,13 +5,7 @@ struct Camera
 {
    quat orientation;
    v3 position;
-
-   u32 lerping;
-   float t;
-
    m4 view;
-
-   inline void BeginTrackSwitchEase();
 };
 
 struct BBox

@@ -27,11 +27,9 @@ m4 CameraMatrix(Camera &camera)
 static
 void InitCamera(Camera &camera)
 {
-   camera.position = V3(0.0f, 0.0f, 10.0f);
-   camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.0f);
+   camera.position = V3(0.0f, -3.0f, 12.0f);
+   camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.1f);
    camera.view = CameraMatrix(camera);
-   camera.t = 0.0f;
-   camera.lerping = false;
 };
 
 static inline
@@ -650,6 +648,26 @@ void FillGraph(NewTrackGraph &graph)
 	 graph.newBranches.Push(virt);
       }      
    }
+
+   // Fill out speedup tracks
+   // @SLOW
+   for(u32 i = 0; i < graph.capacity; ++i)
+   {
+      if(graph.adjList[i].flags & Attribute::linear)
+      {
+	 for(u16 j = 0; j < graph.adjList[i].ancestorCount; ++i)
+	 {
+	    u16 ancestorID = graph.adjList[i].ancestors[j];
+	    u16 ancestorActual = graph.GetActualID(ancestorID);
+	    if(graph.adjList[ancestorActual].flags & Attribute::speedup)
+	    {
+	       graph.adjList[i].flags &= ~Attribute::linear;
+	       graph.adjList[i].flags |= Attribute::speedup;
+	       break;
+	    }
+	 }
+      }
+   }
 }
 
 void NewSetReachable(NewTrackGraph &graph, StackAllocator &allocator, u16 start)
@@ -950,10 +968,6 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	    {
 	       player.velocity = min(player.velocity + 0.01f, 0.25f);
 	    }
-	    else if(tracks.adjList[actualID].flags & Attribute::branch)
-	    {
-	       state.camera.BeginTrackSwitchEase();
-	    }
 	 }
 	 else
 	 {
@@ -975,10 +989,6 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	    {
 	       player.velocity = min(player.velocity + 0.01f, 0.25f);
 	    }
-	    else if(tracks.adjList[actualID].flags & Attribute::branch)
-	    {
-	       state.camera.BeginTrackSwitchEase();
-	    }
 	 }
 	 else
 	 {
@@ -993,30 +1003,15 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
    player.renderable.worldPos = GetPositionOnTrack(*currentTrack, player.t);
 }
 
-inline void
-Camera::BeginTrackSwitchEase()
-{
-   lerping = true;
-   t = 0.0f;
-}
-
 void UpdateCamera(Camera &camera, Player &player, NewTrackGraph &graph)
 {
    v3 playerPosition = player.renderable.worldPos;
 
-   if(camera.lerping)
-   {
-      camera.t = min(camera.t + (delta * 0.02f), 1.0f);
-      camera.position.x = lerp(camera.position.x, player.renderable.worldPos.x, camera.t);
+   float maxFrom = 13.0f;
+   float from = min(abs(playerPosition.x - camera.position.x), maxFrom);
 
-      if(camera.t >= 1.0f)
-      {
-	 camera.lerping = false;
-      }
-   }
-   else
-   {      
-      camera.position.x = playerPosition.x;
+   if(from > 0.0f) {
+      camera.position.x = lerp(camera.position.x, playerPosition.x, (from / (2.0f * maxFrom)) * delta);
    }
 
    camera.position.y = playerPosition.y - 10.0f;
@@ -1475,7 +1470,7 @@ void GameLoop(GameState &state)
 	 NewUpdateTrackGraph(state.tracks, *((StackAllocator *)state.mainArena.base), state.sphereGuy, state.camera);
 	 UpdatePlayer(state.sphereGuy, state.tracks, state);
 	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);	 
-	 // state.lightPos = state.sphereGuy.renderable.worldPos;
+
 
 	 glUseProgram(DefaultShader.programHandle); 
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
@@ -1561,11 +1556,8 @@ void GameLoop(GameState &state)
 
    static float time = 0.0f;
    time += delta * 0.1f;
-
-   // m4 lightTransform = Translate(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, 0.0f) * M4(Rotation(V3(0.0f, 1.0f, 0.0f), angle)) * Translate(5.0f, 0.0f, 0.0f);
-   // state.lightPos = (lightTransform * V4(0.0f, 0.0f, 0.0f, 1.0f)).xyz;
    
-   state.lightPos = V3(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, 5.0f + (sinf(time)));
+   state.lightPos = V3(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, 5 + smoothstep(0.0f, 1.0f, sinf(time)));
    Object lightRenderable;
    lightRenderable.worldPos = state.lightPos;
    lightRenderable.scale = V3(0.3f, 0.3f, 0.3f);
@@ -1576,7 +1568,6 @@ void GameLoop(GameState &state)
    glUseProgram(0);
 
    state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
-   
    state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));   
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }

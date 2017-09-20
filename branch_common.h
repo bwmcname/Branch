@@ -5,6 +5,9 @@
 
 #define PI 3.14159265358979323846f
 
+#define clamp(x, min, max) (((x) < (min)) ? (min) : (((x) > (max)) ? (max) : (x)))
+#define abs(x) (((x) >= 0) ? (x) : -(x))
+
 #define KILOBYTES(count) (count * 1024ull)
 #define MEGABYTES(count) (count * KILOBYTES(1024ull))
 #define GIGABYTES(count) (count * MEGABYTES(1024ull))
@@ -874,6 +877,13 @@ static inline
 float lerp(float a, float b, float t)
 {
    return (1.0f - t) * a + (t * b);
+}
+
+static inline
+float smoothstep(float a, float b, float t)
+{
+   t = clamp((t - a) / (b - a), 0.0f, 1.0f);
+   return t * t * (3 - 2 * t);
 }
 
 static inline

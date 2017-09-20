@@ -1,3 +1,6 @@
+
+#define NORMAL_COLOR  (V3(0.0f, 1.0f, 1.0f))
+#define SPEEDUP_COLOR (V3(0.0f, 1.0f, 0.0f))
  
 static m4 Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
 static m4 InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
@@ -851,25 +854,25 @@ void RenderObject(Object &obj, MeshObject buffers, ShaderProgram *program, m4 &c
 static
 void RenderBranch(DrawBranchCommand *command, Camera &camera, v3 lightPos, ProgramBase *program)
 {
-   RenderObject(command->obj, BranchTrack, (ShaderProgram *)program, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
+   RenderObject(command->obj, BranchTrack, (ShaderProgram *)program, camera.view, lightPos, NORMAL_COLOR);
 }
 
 static
 void RenderLinear(DrawLinearCommand *command, Camera &camera, v3 lightPos, ProgramBase *current)
 {
-   RenderObject(command->obj, LinearTrack, (ShaderProgram *)current, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
+   RenderObject(command->obj, LinearTrack, (ShaderProgram *)current, camera.view, lightPos, NORMAL_COLOR);
 }
 
 static
 void RenderSpeedup(DrawSpeedupCommand *command, Camera &camera, v3 lightPos, ProgramBase *program)
 {
-   RenderObject(command->obj, LinearTrack, (ShaderProgram *)program, camera.view, lightPos, V3(3.0f, 0.0f, 0.0f));
+   RenderObject(command->obj, LinearTrack, (ShaderProgram *)program, camera.view, lightPos, SPEEDUP_COLOR);
 }
 
 static
 void RenderBreak(DrawBreakCommand *command, Camera &camera, v3 lightPos, ProgramBase *currentProgram)
 {
-   RenderObject(command->obj, BreakTrack, (ShaderProgram *)currentProgram, camera.view, lightPos, V3(0.0f, 1.0f, 0.0f));
+   RenderObject(command->obj, BreakTrack, (ShaderProgram *)currentProgram, camera.view, lightPos, NORMAL_COLOR);
 
    m4 translation = Translate(V3(command->obj.worldPos.x, command->obj.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, command->obj.worldPos.z));
    m4 orientation = M4(Rotation(V3(-1.0f, 0.0f, 0.0f), 1.5708f));
@@ -1411,7 +1414,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	    BBox box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
 	    {	       
-	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, V3(0.0f, 1.0f, 0.0f));
+	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, NORMAL_COLOR);
 	    }	    
 	 }	    
 	 else if(state.tracks.adjList[i].flags & Attribute::breaks)
@@ -1427,7 +1430,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	    BBox box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
 	    {	       
-	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, V3(1.0f, 0.0f, 0.0f));
+	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, SPEEDUP_COLOR);
 	    }
 	 }
 	 else
@@ -1443,4 +1446,3 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 
    return rendered;
 }
-
