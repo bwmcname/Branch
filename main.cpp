@@ -951,10 +951,11 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
    // if the player has just left the current track
    if(player.t > 1.0f)
    {
-      player.t -= 1.0f;      
+      player.t -= 1.0f;
 
-      if((tracks.flags & NewTrackGraph::left) || (currentTrack->flags & Track::branch) == 0 ||
-	 player.forceDirection & Player::Force_Left)
+      if(((tracks.flags & NewTrackGraph::left) && !(tracks.adjList[actualID].flags & Attribute::lockedRight)) ||
+	 (currentTrack->flags & Track::branch) == 0 ||
+	 tracks.adjList[actualID].flags & Attribute::lockedLeft)
       {
 	 u16 trackActual = tracks.GetActualID(player.trackIndex);
 	 if(tracks.adjList[trackActual].hasLeft())
@@ -1275,6 +1276,12 @@ void GameInit(GameState &state)
    BranchTrack = AllocateMeshObject(80 * 3, stack);
    BreakTrack = AllocateMeshObject(80 * 3, stack);
 
+   LeftBranchTrack = AllocateMeshObject(80 * 3, stack);
+   RightBranchTrack = AllocateMeshObject(80 * 3, stack);
+
+   GenerateTrackSegmentVertices(LeftBranchTrack, LEFT_CURVE);
+   GenerateTrackSegmentVertices(RightBranchTrack, RIGHT_CURVE);
+
    state.renderer = InitRenderState(stack, state.assetManager);   
 
    state.state = GameState::START;
@@ -1340,9 +1347,10 @@ void GameInit(GameState &state)
    Sphere = InitMeshObject("assets\\sphere.brian", stack);
 
    GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
-   GlobalBranchCurve = BranchCurve(0, 0,
-				   -1, 1);
+   GlobalBranchCurve = LEFT_CURVE;
    GlobalBreakCurve = BreakCurve();
+   GlobalLeftCurve = LEFT_CURVE;
+   GlobalRightCurve = RIGHT_CURVE;
 
    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
    GenerateTrackSegmentVertices(LinearTrack, GlobalLinearCurve);
@@ -1404,8 +1412,27 @@ v2 ScreenToClip(v2i screen)
 void ProcessInput(GameState &state)
 {
    if(state.input.Touched())
-   {      
+   {
+      u16 actual = state.tracks.GetActualID(state.sphereGuy.trackIndex);
+      if(state.sphereGuy.OnSwitch(state.tracks) &&
+	 !(state.tracks.adjList[actual].flags & Attribute::lockedMask))
+      {	 
+	 Track &on = state.tracks.elements[actual];	 
 
+	 if(state.tracks.flags & NewTrackGraph::left)
+	 {
+	    on.bezier = &GlobalLeftCurve;
+	    LockedBranchTrack = &LeftBranchTrack;
+	    state.tracks.adjList[actual].flags |= Attribute::lockedLeft;
+	 }
+	 else
+	 {
+	    on.bezier = &GlobalRightCurve;
+	    LockedBranchTrack = &RightBranchTrack;
+	    state.tracks.adjList[actual].flags |= Attribute::lockedRight;
+	 }
+      }
+      
       if(state.state == GameState::LOOP)
       {
 	 if(state.sphereGuy.OnSwitch(state.tracks) && state.sphereGuy.t > 0.5f)
@@ -1440,7 +1467,7 @@ void ProcessInput(GameState &state)
 	       state.tracks.switchDelta = 0.0f;
 	    }
 	 }
-      }  
+      }
    }
 }
 

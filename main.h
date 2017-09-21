@@ -37,9 +37,14 @@ union Curve
    v4 lerpables[2];
 };
 
+#define LEFT_CURVE  BranchCurve(0, 0, -1, 1)
+#define RIGHT_CURVE BranchCurve(0, 0, 1, 1)
+
 static Curve GlobalLinearCurve;
 static Curve GlobalBranchCurve;
 static Curve GlobalBreakCurve;
+static Curve GlobalRightCurve;
+static Curve GlobalLeftCurve; 
 
 enum KeyState
 {
@@ -110,7 +115,10 @@ struct Attribute
       breaks = 0x20,
       branch = 0x40,
       linear = 0x80,
-      speedup = 0x100
+      speedup = 0x100,
+      lockedLeft = 0x200,
+      lockedRight = 0x400,
+      lockedMask = 0x600
    };
 
    u16 id;

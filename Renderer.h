@@ -60,6 +60,7 @@ enum RenderCommand
    DrawLinear,
    DrawSpeedup,
    DrawBranch,
+   DrawLockedBranch,
    DrawBreak,
    DrawString, //DrawText is taken :(
    DrawBlur,
@@ -142,6 +143,11 @@ struct DrawButtonCommand : public CommandBase
    GLuint texture;
 };
 
+struct DrawLockedBranchCommand : public DrawBranchCommand
+{
+   MeshObject *mesh;
+};
+
 struct DrawLinearInstancesCommand : public CommandBase
 {
 };
@@ -179,6 +185,7 @@ struct CommandState
    void RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view);
    inline void PushDrawSpeedup(Object obj, StackAllocator *allocator);
    inline void PushDrawBranch(Object obj, StackAllocator *allocator);
+   inline void PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocator *allocator);
    inline void PushDrawBreak(Object obj, StackAllocator *allocator);
    inline void PushRenderBlur(StackAllocator *allocator);
    inline void PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator);

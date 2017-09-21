@@ -19,6 +19,9 @@ static MeshObject Sphere;
 static MeshObject LinearTrack;
 static MeshObject BranchTrack;
 static MeshObject BreakTrack;
+static MeshObject LeftBranchTrack;
+static MeshObject RightBranchTrack;
+static MeshObject *LockedBranchTrack;
 
 static ShaderProgram DefaultShader;
 static ShaderProgram DefaultInstanced;
@@ -339,6 +342,21 @@ CommandState::PushDrawBranch(Object obj, StackAllocator *allocator)
    DrawBranchCommand *command = (DrawBranchCommand *)last->next;
    command->command = DrawBranch;
    command->obj = obj;
+   last = command;
+   ++count;
+}
+
+inline void
+CommandState::PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocator *allocator)
+{
+   assert(first);
+   assert(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawLockedBranchCommand));
+   DrawLockedBranchCommand *command = (DrawLockedBranchCommand *)last->next;
+   command->command = DrawLockedBranch;
+   command->obj = obj;
+   command->mesh = buffers;
    last = command;
    ++count;
 }
@@ -852,9 +870,9 @@ void RenderObject(Object &obj, MeshObject buffers, ShaderProgram *program, m4 &c
 }
 
 static
-void RenderBranch(DrawBranchCommand *command, Camera &camera, v3 lightPos, ProgramBase *program)
+void RenderBranch(DrawBranchCommand *command, Camera &camera, v3 lightPos, ProgramBase *program, MeshObject buffers = BranchTrack)
 {
-   RenderObject(command->obj, BranchTrack, (ShaderProgram *)program, camera.view, lightPos, NORMAL_COLOR);
+   RenderObject(command->obj, buffers, (ShaderProgram *)program, camera.view, lightPos, NORMAL_COLOR);
 }
 
 static
@@ -1329,6 +1347,12 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 {
 	    RenderButton((DrawButtonCommand *)current, renderer.buttonVbo, currentProgram->programHandle);
 	 }break;
+
+	 case DrawLockedBranch:
+	 {
+	    RenderBranch((DrawLockedBranchCommand *)current, camera, lightPos, currentProgram,
+			 *((DrawLockedBranchCommand *)current)->mesh);
+	 }break;
 #ifdef DEBUG
 	 default:
 	 {
@@ -1394,7 +1418,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
    i32 rendered = 0;
 
    TrackFrustum frustum = CreateTrackFrustum(InfiniteProjection * state.camera.view);
- 
+
    state.renderer.commands.PushBindProgram(&DefaultShader, allocator);
    for(i32 i = 0; i < state.tracks.capacity; ++i)
    {	    
@@ -1406,7 +1430,14 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	    BBox box = BranchBBox(GlobalBranchCurve, state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
 	    {
-	       state.renderer.commands.PushDrawBranch(state.tracks.elements[i].renderable, allocator);
+	       if(state.tracks.adjList[i].flags & Attribute::lockedMask)
+	       {
+		  state.renderer.commands.PushDrawLockedBranch(state.tracks.elements[i].renderable, LockedBranchTrack, allocator);
+	       }
+	       else
+	       {
+		  state.renderer.commands.PushDrawBranch(state.tracks.elements[i].renderable, allocator);
+	       }
 	    }
 	 }
 	 else if(state.tracks.adjList[i].flags & Attribute::linear)
