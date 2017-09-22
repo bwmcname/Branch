@@ -564,6 +564,36 @@ m4 transpose(m4 m)
 }
 
 static
+m3 M3(quat q)
+{
+   float xx = 2.0f * q.x * q.x;
+   float yy = 2.0f * q.y * q.y;
+   float zz = 2.0f * q.z * q.z;
+   float xy = 2.0f * q.x * q.y;
+   float wz = 2.0f * q.w * q.z;
+   float xz = 2.0f * q.x * q.z;
+   float wy = 2.0f * q.w * q.y;
+   float yz = 2.0f * q.y * q.z;
+   float wx = 2.0f * q.w * q.x;
+
+   m3 result;
+
+   result.e[0] = 1 - yy - zz;
+   result.e[1] = xy - wz;
+   result.e[2] = xz + wy;
+
+   result.e[3] = xy + wz;
+   result.e[4] = 1.0f - xx - zz;
+   result.e[5] = yz - wx;
+
+   result.e[6] = xz - wy;
+   result.e[7] = yz + wx;
+   result.e[8] = 1.0f - xx - yy;
+
+   return result;
+}
+
+static
 m4 M4(quat q)
 {
    float xx = 2.0f * q.x * q.x;

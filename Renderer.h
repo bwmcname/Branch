@@ -206,6 +206,7 @@ struct RenderState
 
    GLuint fullScreenProgram;
    GLuint blurProgram;
+   GLuint outlineProgram;
 
    GLuint horizontalFbo;
    GLuint horizontalColorBuffer;

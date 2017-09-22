@@ -4,24 +4,26 @@
 #define SCREEN_RIGHT 1.0f
 #define SCREEN_LEFT -1.0f
 
-static
-m4 CameraMatrix(Camera &camera)
+void
+Camera::UpdateView()
 {
    //calculate the inverse by computing the conjugate
    //the normal of a quaternion is the same as the unit for a v4
    quat inverse;
-   inverse.V4 = unit(camera.orientation.V4);
+   inverse.V4 = unit(orientation.V4);
    inverse.x = -inverse.x;
    inverse.y = -inverse.y;
    inverse.z = -inverse.z;
    inverse.w = -inverse.w;
 
    m4 rotation = M4(inverse);
-   m4 translation = Translate(-camera.position.x,
-			      -camera.position.y,
-			      -camera.position.z);
+   m4 translation = Translate(-position.x,
+			      -position.y,
+			      -position.z);
 
-   return rotation * translation;
+   view = rotation * translation;
+
+   forward = M3(orientation) * V3(0.0f, 0.0f, -1.0f);
 }
 
 static
@@ -29,7 +31,7 @@ void InitCamera(Camera &camera)
 {
    camera.position = V3(0.0f, -3.0f, 12.0f);
    camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.1f);
-   camera.view = CameraMatrix(camera);
+   camera.UpdateView();
 };
 
 static inline
@@ -1020,7 +1022,7 @@ void UpdateCamera(Camera &camera, Player &player, NewTrackGraph &graph)
    }
 
    camera.position.y = playerPosition.y - 10.0f;
-   camera.view = CameraMatrix(camera);
+   camera.UpdateView();
 }
 
 static __forceinline

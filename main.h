@@ -6,6 +6,9 @@ struct Camera
    quat orientation;
    v3 position;
    m4 view;
+   v3 forward;
+
+   void UpdateView();
 };
 
 struct BBox

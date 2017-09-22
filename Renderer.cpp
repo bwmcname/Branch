@@ -697,6 +697,14 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    }
 
    {
+      result.outlineProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
+							    assetManager.LoadStacked(AssetHeader::outline_frag_ID));
+
+      assetManager.PopStacked(AssetHeader::ScreenTexture_vert_ID);
+      assetManager.PopStacked(AssetHeader::outline_frag_ID);
+   }
+
+   {
       result.blurProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ApplyBlur_vert_ID),
 							 assetManager.LoadStacked(AssetHeader::ApplyBlur_frag_ID));
 
@@ -806,7 +814,7 @@ void BeginFrame(GameState &state)
    RenderBackground(state);
 }
 
-void RenderBlur(RenderState &renderer)
+void RenderBlur(RenderState &renderer, Camera &camera)
 {
    glBindFramebuffer(GL_FRAMEBUFFER, renderer.horizontalFbo);
    
@@ -870,6 +878,25 @@ void RenderBlur(RenderState &renderer)
    glEnable(GL_FRAMEBUFFER_SRGB);
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glDisable(GL_FRAMEBUFFER_SRGB);
+
+   // maybe a good opportunity to do this at the same time as the blur
+   glUseProgram(renderer.outlineProgram);
+
+   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
+   glEnableVertexAttribArray(UV_LOCATION);
+   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glActiveTexture(GL_TEXTURE0);
+   glBindTexture(GL_TEXTURE_2D, renderer.normalTexture);
+   glUniform1i(glGetUniformLocation(renderer.outlineProgram, "normals"), 0);
+   glUniform3fv(glGetUniformLocation(renderer.outlineProgram, "forward"), 1, camera.forward.e);
+   glDisable(GL_DEPTH_TEST);
+   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
+   glEnable(GL_DEPTH_TEST);
 }
 
 void RenderMesh(ShaderProgram *p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
@@ -1379,7 +1406,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
 	 case DrawBlur:
 	 {
-	    RenderBlur(renderer);
+	    RenderBlur(renderer, camera);
 	 }break;
 
 	 case DrawButton:
