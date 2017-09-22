@@ -632,6 +632,9 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    glGenFramebuffers(1, &result.fbo);
    glBindFramebuffer(GL_FRAMEBUFFER, result.fbo);
 
+   GLuint attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};   
+   glDrawBuffers(3, attachments);
+
    glGenTextures(1, &result.mainColorTexture);
    glBindTexture(GL_TEXTURE_2D, result.mainColorTexture);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -653,13 +656,13 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, result.blurTexture, 0);
    glBindTexture(GL_TEXTURE_2D, 0);
 
-   // glGenTextures(1, &result.normalTexture);
-   // glBindTexture(GL_TEXTURE_2D, result.normalTexture);
-   // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
-   // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
-   // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, result.normalTexture, 0);
-   // glBindTexture(GL_TEXTURE_2D, 0);
+   glGenTextures(1, &result.normalTexture);
+   glBindTexture(GL_TEXTURE_2D, result.normalTexture);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, result.normalTexture, 0);
+   glBindTexture(GL_TEXTURE_2D, 0);
    
    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 
@@ -737,6 +740,39 @@ v3 *Normals(float *vertices, i32 count, StackAllocator *allocator)
    return Normals(vertices, buffer, count);
 }
 
+// n^2 operation
+// flat normals -> smooth normals
+v3 *SmoothNormals(v3 *verts, v3 *normals, v3 *outNormals, u32 count, StackAllocator *alloc)
+{
+   float *times = (float *)alloc->push(count * sizeof(float));
+
+   for(u32 i = 0; i < count; ++i)
+   {
+      times[i] = 1.0f;
+      outNormals[i] = normals[i];
+   }
+
+   for(u32 i = 0; i < count; ++i)
+   {
+      for(u32 j = i+1; j < count; ++j)
+      {
+	 if(Approx(verts[i], verts[j]))
+	 {
+	    outNormals[i] = outNormals[i] + normals[j];
+	    outNormals[j] = outNormals[j] + normals[i];
+	    times[i] += 1.0f;
+	    times[j] += 1.0f;
+	 }
+      }
+   }
+
+   for(u16 i = 0; i < count; ++i) {
+      outNormals[i] = outNormals[i] / times[i];
+   }
+
+   alloc->pop();
+   return outNormals;
+}
 
 static inline
 m3 TextProjection(float screenWidth, float screenHeight)
@@ -764,8 +800,6 @@ void RenderBackground(GameState &state)
 void BeginFrame(GameState &state)
 {
    glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo);
-   GLuint attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};   
-   glDrawBuffers(3, attachments);
 
    // @we really only need to clear the color of the secondary buffer, can we do this?
    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);   
@@ -1223,7 +1257,12 @@ MeshObject InitMeshObject(char *filename, StackAllocator *allocator)
 
    mesh.vcount = *((i32 *)buffer);
    mesh.vertices = (float *)(buffer + 4);
-   mesh.normals = Normals(mesh.vertices, mesh.vcount, allocator);
+   mesh.normals = (v3 *)allocator->push(sizeof(v3) * mesh.vcount);
+   v3 *flat_normals = (v3 *)allocator->push(sizeof(v3) * mesh.vcount);
+   flat_normals = Normals(mesh.vertices, flat_normals, mesh.vcount);   
+   SmoothNormals((v3 *)mesh.vertices, flat_normals, mesh.normals, mesh.vcount, allocator);
+   allocator->pop();
+
    MeshBuffers handles = UploadStaticMesh(mesh.vertices, mesh.normals, mesh.vcount, 3);
    allocator->pop(); // pop normals
    allocator->pop(); // pop file

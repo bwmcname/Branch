@@ -29,6 +29,11 @@ typedef uint64_t u64;
 typedef int8_t b8;
 typedef int32_t b32;
 
+
+// For us, a float with a difference
+// of < 0.00001 are the same numbers
+#define F_EPSILON 0.00001f
+
 struct stbFont
 {
    u8 *rawFile; // @: We might not have to keep this around.
@@ -94,8 +99,15 @@ union v3
 
    inline v3 operator-(v3 b);
    inline v3 operator*(float b);
+   inline v3 operator/(float b);
    inline v3 operator+(v3 b);
 };
+
+inline
+v3 v3::operator/(float b)
+{
+   return {x / b, y / b, z / b};
+}
 
 inline
 v3 v3::operator+(v3 b)
@@ -132,6 +144,17 @@ v3 operator*(float c, v3 v)
 {
    return V3(c * v.x, c * v.y, c * v.z);
 }
+
+static inline bool
+Approx(v3 a, v3 b)
+{
+   float x = abs(a.x - b.x);
+   float y = abs(a.y - b.y);
+   float z = abs(a.z - b.z);
+
+   return x < F_EPSILON && y < F_EPSILON && z < F_EPSILON;
+}
+
 
 union v3i
 {

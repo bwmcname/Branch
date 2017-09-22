@@ -10,5 +10,4 @@ out vec4 color;
 void main()
 { 
    color = vec4(texture2D(blur, out_uv).rgb + texture2D(scene, out_uv).rgb, 1.0);
-   //color = vec4(texture2D(blur, out_uv).rgb, 1.0);
 }

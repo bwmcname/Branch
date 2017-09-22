@@ -1,4 +1,5 @@
 
+// flat normal mesh
 struct Mesh
 {
    v3i faces;
@@ -198,6 +199,7 @@ struct RenderState
 {
    GLuint fbo;
    GLuint mainColorTexture;
+   GLuint normalTexture;
    GLuint blurTexture;
    GLuint depthBuffer;
    GLuint buttonVbo;

@@ -530,7 +530,11 @@ void FillGraph(NewTrackGraph &graph)
 		 !graph.taken.get({item.x+1, item.y+1}).hasBranch() &&
 		 !graph.taken.get({item.x-1, item.y+1}).hasBranch() &&
 		 !graph.taken.get({item.x+1, item.y-1}).hasBranch() &&
-		 !graph.taken.get({item.x-1, item.y-1}).hasBranch())
+		 !graph.taken.get({item.x-1, item.y-1}).hasBranch() &&
+		 !graph.taken.get({item.x-1, item.y-2}).hasBranch() &&
+		 !graph.taken.get({item.x+1, item.y-2}).hasBranch() &&
+		 !graph.taken.get({item.x+1, item.y+2}).hasBranch() &&
+		 !graph.taken.get({item.x-1, item.y+2}).hasBranch())
 	 {
 	    u16 branchActual = graph.GetActualID(edgeID);
 	    graph.elements[branchActual] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
@@ -1033,7 +1037,7 @@ v2 Tangent(Curve c, float t)
 }
 
 static
-void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier)
+void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier, StackAllocator *alloc)
 {
    // 10 segments, 8 tris per segment --- 80 tries   
    tri *tris = (tri *)meshBuffers.mesh.vertices;
@@ -1089,20 +1093,25 @@ void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier)
       bottom1 = bottom2;
    }
 
-   v3 *normals = meshBuffers.mesh.normals;
-   Normals((float *)tris, (v3 *)normals, 80 * 3); // 3 vertices per tri
+   v3 *flat_normals = (v3 *)alloc->push(80 * 3 * sizeof(v3));
+   v3 *smooth_normals = (v3 *)alloc->push(80 * 3 * sizeof(v3));
+   Normals((float *)tris, flat_normals, 80 * 3); // 3 vertices per tri
+   SmoothNormals((v3 *)tris, flat_normals, smooth_normals, 80 * 3, alloc);   
    
    glBindBuffer(GL_ARRAY_BUFFER, meshBuffers.handles.vbo);
    glBufferSubData(GL_ARRAY_BUFFER, 0, (sizeof(tri) * 80), (void *)tris);
    glBindBuffer(GL_ARRAY_BUFFER, meshBuffers.handles.nbo);
-   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(tri) * 80, (void *)normals);
-   glBindBuffer(GL_ARRAY_BUFFER, 0);   
+   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(tri) * 80, (void *)smooth_normals);
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+   alloc->pop();
+   alloc->pop();
 }
 
 static inline
-void GenerateTrackSegmentVertices(Track &track, MeshObject meshBuffers)
+void GenerateTrackSegmentVertices(Track &track, MeshObject meshBuffers, StackAllocator *allocator)
 {
-   GenerateTrackSegmentVertices(meshBuffers, *track.bezier);   
+   GenerateTrackSegmentVertices(meshBuffers, *track.bezier, allocator);
 }
 
 GLuint UploadDistanceTexture(Image &image)
@@ -1225,7 +1234,7 @@ Player InitPlayer()
 				       V3(1.0f, 1.0f, 1.0f),
 				       Quat(1.0f, 0.0f, 0.0f, 0.0f));
 
-   result.mesh = Sphere;   
+   result.mesh = Sphere;
    result.velocity = 0.15f;
    result.t = 0.0f;   
    result.trackIndex = 0;
@@ -1279,8 +1288,8 @@ void GameInit(GameState &state)
    LeftBranchTrack = AllocateMeshObject(80 * 3, stack);
    RightBranchTrack = AllocateMeshObject(80 * 3, stack);
 
-   GenerateTrackSegmentVertices(LeftBranchTrack, LEFT_CURVE);
-   GenerateTrackSegmentVertices(RightBranchTrack, RIGHT_CURVE);
+   GenerateTrackSegmentVertices(LeftBranchTrack, LEFT_CURVE, stack);
+   GenerateTrackSegmentVertices(RightBranchTrack, RIGHT_CURVE, stack);
 
    state.renderer = InitRenderState(stack, state.assetManager);   
 
@@ -1352,9 +1361,9 @@ void GameInit(GameState &state)
    GlobalLeftCurve = LEFT_CURVE;
    GlobalRightCurve = RIGHT_CURVE;
 
-   GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
-   GenerateTrackSegmentVertices(LinearTrack, GlobalLinearCurve);
-   GenerateTrackSegmentVertices(BreakTrack, GlobalBreakCurve);
+   GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, stack);
+   GenerateTrackSegmentVertices(LinearTrack, GlobalLinearCurve, stack);
+   GenerateTrackSegmentVertices(BreakTrack, GlobalBreakCurve, stack);
 
    RectangleUVBuffer = UploadVertices(RectangleUVs, 6, 2);
    RectangleVertBuffer = UploadVertices(RectangleVerts, 6, 2);
@@ -1486,7 +1495,7 @@ void GameLoop(GameState &state)
 	    state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
 
 	    GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, state.tracks.switchDelta);
-	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
+	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
 
 	    if(state.tracks.switchDelta == 1.0f)
 	    {
@@ -1563,7 +1572,7 @@ void GameLoop(GameState &state)
 	    GlobalBranchCurve = BranchCurve(0, 0,
 					    -1, 1);
 
-	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve);
+	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
 	 }
 
 	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
