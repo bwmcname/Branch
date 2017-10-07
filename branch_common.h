@@ -8,6 +8,9 @@
 #define clamp(x, min, max) (((x) < (min)) ? (min) : (((x) > (max)) ? (max) : (x)))
 #define abs(x) (((x) >= 0) ? (x) : -(x))
 
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) < (b)) ? (b) : (a))
+
 #define KILOBYTES(count) (count * 1024ull)
 #define MEGABYTES(count) (count * KILOBYTES(1024ull))
 #define GIGABYTES(count) (count * MEGABYTES(1024ull))
@@ -445,7 +448,7 @@ union quat
 
    float e[4];
 
-   __forceinline quat operator*(quat other);
+   B_INLINE quat operator*(quat other);
 };
 
 inline static
@@ -454,7 +457,7 @@ quat Quat(float x, float y, float z, float w)
    return {x, y, z, w};
 }
 
-__forceinline
+B_INLINE
 quat quat::operator*(quat other)
 {
    return Quat(w * other.x + x * other.w + y * other.z - z * other.y,

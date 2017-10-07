@@ -1,6 +1,12 @@
 
 #define ErrorDialogue(str) MessageBoxEx(0, (LPCTSTR)(str), 0, MB_ICONEXCLAMATION, 0)
 
+static
+u64 bclock()
+{
+   return __rdtsc();
+}
+
 // only read right now
 static
 HANDLE Win32FileOpen(char *filename)
@@ -286,8 +292,35 @@ int OpenglCreate(HWND WindowHandle)
    WinGetGlExtension(glVertexAttribDivisor);
    WinGetGlExtension(glDisableVertexAttribArray);
 
-   glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
+   glClearColor(1.0f, 0.0f, 0.0f, 0.0f);   
    return true;
+}
+
+THREAD_FUNC TestThread(THREAD_PARAMS)
+{
+   return THREAD_RETURN_VALUE;
+}
+
+void WinInitializeThreads(GameState &state, StackAllocator *allocator)
+{
+   SYSTEM_INFO info;
+   GetSystemInfo(&info);
+
+   state.threadCount = info.dwNumberOfProcessors;
+   state.threadPool = (Thread *)allocator->push(sizeof(Thread));
+
+   for(i32 i = 0; i < state.threadCount; ++i)
+   {
+      HANDLE handle = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)TestThread, 0, 0, 0);
+      if(handle)
+      {
+	 state.threadPool[i] = {handle};
+      }
+      else
+      {
+	 assert(0);
+      }
+   }
 }
 
 int CALLBACK WinMain(HINSTANCE Instance,
@@ -475,6 +508,12 @@ int CALLBACK WinMain(HINSTANCE Instance,
       float target = 16666.7f;
 
       delta = time / target;
+   }
+
+   // delete threads
+   for(i32 i = 0; i < state.threadCount; ++i)
+   {
+      CloseHandle(state.threadPool[i].handle);
    }
 
    OnWindowsExit();

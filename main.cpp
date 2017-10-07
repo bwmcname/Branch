@@ -63,7 +63,7 @@ Curve InvertX(Curve c)
    return result;
 }
 
-static __forceinline
+static B_INLINE
 Curve lerp(Curve a, Curve b, float t)
 {
    Curve result;
@@ -72,7 +72,7 @@ Curve lerp(Curve a, Curve b, float t)
    return result;
 }
 
-static __forceinline
+static B_INLINE
 v2 CubicBezier(v2 p1, v2 p2, v2 p3, v2 p4, float t)
 {
    // uses the quicker non matrix form of the equation
@@ -90,7 +90,7 @@ v2 CubicBezier(v2 p1, v2 p2, v2 p3, v2 p4, float t)
    return result;
 }
 
-static __forceinline
+static B_INLINE
 v2 CubicBezier(Curve c, float t)
 {
    return CubicBezier(c.p1, c.p2, c.p3, c.p4, t);
@@ -122,7 +122,7 @@ inline i32 CircularQueue<T>::IncrementIndex(i32 index)
 template <typename T>
 void CircularQueue<T>::Push(T e)
 {
-   assert(size <= max);
+   B_ASSERT(size <= max);
 
    elements[end] = e;
    ++size;
@@ -132,7 +132,7 @@ void CircularQueue<T>::Push(T e)
 template <typename T>
 T CircularQueue<T>::Pop()
 {
-   assert(size > 0);
+   B_ASSERT(size > 0);
 
    T pop = elements[begin];
    --size;
@@ -260,14 +260,14 @@ Attribute::removeEdge(u16 edgeID)
 inline void
 Attribute::addAncestor(u16 ancestorID)
 {
-   assert(ancestorCount < 3);
+   B_ASSERT(ancestorCount < 3);
    ancestors[ancestorCount++] = ancestorID;   
 }
 
 inline void
 Attribute::removeAncestor(u16 ancestorID)
 {
-   assert(ancestorCount > 0);
+   B_ASSERT(ancestorCount > 0);
 
    u16 i;
    for(i = 0; i < ancestorCount; ++i)
@@ -511,7 +511,7 @@ void FillGraph(NewTrackGraph &graph)
       else
       {	
 	 edgeID = graph.availableIDs.Pop();
-	 assert(graph.adjList[graph.IDtable[edgeID]].flags & Attribute::unused);
+	 B_ASSERT(graph.adjList[graph.IDtable[edgeID]].flags & Attribute::unused);
 	 
 	 v2 position = VirtualToReal(item.x, item.y);
 	 long roll = rand();	 
@@ -587,7 +587,7 @@ void FillGraph(NewTrackGraph &graph)
       u16 actualAncestor = graph.GetActualID(ancestorID);
       u16 actualEdge = graph.GetActualID(edgeID);
 
-      assert(actualEdge != actualAncestor);
+      B_ASSERT(actualEdge != actualAncestor);
 
       if(item.flags & NewTrackOrder::left)
       {
@@ -913,7 +913,7 @@ Object SpherePrimitive(v3 position, v3 scale, quat orientation)
    return result;
 }
 
-static __forceinline
+static B_INLINE
 v3 GetPositionOnTrack(Track &track, float t)
 {   
    v2 displacement = CubicBezier(*track.bezier, t);
@@ -1025,7 +1025,7 @@ void UpdateCamera(Camera &camera, Player &player, NewTrackGraph &graph)
    camera.UpdateView();
 }
 
-static __forceinline
+static B_INLINE
 v2 Tangent(Curve c, float t)
 {
    v2 result;
@@ -1075,7 +1075,6 @@ void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier, StackAl
       // top left side
       tris[j] = Tri(top1, left1, left2);
       tris[j+1] = Tri(top1, left2, top2);
-
       
       // top right side
       tris[j+2] = Tri(top1, top2, right1);
@@ -1156,7 +1155,7 @@ GLuint UploadTexture(Image &image, i32 channels = 4)
       }break;
       default:
       {
-	 assert(!"unsupported channel format");
+	 B_ASSERT(!"unsupported channel format");
 	 type = 0; // shut the compiler up
       }
    }
@@ -1200,7 +1199,7 @@ stbFont InitFont_stb(char *fontFile, u32 width, u32 height, StackAllocator *allo
    
    if(!stbtt_InitFont(&result.info, result.rawFile, 0))
    {
-      assert(false);
+      B_ASSERT(false);
    }
 
    stbtt_pack_context pack;
@@ -1252,14 +1251,6 @@ Branch_Image_Header *LoadImageFromAsset(Asset &asset)
    return (Branch_Image_Header *)asset.mem;
 }
 
-Branch_Image_Header *LoadImageFromFileName(char *name, StackAllocator *allocator)
-{
-   size_t fileSize = FileSize(name);
-   Branch_Image_Header *buffer = (Branch_Image_Header *)allocator->push(fileSize);
-   WinReadFile(name, (u8 *)buffer, fileSize);
-   return buffer;
-}
-
 GLuint LoadImageIntoTexture(Branch_Image_Header *header)
 {
    GLuint result;
@@ -1282,16 +1273,12 @@ void GameInit(GameState &state)
 
    state.assetManager.Init(stack);
 
-      // @leak
+   // @leak
    LinearTrack = AllocateMeshObject(80 * 3, stack);
    BranchTrack = AllocateMeshObject(80 * 3, stack);
    BreakTrack = AllocateMeshObject(80 * 3, stack);
-
    LeftBranchTrack = AllocateMeshObject(80 * 3, stack);
    RightBranchTrack = AllocateMeshObject(80 * 3, stack);
-
-   GenerateTrackSegmentVertices(LeftBranchTrack, LEFT_CURVE, stack);
-   GenerateTrackSegmentVertices(RightBranchTrack, RIGHT_CURVE, stack);
 
    state.renderer = InitRenderState(stack, state.assetManager);   
 
@@ -1299,9 +1286,9 @@ void GameInit(GameState &state)
 
    state.tracks = InitNewTrackGraph(stack);
 
-   assert(state.mainArena.base);
+   B_ASSERT(state.mainArena.base);
 
-   srand((u32)__rdtsc());
+   srand((u32)bclock());
 
    glEnable(GL_BLEND);
    glEnable(GL_DEPTH_TEST);
@@ -1366,6 +1353,8 @@ void GameInit(GameState &state)
    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, stack);
    GenerateTrackSegmentVertices(LinearTrack, GlobalLinearCurve, stack);
    GenerateTrackSegmentVertices(BreakTrack, GlobalBreakCurve, stack);
+   GenerateTrackSegmentVertices(LeftBranchTrack, LEFT_CURVE, stack);
+   GenerateTrackSegmentVertices(RightBranchTrack, RIGHT_CURVE, stack);
 
    RectangleUVBuffer = UploadVertices(RectangleUVs, 6, 2);
    RectangleVertBuffer = UploadVertices(RectangleVerts, 6, 2);
@@ -1376,7 +1365,7 @@ void GameInit(GameState &state)
    FillGraph(state.tracks);
 }
 
-template <typename int_type> static __forceinline
+template <typename int_type> static B_INLINE
 int_type IntToString(char *dest, int_type num)
 {
    static char table[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
@@ -1507,8 +1496,7 @@ void GameLoop(GameState &state)
 
 	 NewUpdateTrackGraph(state.tracks, *((StackAllocator *)state.mainArena.base), state.sphereGuy, state.camera);
 	 UpdatePlayer(state.sphereGuy, state.tracks, state);
-	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);	 
-
+	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);
 
 	 glUseProgram(DefaultShader.programHandle); 
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
@@ -1518,7 +1506,6 @@ void GameLoop(GameState &state)
 
 	 glUseProgram(0);
 
-#ifdef TIMERS
 	 static char framerate[8];
 	 static float time = 120.0f;
 	 time += delta;
@@ -1528,22 +1515,13 @@ void GameLoop(GameState &state)
 	    time = 0.0f;
 	    count = IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
 	 }
+	 
 	 // RenderText_stb(framerate, count, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
-	 state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));	 
-	 static char renderTimeSting[19];
-	 size_t renderTimeCount = IntToString(renderTimeSting, state.TrackRenderTime);
+	 // state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));	 
+	 // static char renderTimeSting[19];
+	 // size_t renderTimeCount = IntToString(renderTimeSting, state.TrackRenderTime);
 	 // RenderText_stb(renderTimeSting, (u32)renderTimeCount, -0.8f, 0.75f, state.bitmapFont, state.bitmapFontProgram);
-	 state.renderer.commands.PushRenderText(renderTimeSting, (u32)renderTimeCount, V2(-0.8f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
-
-#ifdef DEBUG
-#pragma warning(push, 0)
-	 v2 clip = ScreenToClip(state.input.TouchPoint());
-	 static char PointString[32];
-	 sprintf_s(PointString, 32, "Mouse: (%f, %f)", clip.x, clip.y);
-	 state.renderer.commands.PushRenderText(PointString, (u32)strlen(PointString), V2(-0.8f, 0.7f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
-#pragma warning(pop)
-#endif
-#endif	 
+	 // state.renderer.commands.PushRenderText(renderTimeSting, (u32)renderTimeCount, V2(-0.8f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
       }break;
 
       case GameState::RESET:
@@ -1580,15 +1558,11 @@ void GameLoop(GameState &state)
 	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
 	 
 	 state.renderer.commands.PushDrawButton(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.buttonTex, ((StackAllocator *)state.mainArena.base));
-      }break;      
-      
-      case GameState::INITGAME:
-      {
       }break;
       
       default:
       {
-	 assert(!"invalid state");
+	 B_ASSERT(!"invalid state");
       }
    }   
 
@@ -1631,12 +1605,14 @@ void GameEnd(GameState &state)
 
 #ifdef DEBUG
 
+// only good on creation
+// ID's after sorting do not necassarily = i
 void
 NewTrackGraph::VerifyIDTables()
 {
    for(u16 i = 0; i < 1024; ++i)
    {
-      assert(IDtable[reverseIDtable[i]] == i);
+      B_ASSERT(IDtable[reverseIDtable[i]] == i);
    }
 }
 
@@ -1664,7 +1640,7 @@ NewTrackGraph::VerifyGraph()
 		     }
 		  }
 
-		  assert(good);
+		  B_ASSERT(good);
 	       }
 	    
 	       if(!adjList[i].hasRight())
@@ -1680,54 +1656,16 @@ NewTrackGraph::VerifyGraph()
 		     }
 		  }
 
-		  assert(good);
+		  B_ASSERT(good);
 	       }
 	    }
 	 }
 	 else if(adjList[i].flags & Attribute::breaks)
 	 {
-	    assert(!(adjList[i].flags & (Attribute::hasLeftEdge | Attribute::hasRightEdge)));
+	    B_ASSERT(!(adjList[i].flags & (Attribute::hasLeftEdge | Attribute::hasRightEdge)));
 
 	    // There really isn't a good way to test if there is a branch behind a break,
 	    // since tracks are removed once they become invisible
-	    /*
-	    i32 good = 0;
-	    for(u32 j = 0; j < adjList[i].ancestorCount; ++j)
-	    {
-	       u16 ancestor = IDtable[adjList[i].ancestors[j]];
-	       if(adjList[ancestor].flags & Attribute::branch)
-	       {
-		  good = 1;
-
-		  u16 leftEdge = IDtable[adjList[ancestor].leftEdge()];
-		  u16 rightEdge = IDtable[adjList[ancestor].rightEdge()];
-
-		  if(adjList[ancestor].hasLeft())
-		  {
-		     if(leftEdge == i)
-		     {
-			if(adjList[ancestor].hasRight())
-			{
-			   assert(!(adjList[rightEdge].flags & Attribute::breaks));
-			}
-		     }	    		     
-		  }
-		  else if(adjList[ancestor].hasRight())
-		  {
-		     if(rightEdge == i)
-		     {
-			if(adjList[ancestor].hasLeft())
-			{
-			   assert(!(adjList[leftEdge].flags & Attribute::breaks));
-			}
-		     }
-		  }
-		  break;
-	       }
-	    }
-
-	    assert(good);
-	    */
 	 }
 	 else if(adjList[i].flags & Attribute::linear ||
 		 adjList[i].flags & Attribute::speedup)
@@ -1744,15 +1682,16 @@ NewTrackGraph::VerifyGraph()
 		  }
 	       }
 
-	       assert(good);
+	       B_ASSERT(good);
 	    }
 	 }
 	 else
 	 {
-	    assert(0);
+	    B_ASSERT(0);
 	 }
       }
    }
 }
+// shut the compiler up about sprintf
 #endif
-#pragma warning(push, 0) // to shut up the compiler about sprintf_s
+#pragma warning(push, 0)

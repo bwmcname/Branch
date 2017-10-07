@@ -5,6 +5,20 @@ enum ShaderType
    Fragment,
 };
 
+
+union AssetData
+{
+   struct ShaderData
+   {
+      ShaderType type;
+
+      void ReleaseFromMemory();
+      void ReleaseFromGpu();
+   };
+
+   ShaderData shader;
+};
+
 struct Asset
 {   
    enum
@@ -20,18 +34,7 @@ struct Asset
 
    inline void SetPermanent();
 
-   union
-   {
-      struct ShaderData
-      {
-	 ShaderType type;
-
-	 void ReleaseFromMemory();
-	 void ReleaseFromGpu();
-      };
-
-      ShaderData shader;
-   };
+   AssetData data;
 };
 
 struct AssetManager
@@ -52,7 +55,7 @@ struct AssetManager
    Asset &Get(u32 id);
    
    void Init(StackAllocator *_allocator);
-   inline void AssetManager::SetOnGpu(u32 id);
+   inline void SetOnGpu(u32 id);
 };
 
 /*

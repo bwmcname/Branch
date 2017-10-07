@@ -10,8 +10,8 @@ in vec2 uv;
 out vec4 color;
 
 void main()
-{
+{  
    vec3 normal = texture2D(normals, uv).rgb;
-   if(abs(dot(normal, forward)) < F_EPSILON) color = vec4(0.1, 0.1, 0.1, 1.0);
+   if(abs(dot(forward, normal)) < F_EPSILON) color = vec4(0.1, 0.1, 0.1, 1.0);
    else discard;
 }

@@ -18,7 +18,7 @@ out vec3 fragPos;
 
 void main()
 {
-   norm = transpose(inverse(mat3(m))) * normal;
+   norm = (transpose(inverse(m)) * vec4(normal, 0.0)).xyz;
    fragPos = (m * vertex).xyz;
    gl_Position = mvp * vertex;
 }

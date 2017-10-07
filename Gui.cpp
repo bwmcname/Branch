@@ -7,7 +7,7 @@ enum ButtonUpdateResult
    None,
 };
 
-__forceinline
+static B_INLINE
 bool TestPoint(v2 boxPosition, v2 boxScale, v2 point)
 {
    return point.x < (boxPosition.x + boxScale.x) && point.x > (boxPosition.x - boxScale.x) &&

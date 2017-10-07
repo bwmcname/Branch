@@ -37,6 +37,12 @@
 #*
 .#*
 
+# Android Stuff
+*.apk
+Key.bat
+AndroidKey
+AndroidKeyStore
+
 # Visual Studio
 *.sln
 *.db

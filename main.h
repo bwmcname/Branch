@@ -275,6 +275,8 @@ struct GameState
 
    GLuint buttonTex;
 
+   i32 threadCount;   
+
    enum
    {
       START,      

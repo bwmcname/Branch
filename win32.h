@@ -14,7 +14,6 @@
 #define WGL_SAMPLE_BUFFERS_ARB 0x2041
 #define WGL_SAMPLES_ARB 0x2042
 
-
 #define GL_VERTEX_SHADER 0x8B31
 #define GL_FRAGMENT_SHADER 0x8B30
 
@@ -161,7 +160,6 @@ HMODULE glDll = 0;
       ErrorDialogue("name not found");		\
    }						
 
-
 static size_t WinFileSize(char *);
 static b32 WinReadFile(char *, u8 *, size_t, size_t offset = 0);
 static u8 *Win32AllocateMemory(size_t, size_t*);
@@ -170,3 +168,12 @@ static b32 WinReadFileHandle(HANDLE FileHandle, u8 *buffer, size_t fileSize, siz
 static HANDLE Win32FileOpen(char *filename);
 
 struct GameState;
+
+struct Thread
+{
+   HANDLE handle;   
+};
+
+#define THREAD_FUNC DWORD WINAPI
+#define THREAD_PARAMS LPVOID param
+#define THREAD_RETURN_VALUE 0

@@ -281,8 +281,8 @@ CommandState::PushBindProgram(ProgramBase *program, StackAllocator *allocator)
 inline void
 CommandState::PushDrawLinear(Object obj, StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
 
    last->next = (CommandBase *)allocator->push(sizeof(DrawLinearCommand));
    DrawLinearCommand *command = (DrawLinearCommand *)last->next;
@@ -295,7 +295,7 @@ CommandState::PushDrawLinear(Object obj, StackAllocator *allocator)
 inline
 void CommandState::PushLinearInstance(Object obj, v3 color)
 {
-   assert(linearInstanceCount < 1024);
+   B_ASSERT(linearInstanceCount < 1024);
    linearInstances[linearInstanceCount++] = {obj.worldPos,
 					     obj.orientation,
 					     obj.scale,
@@ -305,8 +305,8 @@ void CommandState::PushLinearInstance(Object obj, v3 color)
 inline void
 CommandState::PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
 
    last->next = (CommandBase *)allocator->push(sizeof(DrawButtonCommand));
    DrawButtonCommand *command = (DrawButtonCommand *)last->next;
@@ -321,8 +321,8 @@ CommandState::PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocat
 inline void
 CommandState::PushDrawSpeedup(Object obj, StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
 
    last->next = (CommandBase *)allocator->push(sizeof(DrawSpeedupCommand));
    DrawSpeedupCommand *command = (DrawSpeedupCommand *)last->next;
@@ -335,8 +335,8 @@ CommandState::PushDrawSpeedup(Object obj, StackAllocator *allocator)
 inline void
 CommandState::PushDrawBranch(Object obj, StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
 
    last->next = (CommandBase *)allocator->push(sizeof(DrawBranchCommand));
    DrawBranchCommand *command = (DrawBranchCommand *)last->next;
@@ -349,8 +349,8 @@ CommandState::PushDrawBranch(Object obj, StackAllocator *allocator)
 inline void
 CommandState::PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
 
    last->next = (CommandBase *)allocator->push(sizeof(DrawLockedBranchCommand));
    DrawLockedBranchCommand *command = (DrawLockedBranchCommand *)last->next;
@@ -364,8 +364,8 @@ CommandState::PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocat
 inline void
 CommandState::PushDrawBreak(Object obj, StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
 
    last->next = (CommandBase *)allocator->push(sizeof(DrawBreakCommand));
    DrawBreakCommand *command = (DrawBreakCommand *)last->next;
@@ -379,8 +379,8 @@ CommandState::PushDrawBreak(Object obj, StackAllocator *allocator)
 inline void
 CommandState::PushDrawMesh(MeshObject mesh, v3 position, v3 scale, quat orientation, StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
 
    last->next = (CommandBase *)allocator->push(sizeof(DrawMeshCommand));
    DrawMeshCommand *command = (DrawMeshCommand *)last->next;
@@ -396,8 +396,8 @@ CommandState::PushDrawMesh(MeshObject mesh, v3 position, v3 scale, quat orientat
 inline void
 CommandState::PushDrawBreakTexture(v3 position, v3 scale, quat orientation, StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
 
    last->next = (CommandBase *)allocator->push(sizeof(DrawBreakTextureCommand));
    DrawBreakTextureCommand *command = (DrawBreakTextureCommand *)last->next;
@@ -412,8 +412,8 @@ CommandState::PushDrawBreakTexture(v3 position, v3 scale, quat orientation, Stac
 inline void
 CommandState::PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
 
    last->next = (CommandBase *)allocator->push(sizeof(DrawTextCommand) + textSize);
    DrawTextCommand *command = (DrawTextCommand *)last->next;
@@ -437,8 +437,8 @@ CommandState::PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3
 inline void
 CommandState::PushRenderLinearInstances(StackAllocator *allocator)
 {
-   assert(first);
-   assert(currentProgram);
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
 
    last->next = (CommandBase *)allocator->push(sizeof(DrawLinearInstancesCommand));
    DrawLinearInstancesCommand *command = (DrawLinearInstancesCommand *)last->next;
@@ -506,7 +506,7 @@ MakeProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize
    return result;
 }
 
-static __forceinline
+static B_INLINE
 GLuint CreateSimpleProgramFromAssets(Asset &vert, Asset &frag)
 {
    GLuint dummyVert;
@@ -537,7 +537,7 @@ CreateProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsi
    return result;
 }
 
-static __forceinline
+static B_INLINE
 ShaderProgram CreateProgramFromAssets(Asset &vert, Asset &frag)
 {
    ShaderProgram result = CreateProgram((char *)vert.mem, vert.size,
@@ -594,7 +594,7 @@ CreateTextProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t
    return result;
 }
 
-static __forceinline
+static B_INLINE
 TextProgram CreateTextProgramFromAssets(Asset &vert, Asset &frag)
 {
    TextProgram result = CreateTextProgram((char *)vert.mem, vert.size,
@@ -664,7 +664,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, result.normalTexture, 0);
    glBindTexture(GL_TEXTURE_2D, 0);
    
-   assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+   B_ASSERT(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 
    // init horizontal and vertical blur framebuffers
    glGenFramebuffers(1, &result.horizontalFbo);
@@ -875,11 +875,20 @@ void RenderBlur(RenderState &renderer, Camera &camera)
    glUniform1i(glGetUniformLocation(renderer.blurProgram, "scene"), 0);
    glUniform1i(glGetUniformLocation(renderer.blurProgram, "blur"), 1);
 
+   // temporary to get Android build to work
+   // @Support non SRGB framebuffers!
+   #ifdef WIN32_BUILD
    glEnable(GL_FRAMEBUFFER_SRGB);
+   #endif
+   
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
+
+   #ifdef WIN32_BUILD
    glDisable(GL_FRAMEBUFFER_SRGB);
+   #endif
 
    // maybe a good opportunity to do this at the same time as the blur
+   /*
    glUseProgram(renderer.outlineProgram);
 
    glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
@@ -897,6 +906,7 @@ void RenderBlur(RenderState &renderer, Camera &camera)
    glDisable(GL_DEPTH_TEST);
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glEnable(GL_DEPTH_TEST);
+   */
 }
 
 void RenderMesh(ShaderProgram *p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
@@ -1018,7 +1028,7 @@ void RenderTexture(GLuint texture, ShaderProgram &program)
 {
    glUseProgram(program.programHandle);
 
-   assert(glIsTexture(texture));
+   B_ASSERT(glIsTexture(texture));
 
    glBindBuffer(GL_ARRAY_BUFFER, RectangleVertBuffer);
    glEnableVertexAttribArray(VERTEX_LOCATION);
@@ -1108,7 +1118,6 @@ static
 void DistanceRenderText(char *string, u32 length, float xpos, float ypos, float scale, FontData &font,
 			TextProgram p, GLuint textureMap)
 {
-
    xpos = ((xpos + 1.0f) * 0.5f) * (float)SCREEN_WIDTH;
    ypos = ((ypos + 1.0f) * 0.5f) * (float)SCREEN_HEIGHT;
 
@@ -1145,7 +1154,7 @@ void DistanceRenderText(char *string, u32 length, float xpos, float ypos, float 
 	    break;
 	 }
 
-	 assert(j != font.count-1);
+	 B_ASSERT(j != font.count-1);
       }
 
       //@ 0.001 to prevent texture bleeding
@@ -1422,7 +1431,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 #ifdef DEBUG
 	 default:
 	 {
-	    assert(false);
+	    B_ASSERT(false);
 	 }break;
 #endif
       }
@@ -1532,7 +1541,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	 }
 	 else
 	 {
-	    assert(false);
+	    B_ASSERT(false);
 	 }	 
       }	 
    }

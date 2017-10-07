@@ -56,4 +56,63 @@ struct Win32_Input_State
 
 typedef Win32_Input_State Platform_Input_State;
 
+#elif ANDROID_BUILD
+
+static AAsset *AndroidFileOpen(char *filename);
+static size_t AndroidFileSize(char *filename);
+
+#define FileSize(fileName) AndroidFileSize(fileName)
+#define FileRead(string, dest, size)
+#define FileReadHandle(handle, dest, size, offset)
+#define AllocateSystemMemory(size, dest) AndroidAllocateSystemMemory(size, dest)
+#define FreeSystemMemory(mem)
+#define FileOpen(fileName) AndroidFileOpen(fileName)
+
+typedef AAsset * BranchFileHandle;
+
+struct Android_Input_State
+{
+   enum : u32
+   {
+      touched = 0x1,
+      released = 0x2,
+      held = 0x3
+   };
+
+   u32 flags;
+   v2i touchCoords;
+
+   inline u32 Touched()
+   {
+      return flags & touched;
+   }
+
+   inline u32 UnTouched()
+   {
+      return flags & released;
+   }
+
+   inline v2i TouchPoint()
+   {
+      return touchCoords;
+   }
+
+   inline u32 Escaped()
+   {
+      return 0;
+   }
+
+   inline u32 UnEscaped()
+   {
+      return 0;
+   }
+
+   inline u32 EscapeHeld()
+   {
+      return 0;
+   }
+};
+
+typedef Android_Input_State Platform_Input_State;
+
 #endif
