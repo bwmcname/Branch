@@ -25,9 +25,10 @@ struct AssetHeader
    static const u32 Emissive_vert_ID = 22;
    static const u32 Emissive_frag_ID = 23;
    static const u32 outline_frag_ID = 24;
+   static const u32 sphere_ID = 25;
    static const u32 offsetTable[];
    static const u32 sizeTable[];
-   static const u32 entries = 24;
+   static const u32 entries = 25;
 };
-const u32 AssetHeader::offsetTable[] = {0,810,1361,1697,1980,2276,2684,3152,3309,3777,4086,4591,5075,5466,6103,6377,6713,7099,7229,40013,40733,41549,41976,42360,};
-const u32 AssetHeader::sizeTable[] = {810,551,336,283,296,408,468,157,468,309,505,484,391,637,274,336,386,130,32784,720,816,427,384,365,};
+const u32 AssetHeader::offsetTable[] = {0,810,1361,1697,1980,2276,2684,3152,3309,3777,4086,4591,5075,5466,6103,6377,6713,7099,7229,40013,40733,41549,41976,42360,42725,};
+const u32 AssetHeader::sizeTable[] = {810,551,336,283,296,408,468,157,468,309,505,484,391,637,274,336,386,130,32784,720,816,427,384,365,11524,};

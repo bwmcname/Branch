@@ -263,10 +263,6 @@ struct GameState
 
    v3 lightPos;
 
-   Image tempFontField; // @delete!
-   FontData tempFontData; // @delete!
-   GLuint fontTextureHandle; //@delete!  
-
    TextProgram bitmapFontProgram;
    TextProgram fontProgram;
    GLuint backgroundProgram;

@@ -301,13 +301,14 @@ THREAD_FUNC TestThread(THREAD_PARAMS)
    return THREAD_RETURN_VALUE;
 }
 
+#if 0
 void WinInitializeThreads(GameState &state, StackAllocator *allocator)
 {
    SYSTEM_INFO info;
    GetSystemInfo(&info);
 
-   state.threadCount = info.dwNumberOfProcessors;
-   state.threadPool = (Thread *)allocator->push(sizeof(Thread));
+   // state.threadCount = info.dwNumberOfProcessors;
+   // state.threadPool = (Thread *)allocator->push(sizeof(Thread));
 
    for(i32 i = 0; i < state.threadCount; ++i)
    {
@@ -322,6 +323,7 @@ void WinInitializeThreads(GameState &state, StackAllocator *allocator)
       }
    }
 }
+#endif
 
 int CALLBACK WinMain(HINSTANCE Instance,
 		     HINSTANCE Previous,
@@ -510,11 +512,13 @@ int CALLBACK WinMain(HINSTANCE Instance,
       delta = time / target;
    }
 
+   /*
    // delete threads
    for(i32 i = 0; i < state.threadCount; ++i)
    {
       CloseHandle(state.threadPool[i].handle);
    }
+   */
 
    OnWindowsExit();
    GameEnd(state);

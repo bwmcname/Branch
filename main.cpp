@@ -1336,13 +1336,12 @@ void GameInit(GameState &state)
    stack->pop();
    stack->pop();
 
-   state.tempFontField = LoadImageFile("distance_field.bi", stack);   
-   state.tempFontData = LoadFontFile("font_data.bf", stack);
+   
    state.bitmapFont = InitFont_stb("c:/Windows/Fonts/arial.ttf", 1024, 1024,stack);
    
-   state.fontTextureHandle = UploadTexture(state.tempFontField);
    state.keyState = up;
-   Sphere = InitMeshObject("assets\\sphere.brian", stack);
+   Sphere = InitMeshObject(state.assetManager.LoadStacked(AssetHeader::sphere_ID).mem, stack);
+   
 
    GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
    GlobalBranchCurve = LEFT_CURVE;
@@ -1516,8 +1515,8 @@ void GameLoop(GameState &state)
 	    count = IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
 	 }
 	 
-	 // RenderText_stb(framerate, count, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
-	 // state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));	 
+	 RenderText_stb(framerate, count, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
+	 state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));	 
 	 // static char renderTimeSting[19];
 	 // size_t renderTimeCount = IntToString(renderTimeSting, state.TrackRenderTime);
 	 // RenderText_stb(renderTimeSting, (u32)renderTimeCount, -0.8f, 0.75f, state.bitmapFont, state.bitmapFontProgram);
@@ -1599,8 +1598,6 @@ void GameEnd(GameState &state)
    glDeleteBuffers(1, &BranchTrack.handles.nbo);
    glDeleteBuffers(1, &LinearTrack.handles.nbo);
    glDeleteBuffers(1, &BranchTrack.handles.vbo);
-
-   glDeleteTextures(1, &state.fontTextureHandle);
 }
 
 #ifdef DEBUG

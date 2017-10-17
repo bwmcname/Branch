@@ -30,7 +30,7 @@
 struct saved_state {
 	float angle;
 	int32_t x;
-	int32_t y;
+	int32_t y;n
 };
 
 /**
@@ -44,7 +44,7 @@ struct engine {
 	ASensorEventQueue* sensorEventQueue;
 
 	int animating;
-	EGLDisplay display;
+   EGLDisplay display;
 	EGLSurface surface;
 	EGLContext context;
 	int32_t width;
@@ -64,12 +64,13 @@ static int engine_init_display(struct engine* engine) {
 	* component compatible with on-screen windows
 	*/
 	const EGLint attribs[] = {
-		EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+	   EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
 		EGL_BLUE_SIZE, 8,
 		EGL_GREEN_SIZE, 8,
 		EGL_RED_SIZE, 8,
 		EGL_NONE
 	};
+
 	EGLint w, h, format;
 	EGLint numConfigs;
 	EGLConfig config;

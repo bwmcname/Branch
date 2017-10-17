@@ -8,8 +8,8 @@
       The earliest version of android that supports opengles3 is 18,
       The earliest version that supports aarch64 is 21
   -->
-    <uses-sdk android:minSdkVersion="14" />
-    <application android:label="Branch" android:hasCode="false" android:debuggable="true">
+    <uses-sdk android:minSdkVersion="21" />
+    <application android:label="Branch" android:hasCode="false">
         <activity android:name="android.app.NativeActivity"
                   android:label="@string/app_name"
                   android:configChanges="orientation|keyboardHidden">

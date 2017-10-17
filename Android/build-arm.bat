@@ -12,16 +12,17 @@ set INCLUDES="C:\\Program Files\\android-ndk-r15c\\platforms\\android-21\\arch-a
 
 del Branch.apk
 
+copy ..\assets\Packed.assets assets\assets\
+
 call ndk-build NDK_DEBUG=1 APP_BUILD_SCRIPT=Android.mk NDK_APPLICATION_MK=Application.mk NDK_LIBS_OUT=output\lib\lib
 
-aapt package -v -m -J output -f -M AndroidManifest.xml -S res -I %SDK%\platforms\android-21\android.jar -F BranchUnsigned.apk output\lib
-rem aapt add BranchUnsigned.apk libs\arm64-v8a\libnative-activity.so
+aapt package --debug-mode -m -J output -f -M AndroidManifest.xml -S res -I %SDK%\platforms\android-21\android.jar -F BranchUnsigned.apk output\lib assets
 
 call SignAPK
 
 del BranchUnsigned.apk
 
-%ZIPALIGN% -v 4 BranchUnaligned.apk Branch.apk
+%ZIPALIGN% 4 BranchUnaligned.apk Branch.apk
 
 del BranchUnaligned.apk
 

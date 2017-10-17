@@ -1283,12 +1283,8 @@ MeshObject AllocateMeshObject(i32 vertexCount, StackAllocator *allocator)
 }
 
 // Inits Mesh Object and uploads to vertex buffers
-MeshObject InitMeshObject(char *filename, StackAllocator *allocator)
+MeshObject InitMeshObject(u8 *buffer, StackAllocator *allocator)
 {
-   size_t size = FileSize(filename);
-   u8 *buffer = (u8 *)allocator->push(size);
-   FileRead(filename, buffer, size);
-
    Mesh mesh;
 
    mesh.vcount = *((i32 *)buffer);

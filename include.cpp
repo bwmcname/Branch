@@ -9,13 +9,13 @@
 
 #ifdef ANDROID_BUILD
 #include <GLES3/gl3.h>
+#include <android/native_activity.h>
 #include <android/asset_manager.h>
 #include <unistd.h>
 #include <android/log.h>
-#include <android/native_activity.h>
-
-#include "Android/android_native_app_glue.c"
-#include "Android/android_native_app_glue.h"
+#include <stdlib.h>
+#include <pthread.h>
+#include <EGL/egl.h>
 #endif
 
 #ifdef __GNUC__
@@ -67,6 +67,7 @@
 #include "main.h"
 
 #ifdef ANDROID_BUILD
+#include "Android/Branch_Android.h"
 #include "Android/Android.cpp"
 #endif
 

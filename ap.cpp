@@ -14,11 +14,10 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-// vertex mask
+// vertex bits
 #define VERTEX 1
 #define UV (1 << 1)
 #define NORMAL (1 << 2)
-
 
 FILE *OpenForRead(char *file)
 {
@@ -201,6 +200,12 @@ char *LoadIntoBuffer(char *fileName, size_t *outSize)
    fread(buffer, *outSize, 1, file);
    fclose(file);
    return buffer;
+}
+
+static void
+PackFont(char *fontFile, u32 width, u32 height)
+{
+   
 }
 
 MeshBuilder ParseObj(char *obj, size_t size)

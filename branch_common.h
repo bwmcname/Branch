@@ -33,7 +33,7 @@ typedef int8_t b8;
 typedef int32_t b32;
 
 
-// For us, a float with a difference
+// For us, floats with a difference
 // of < 0.00001 are the same numbers
 #define F_EPSILON 0.00001f
 
