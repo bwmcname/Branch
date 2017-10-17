@@ -527,7 +527,53 @@ void Shader(char *filename)
    free(buffer);
 }
 
+int Font(char *fontName, u32 width, u32 height, float pointSize)
+{
+   FILE *font = OpenForRead(fontName);
+   size_t size = FileSize(font);
+   u8 *fileBuffer = (u8 *)malloc(size);
+   fread(fileBuffer, size, 1, font);
 
+   stbtt_fontinfo info;
+   stbtt_packedchar *chars;
+
+   if(!stbtt_InitFont(&info, fileBuffer, 0))
+   {
+      free(fileBuffer);
+      return false;
+   }
+
+   u32 charOffset = sizeof(PackedFont);
+   u32 imageOffset = sizeof(PackedFont) + (sizeof(stbtt_packedchar) * 256);
+   u32 outFileSize = sizeof(PackedFont) + (sizeof(stbtt_packedchar) * 256) + (width * height);
+   u8 *outBuffer = (u8 *)malloc(outFileSize);
+   PackedFont *result = (PackedFont *)outBuffer;
+   
+   stbtt_pack_context pack;
+   stbtt_PackBegin(&pack, outBuffer + imageOffset, width, height, width, 1, 0);
+   stbtt_PackSetOversampling(&pack, 4, 4);
+   stbtt_PackFontRange(&pack, fileBuffer, 0, STBTT_POINT_SIZE(pointSize), 0, 256,
+		       (stbtt_packedchar *)(outBuffer + charOffset));
+   stbtt_PackEnd(&pack);
+   
+   result->width = width;
+   result->height = height;
+   result->imageOffset = imageOffset;
+
+   printf("width:      %d\n", result->width);
+   printf("height:     %d\n", result->height);
+   printf("point_size: %f\n", pointSize);
+
+   FILE *outFont = OpenForWrite("Assets/wow.font");
+   fwrite(result, outFileSize, 1, outFont);
+
+   free(outBuffer);
+   free(fileBuffer);
+   
+   return true;
+}
+
+/*
 int Font(char *imgFileName, char *dataFileName)
 {
    FILE *dataFile = OpenForRead(dataFileName);
@@ -663,7 +709,7 @@ int BFont(char *filename, int point, int width, int height)
 
    return 1;
 }
-
+*/
 void Image(char *fileName)
 {
    size_t size;
@@ -833,9 +879,9 @@ void main(int argc, char **argv)
 
 	    if(font == 0)
 	    {
-	       if(argc == 4)
+	       if(argc == 6)
 	       {
-		  if(!Font(argv[2], argv[3]))
+		  if(!Font(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5])))
 		  {
 		     printf("unable to finish font processing");
 		  }
@@ -845,56 +891,36 @@ void main(int argc, char **argv)
 		  printf("Incorrect argument format\n");
 	       }
 	    }
-	    else
-	    {
-	       int bfont = strcmp(parse, "bfont");
+	    else {
+	       int image = strcmp(parse, "image");
 
-	       if(bfont == 0)
+	       if(image == 0)
 	       {
-		  if(argc == 6)
+		  if(argc == 3)
 		  {
-		     if(!BFont(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5])))
-		     {
-			printf("unable to finish font processing");
-		     }
+		     Image(argv[2]);
 		  }
 		  else
 		  {
 		     printf("Incorrect argument format");
-		  }		     
+		  }
 	       }
 	       else
 	       {
-		  int image = strcmp(parse, "image");
+		  int build = strcmp(parse, "build");
 
-		  if(image == 0)
+		  if(build == 0)
 		  {
-		     if(argc == 3)
+		     if(argc > 2)
 		     {
-			Image(argv[2]);
+			Build(argc - 2, &argv[2]);
 		     }
 		     else
 		     {
-			printf("Incorrect argument format");
+			printf("No Assets specified to build");
 		     }
 		  }
-		  else
-		  {
-		     int build = strcmp(parse, "build");
-
-		     if(build == 0)
-		     {
-			if(argc > 2)
-			{
-			   Build(argc - 2, &argv[2]);
-			}
-			else
-			{
-			   printf("No Assets specified to build");
-			}
-		     }
-		  }
-	       }
+	       }	       
 	    }
 	 }
       }

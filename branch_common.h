@@ -15,6 +15,10 @@
 #define MEGABYTES(count) (count * KILOBYTES(1024ull))
 #define GIGABYTES(count) (count * MEGABYTES(1024ull))
 
+#if !defined(B_INLINE)
+#define B_INLINE inline
+#endif
+
 #define SWAP(type, a, b) type temp = a;		\
    a = b;					\
    b = temp					\
@@ -36,17 +40,6 @@ typedef int32_t b32;
 // For us, floats with a difference
 // of < 0.00001 are the same numbers
 #define F_EPSILON 0.00001f
-
-struct stbFont
-{
-   u8 *rawFile; // @: We might not have to keep this around.
-   stbtt_fontinfo info;
-   stbtt_packedchar *chars;
-   u8 *map;
-   u32 width;
-   u32 height;
-   u32 textureHandle;
-};
 
 // typedef size_t size;
 union m2
@@ -1034,3 +1027,22 @@ struct Branch_Image_Header
    // pixels tagged onto the end
 };
 #pragma pack(pop)
+
+#pragma pack(push, 1)
+struct PackedFont
+{
+   u32 width;
+   u32 height;
+   u32 imageOffset;
+   // followed by the array of stbtt_packedchar
+};
+#pragma pack(pop)
+
+struct stbFont
+{
+   stbtt_packedchar *chars;
+   u8 *map;
+   u32 width;
+   u32 height;
+   u32 textureHandle;
+};

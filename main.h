@@ -267,11 +267,8 @@ struct GameState
    TextProgram fontProgram;
    GLuint backgroundProgram;
 
-   stbFont bitmapFont;   
-
+   stbFont bitmapFont;
    GLuint buttonTex;
-
-   i32 threadCount;   
 
    enum
    {

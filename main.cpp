@@ -1185,33 +1185,14 @@ void InitTextBuffers()
 }
 
 static
-stbFont InitFont_stb(char *fontFile, u32 width, u32 height, StackAllocator *allocator)
+stbFont InitFont_stb(Asset font, StackAllocator *allocator)
 {
    stbFont result;
 
-   result.width = width;
-   result.height = height;
-
-   size_t fileSize = FileSize(fontFile);
-
-   result.rawFile = allocator->push(fileSize);
-   FileRead(fontFile, result.rawFile, fileSize);
-   
-   if(!stbtt_InitFont(&result.info, result.rawFile, 0))
-   {
-      B_ASSERT(false);
-   }
-
-   stbtt_pack_context pack;
-   result.chars = (stbtt_packedchar *)allocator->push(sizeof(stbtt_packedchar) * 256);
-   result.map = allocator->push(width * height);
-
-   // @could we do this in the asset processor? and then use the stb_api to pull the quad from the generated texture?
-   stbtt_PackBegin(&pack, result.map, width, height, width, 1, 0); // @should supply our own allocator instead of defaulting to malloc
-   stbtt_PackSetOversampling(&pack, 4, 4);
-
-   stbtt_PackFontRange(&pack, result.rawFile, 0, STBTT_POINT_SIZE(16.0f), 0, 256, result.chars);
-   stbtt_PackEnd(&pack);
+   PackedFont *cast = (PackedFont *)font.mem;
+   result.chars = (stbtt_packedchar *)(font.mem + sizeof(PackedFont));
+   result.width = cast->width;
+   result.height = cast->height;
 
    glGenTextures(1, &result.textureHandle);
    glBindTexture(GL_TEXTURE_2D, result.textureHandle);
@@ -1221,7 +1202,8 @@ stbFont InitFont_stb(char *fontFile, u32 width, u32 height, StackAllocator *allo
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, result.map);
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, cast->width, cast->height, 0, GL_RED, GL_UNSIGNED_BYTE,
+		font.mem + cast->imageOffset);
    glBindTexture(GL_TEXTURE_2D, 0);
 
    return result;
@@ -1335,13 +1317,11 @@ void GameInit(GameState &state)
 
    stack->pop();
    stack->pop();
-
    
-   state.bitmapFont = InitFont_stb("c:/Windows/Fonts/arial.ttf", 1024, 1024,stack);
+   state.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::wow_ID), stack);
    
    state.keyState = up;
    Sphere = InitMeshObject(state.assetManager.LoadStacked(AssetHeader::sphere_ID).mem, stack);
-   
 
    GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
    GlobalBranchCurve = LEFT_CURVE;

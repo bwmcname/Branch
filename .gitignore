@@ -50,3 +50,4 @@ AndroidKeyStore
 *.ilk
 *.pdb
 *.opendb
+*.vs/
