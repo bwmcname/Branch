@@ -330,6 +330,10 @@ int CALLBACK WinMain(HINSTANCE Instance,
 		     LPSTR CommandLine,
 		     int CommandShow)
 {
+   //@Temporary!!!
+   SCREEN_WIDTH = 480;
+   SCREEN_HEIGHT = 640;
+
    GetGlExtensions(Instance);
    
    WNDCLASSEX WindowClass = {sizeof(WNDCLASSEX),
@@ -350,7 +354,7 @@ int CALLBACK WinMain(HINSTANCE Instance,
    }
 
 
-   RECT WindowRect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+   RECT WindowRect = {0, 0, (long)SCREEN_WIDTH, (long)SCREEN_HEIGHT};
    AdjustWindowRectEx(&WindowRect, WS_OVERLAPPEDWINDOW, FALSE, 0);
 
    HWND WindowHandle = CreateWindowEx(0,

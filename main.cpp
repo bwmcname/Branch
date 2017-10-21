@@ -495,7 +495,8 @@ i32 OtherSideOfBranchHasBreak(NewTrackGraph &graph, u16 ancestor, u16 thisSide)
 
 void FillGraph(NewTrackGraph &graph)
 {
-   while(graph.availableIDs.size > 0 && graph.orders.size > 0)
+   while(graph.availableIDs.size > 0 &&
+	 graph.orders.size > 0)
    {
       NewTrackOrder item = graph.orders.Pop();
 
@@ -1248,21 +1249,25 @@ GLuint LoadImageIntoTexture(Branch_Image_Header *header)
 void GameInit(GameState &state)
 {
    INIT_LOG();
-   state.mainArena.base = AllocateSystemMemory(GIGABYTES(2), &state.mainArena.size);
+   
+   state.mainArena.base = AllocateSystemMemory(MEGABYTES(512), &state.mainArena.size);
+   LOG_WRITE("memory: %p", state.mainArena.base);
    state.mainArena.current = state.mainArena.base;
    InitStackAllocator((StackAllocator *)state.mainArena.base);
    StackAllocator *stack = (StackAllocator *)state.mainArena.base;
-
-   state.assetManager.Init(stack);
+   
+   state.assetManager.Init(stack);   
 
    // @leak
    LinearTrack = AllocateMeshObject(80 * 3, stack);
    BranchTrack = AllocateMeshObject(80 * 3, stack);
    BreakTrack = AllocateMeshObject(80 * 3, stack);
    LeftBranchTrack = AllocateMeshObject(80 * 3, stack);
-   RightBranchTrack = AllocateMeshObject(80 * 3, stack);
+   RightBranchTrack = AllocateMeshObject(80 * 3, stack);   
 
-   state.renderer = InitRenderState(stack, state.assetManager);   
+   state.renderer = InitRenderState(stack, state.assetManager);
+   Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
+   InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
 
    state.state = GameState::START;
 

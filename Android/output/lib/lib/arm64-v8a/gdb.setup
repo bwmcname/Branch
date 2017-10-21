@@ -1,2 +1,0 @@
-set solib-search-path ./obj/local/arm64-v8a
-directory C:/Users/mcnam_000/Documents/work/android-ndk-r15c/build//../sysroot C:/Users/mcnam_000/Documents/work/android-ndk-r15c/build//../sources/android/native_app_glue C:/Users/mcnam_000/Documents/work/android-ndk-r15c/build//../sources/cxx-stl/system/include

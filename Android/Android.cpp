@@ -22,11 +22,18 @@ size_t AndroidFileSize(char *filename)
 }
 
 static inline
+void AndroidFileRead(AAsset *asset, u8 *dest, size_t size, size_t offset)
+{
+   AAsset_seek(asset, offset, SEEK_SET);
+   AAsset_read(asset, dest, size);
+}
+
+static inline
 u8 *AndroidAllocateSystemMemory(size_t size, size_t *outSize)
 {
    // return enough memory pages to fit size
-   int pageSize = getpagesize();
-   int pages;
+   size_t pageSize = getpagesize();
+   size_t pages;
 
    if(size == pageSize)
    {
@@ -37,6 +44,9 @@ u8 *AndroidAllocateSystemMemory(size_t size, size_t *outSize)
       pages = (size / pageSize) + 1;
    }
 
+   LOG_WRITE("memory: %u", pageSize * pages);
+
+   
    return (u8 *)malloc(pages * pageSize);
 }
 
@@ -72,7 +82,7 @@ void OnResume(ANativeActivity *activity)
    state->events.Push({AndroidCommand::RESUME});
 }
 
-void *OnSaveInstanceState(ANativeActivity *activity, unsigned long *size)
+void *OnSaveInstanceState(ANativeActivity *activity, size_t *size)
 {
    AndroidState *state = (AndroidState *)activity->instance;
 
@@ -113,6 +123,8 @@ void OnNativeWindowCreated(ANativeActivity *activity, ANativeWindow *window)
 {
    AndroidState *state = (AndroidState *)activity->instance;
    state->window = window;
+   SCREEN_WIDTH = ANativeWindow_getWidth(window);
+   SCREEN_HEIGHT = ANativeWindow_getHeight(window);
    state->events.Push({AndroidCommand::NATIVEWINDOWCREATED});
 }
 
@@ -179,11 +191,11 @@ void InitOpengl(AndroidState *state)
    __android_log_print(ANDROID_LOG_INFO, "Branch", "Beginning Opengl init.");
    EGLint attribs[] = {
       EGL_BUFFER_SIZE, 4, // rgba
-      EGL_RED_SIZE, 8, // try to get hdr buffer.
+      EGL_RED_SIZE, 8,
       EGL_BLUE_SIZE, 8,
       EGL_GREEN_SIZE, 8,
       EGL_ALPHA_SIZE, 8,
-      EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+      EGL_SURFACE_TYPE, EGL_WINDOW_BIT,      
       EGL_NONE
    };
 
@@ -195,19 +207,16 @@ void InitOpengl(AndroidState *state)
    EGLint format;
    EGLBoolean success;
    eglChooseConfig(state->display, attribs, &config, 1, &nConfigs);
-   __android_log_print(ANDROID_LOG_INFO, "Branch", "num configs: %d", nConfigs);
    eglGetConfigAttrib(state->display, config, EGL_NATIVE_VISUAL_ID, &format);
-   
+
    ANativeWindow_setBuffersGeometry(state->window, 0, 0, format);
-   __android_log_print(ANDROID_LOG_INFO, "Branch", "wut");
    state->surface = eglCreateWindowSurface(state->display, config, state->window, 0);
    state->context = eglCreateContext(state->display, config, 0, 0);      
-   success = eglMakeCurrent(state->display, state->surface, state->surface, state->context);
+   success = eglMakeCurrent(state->display, state->surface, state->surface, state->context);   
 
 #ifdef DEBUG
    if(!success)
    {
-      __android_log_print(ANDROID_LOG_INFO, "Branch", "Unable to initialize opengl.");
       assert(false);
    }
 #endif   
@@ -217,6 +226,7 @@ void AndroidMain(AndroidState *state)
 {
    bool drawing = false;
    GameState gameState;
+
    for(;;)
    {
       AndroidCommand command;      
@@ -226,15 +236,18 @@ void AndroidMain(AndroidState *state)
 	 {
 	    case START:
 	    {
-	       gameState.input = {};
-	       GameInit(gameState);
+	       gameState.input = {};	       
 	       delta = 1.0f;
 	    }break;
 
 	    case NATIVEWINDOWCREATED:
 	    {
 	       InitOpengl(state);
-	       glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+	       glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+	       LOG_WRITE("BEGIN INIT");
+	       GameInit(gameState);
+	       
 	       drawing = true;
 	    }break;
 	 }
@@ -242,7 +255,7 @@ void AndroidMain(AndroidState *state)
 
       if(drawing)
       {
-	 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	 // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	 GameLoop(gameState);
 

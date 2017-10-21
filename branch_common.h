@@ -36,6 +36,8 @@ typedef uint64_t u64;
 typedef int8_t b8;
 typedef int32_t b32;
 
+static u32 SCREEN_WIDTH = 0;
+static u32 SCREEN_HEIGHT = 0;
 
 // For us, floats with a difference
 // of < 0.00001 are the same numbers

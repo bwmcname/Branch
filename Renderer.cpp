@@ -2,8 +2,8 @@
 #define NORMAL_COLOR  (V3(0.0f, 1.0f, 1.0f))
 #define SPEEDUP_COLOR (V3(0.0f, 1.0f, 0.0f))
  
-static m4 Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
-static m4 InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
+static m4 Projection;
+static m4 InfiniteProjection;
 
 static ShaderProgram BreakBlockProgram;
 static ShaderProgram ButtonProgram;
@@ -627,44 +627,47 @@ TextProgram LoadFilesAndCreateTextProgram(char *vertex, char *fragment, StackAll
 static
 RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
 {
-   RenderState result;   
+   RenderState result;      
+
+   LOG_WRITE("WIDTH: %d, HEIGHT: %d", SCREEN_WIDTH, SCREEN_HEIGHT);
+
    // init scene framebuffer with light attachment
    glGenFramebuffers(1, &result.fbo);
-   glBindFramebuffer(GL_FRAMEBUFFER, result.fbo);
-
-   GLuint attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};   
-   glDrawBuffers(3, attachments);
-
+   glBindFramebuffer(GL_FRAMEBUFFER, result.fbo);   
+   GLuint attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};      glDrawBuffers(3, attachments);
    glGenTextures(1, &result.mainColorTexture);
    glBindTexture(GL_TEXTURE_2D, result.mainColorTexture);
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.mainColorTexture, 0);
-
+   
+   glBindTexture(GL_TEXTURE_2D, 0);   
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.mainColorTexture, 0);   
    glGenRenderbuffers(1, &result.depthBuffer);
    glBindRenderbuffer(GL_RENDERBUFFER, result.depthBuffer);
    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, result.depthBuffer);
-
-   glGenTextures(1, &result.blurTexture);
-   glBindTexture(GL_TEXTURE_2D, result.blurTexture);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);    
+      
+   glGenTextures(1, &result.blurTexture);   
+   glBindTexture(GL_TEXTURE_2D, result.blurTexture);   
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, result.blurTexture, 0);
    glBindTexture(GL_TEXTURE_2D, 0);
-
-   glGenTextures(1, &result.normalTexture);
-   glBindTexture(GL_TEXTURE_2D, result.normalTexture);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, result.normalTexture, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
    
-   B_ASSERT(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+   glGenTextures(1, &result.normalTexture);   
+   glBindTexture(GL_TEXTURE_2D, result.normalTexture);   
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);   
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, result.normalTexture, 0);   
+   glBindTexture(GL_TEXTURE_2D, 0);   
+
+   DEBUG_DO(GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER));
+   LOG_WRITE("%X", status);
+
+   B_ASSERT(status == GL_FRAMEBUFFER_COMPLETE);
 
    // init horizontal and vertical blur framebuffers
    glGenFramebuffers(1, &result.horizontalFbo);
@@ -673,7 +676,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    glBindTexture(GL_TEXTURE_2D, result.horizontalColorBuffer);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
    glBindTexture(GL_TEXTURE_2D, 0);
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.horizontalColorBuffer, 0);
 
@@ -683,7 +686,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    glBindTexture(GL_TEXTURE_2D, result.verticalColorBuffer);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
    glBindTexture(GL_TEXTURE_2D, 0);
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.verticalColorBuffer, 0);         
 
@@ -1306,7 +1309,7 @@ MeshObject InitMeshObject(u8 *buffer, StackAllocator *allocator)
    return result;
 }
 
-#ifdef DEBUG
+#if defined(DEBUG) && defined(WIN32_BUILD)
 void RenderBBoxes(GameState &state)
 {  
    glLoadMatrixf((InfiniteProjection * state.camera.view).e);

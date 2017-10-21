@@ -11,7 +11,7 @@ AssetManager::Init(StackAllocator *_allocator)
    assets = (Asset *)_allocator->push(sizeof(Asset) * AssetHeader::entries);
    allocator = _allocator;
 
-   packed = FileOpen("assets/Packed.assets");
+   packed = FileOpen(ASSET_PATH("Packed.assets"));
    
    // clear to zero
    for(u32 i = 0; i < AssetHeader::entries; ++i)

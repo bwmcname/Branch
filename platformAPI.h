@@ -6,6 +6,7 @@
 #define AllocateSystemMemory(size, dest) (Win32AllocateMemory(size, dest))
 #define FreeSystemMemory(mem) (Win32FreeMemory(mem))
 #define FileOpen(fileName) (Win32FileOpen(fileName))
+#define ASSET_PATH(filename) ("assets/" ## filename)
 typedef HANDLE BranchFileHandle;
 
 struct Win32_Input_State
@@ -62,11 +63,12 @@ static AAsset *AndroidFileOpen(char *filename);
 static size_t AndroidFileSize(char *filename);
 
 #define FileSize(fileName) AndroidFileSize(fileName)
-#define FileRead(string, dest, size)
-#define FileReadHandle(handle, dest, size, offset)
+#define FileRead(string, dest, size) LOG_WRITE("ERROR, deprecated read from filename: %d", __LINE__)
+#define FileReadHandle(handle, dest, size, offset) AndroidFileRead(handle, dest, size, offset)
 #define AllocateSystemMemory(size, dest) AndroidAllocateSystemMemory(size, dest)
 #define FreeSystemMemory(mem)
 #define FileOpen(fileName) AndroidFileOpen(fileName)
+#define ASSET_PATH(filename) (filename)
 
 typedef AAsset * BranchFileHandle;
 

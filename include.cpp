@@ -1,10 +1,11 @@
-#define SCREEN_WIDTH 480
-#define SCREEN_HEIGHT 640
+
 #pragma warning(push, 0)
 
 #ifdef WIN32_BUILD
 #include <windows.h>
 #include <GL/GL.h>
+
+#define FRAMEBUFFER_FORMAT GL_RGBA16F
 #endif
 
 #ifdef ANDROID_BUILD
@@ -16,6 +17,9 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <EGL/egl.h>
+
+// currently opengles3 does not support floating point framebuffers
+#define FRAMEBUFFER_FORMAT GL_RGBA8
 #endif
 
 #ifdef __GNUC__
@@ -36,8 +40,13 @@
 #include <stdio.h>
 
 #ifdef DEBUG
+#ifdef WIN32_BUILD
 #define B_ASSERT(x) ((x) ? 0 : *((char *)0) = 'x')
 #define DEBUG_DO(x) x
+#elif defined(ANDROID_BUILD)
+#define B_ASSERT(x) if (!(x)) __android_log_assert("Assertion Failed", "Branch", "%s: %d", __FILE__, __LINE__);
+#define DEBUG_DO(x) x
+#endif
 #else
 #define B_ASSERT(x)
 #define DEBUG_DO(x)
@@ -52,7 +61,6 @@
 #define END_TIME() 
 #define READ_TIME(into)
 #endif
-
 #pragma warning(pop)
 
 #include "log.h"
