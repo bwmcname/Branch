@@ -21,8 +21,8 @@ ap shader Background_frag.frag
 ap shader ScreenTexture_vert.vert
 ap shader ScreenTexture_frag.frag
 
-ap shaderapplyBlur_frag.frag
-ap shaderapplyBlur_vert.vert
+ap shader applyBlur_frag.frag
+ap shader applyBlur_vert.vert
 
 ap shader Button_vert.vert
 ap shader Button_frag.frag
@@ -32,6 +32,9 @@ ap shader Default_Instance_frag.frag
 
 ap shader Emissive_vert.vert
 ap shader Emissive_frag.frag
+
+ap shader bitmap_font_vert.vert
+ap shader bitmap_font_frag.frag
 
 ap shader outline_frag.frag
 

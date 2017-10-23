@@ -1,4 +1,4 @@
-#version 330 core
+#include <glsl.h>
 #include <vertinc.h>
 
 layout(location=MATRIX1_LOCATION) in mat4 amvp;

@@ -1,4 +1,4 @@
-#version 330 core
+#include <glsl.h>
 #include <fraginc.h>
 
 layout(location=DEFAULT_COLOR) out vec4 color;

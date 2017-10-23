@@ -488,16 +488,15 @@ MakeProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize
 	    GLuint *outVertexHandle, GLuint *outFragmentHandle)
 {
    GLuint result = glCreateProgram();
-
    *outVertexHandle = glCreateShader(GL_VERTEX_SHADER);
    *outFragmentHandle = glCreateShader(GL_FRAGMENT_SHADER);
-
+   
    glShaderSource(*outVertexHandle, 1, &vertexSource, (i32 *)&vsize);
    glShaderSource(*outFragmentHandle, 1, &fragmentSource, (i32 *)&fsize);
 
    glCompileShader(*outVertexHandle);
    glCompileShader(*outFragmentHandle);
-
+   
    glAttachShader(result, *outVertexHandle);
    glAttachShader(result, *outFragmentHandle);
 
@@ -509,8 +508,8 @@ MakeProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize
 static B_INLINE
 GLuint CreateSimpleProgramFromAssets(Asset &vert, Asset &frag)
 {
-   GLuint dummyVert;
-   GLuint dummyFrag;
+   GLuint dummyVert = 0;
+   GLuint dummyFrag = 0;
    return MakeProgram((char *)vert.mem, vert.size, (char *)frag.mem, frag.size,
 		      &dummyVert, &dummyFrag);
 }
@@ -570,6 +569,9 @@ CreateTextProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t
 {
    TextProgram result;
 
+   static int called = 0;
+
+
    result.programHandle = glCreateProgram();
    result.vertexHandle = glCreateShader(GL_VERTEX_SHADER);
    result.fragmentHandle = glCreateShader(GL_FRAGMENT_SHADER);
@@ -581,10 +583,10 @@ CreateTextProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t
    glCompileShader(result.fragmentHandle);
 
    glAttachShader(result.programHandle, result.vertexHandle);
-   glAttachShader(result.programHandle, result.fragmentHandle);
+   glAttachShader(result.programHandle, result.fragmentHandle);   
 
    glLinkProgram(result.programHandle);
-
+   
    result.transformUniform = glGetUniformLocation(result.programHandle, "transform");
    result.texUniform = glGetUniformLocation(result.programHandle, "tex");
 
@@ -634,15 +636,17 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    // init scene framebuffer with light attachment
    glGenFramebuffers(1, &result.fbo);
    glBindFramebuffer(GL_FRAMEBUFFER, result.fbo);   
-   GLuint attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};      glDrawBuffers(3, attachments);
+   GLuint attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
+   glDrawBuffers(3, attachments);
+   
    glGenTextures(1, &result.mainColorTexture);
    glBindTexture(GL_TEXTURE_2D, result.mainColorTexture);
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   
-   glBindTexture(GL_TEXTURE_2D, 0);   
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.mainColorTexture, 0);   
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.mainColorTexture, 0);
+   glBindTexture(GL_TEXTURE_2D, 0);
+
    glGenRenderbuffers(1, &result.depthBuffer);
    glBindRenderbuffer(GL_RENDERBUFFER, result.depthBuffer);
    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -650,7 +654,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
       
    glGenTextures(1, &result.blurTexture);   
    glBindTexture(GL_TEXTURE_2D, result.blurTexture);   
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, result.blurTexture, 0);
@@ -658,7 +662,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    
    glGenTextures(1, &result.normalTexture);   
    glBindTexture(GL_TEXTURE_2D, result.normalTexture);   
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);   
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);   
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, result.normalTexture, 0);   
@@ -672,24 +676,36 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    // init horizontal and vertical blur framebuffers
    glGenFramebuffers(1, &result.horizontalFbo);
    glBindFramebuffer(GL_FRAMEBUFFER, result.horizontalFbo);
+   glDrawBuffers(1, attachments);   
    glGenTextures(1, &result.horizontalColorBuffer);
    glBindTexture(GL_TEXTURE_2D, result.horizontalColorBuffer);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.horizontalColorBuffer, 0);
+   glBindTexture(GL_TEXTURE_2D, 0);
+
+   DEBUG_DO(status = glCheckFramebufferStatus(GL_FRAMEBUFFER));
+   LOG_WRITE("%X", status);
+
+   B_ASSERT(status == GL_FRAMEBUFFER_COMPLETE);
 
    glGenFramebuffers(1, &result.verticalFbo);
    glBindFramebuffer(GL_FRAMEBUFFER, result.verticalFbo);
+   glDrawBuffers(1, attachments);
    glGenTextures(1, &result.verticalColorBuffer);
    glBindTexture(GL_TEXTURE_2D, result.verticalColorBuffer);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.verticalColorBuffer, 0);
    glBindTexture(GL_TEXTURE_2D, 0);
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.verticalColorBuffer, 0);         
 
+   DEBUG_DO(status = glCheckFramebufferStatus(GL_FRAMEBUFFER));
+   LOG_WRITE("%X", status);
+   
+   B_ASSERT(status == GL_FRAMEBUFFER_COMPLETE);
+   
    {
 
       result.fullScreenProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
@@ -795,9 +811,13 @@ m3 TextProjection(float screenWidth, float screenHeight)
 
 void RenderBackground(GameState &state)
 {   
-   glDisable(GL_DEPTH_TEST);
+   glDisable(GL_DEPTH_TEST);   
+
+   LOG_WRITE("ERROR: %X, %d", glGetError(), __LINE__);
 
    glUseProgram(state.backgroundProgram);
+
+   LOG_WRITE("ERROR: %X, %d", glGetError(), __LINE__);
    glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
@@ -1291,7 +1311,7 @@ MeshObject InitMeshObject(u8 *buffer, StackAllocator *allocator)
    Mesh mesh;
 
    mesh.vcount = *((i32 *)buffer);
-   mesh.vertices = (float *)(buffer + 4);
+   mesh.vertices = (float *)(buffer + 8);
    mesh.normals = (v3 *)allocator->push(sizeof(v3) * mesh.vcount);
    v3 *flat_normals = (v3 *)allocator->push(sizeof(v3) * mesh.vcount);
    flat_normals = Normals(mesh.vertices, flat_normals, mesh.vcount);   
@@ -1405,6 +1425,8 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 {
 	    BindProgramCommand *programCommand = (BindProgramCommand *)current;
 	    glUseProgram(programCommand->program->programHandle);
+	    GLenum error = glGetError();
+	    LOG_WRITE("GL_ERROR: %X", error);
 	 }break;
 
 	 case DrawString:

@@ -1,4 +1,4 @@
-#version 330 core
+#include <glsl.h>
 #include <fraginc.h>
 
 uniform sampler2D scene;
@@ -9,5 +9,5 @@ out vec4 color;
 
 void main()
 { 
-   color = vec4(texture2D(blur, out_uv).rgb + texture2D(scene, out_uv).rgb, 1.0);
+   color = vec4(texture(blur, out_uv).rgb + texture(scene, out_uv).rgb, 1.0);
 }

@@ -190,12 +190,12 @@ void InitOpengl(AndroidState *state)
 {
    __android_log_print(ANDROID_LOG_INFO, "Branch", "Beginning Opengl init.");
    EGLint attribs[] = {
-      EGL_BUFFER_SIZE, 4, // rgba
+      // EGL_BUFFER_SIZE, 4, // rgba
+      EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
       EGL_RED_SIZE, 8,
       EGL_BLUE_SIZE, 8,
       EGL_GREEN_SIZE, 8,
-      EGL_ALPHA_SIZE, 8,
-      EGL_SURFACE_TYPE, EGL_WINDOW_BIT,      
+      EGL_ALPHA_SIZE, 8,      
       EGL_NONE
    };
 
@@ -243,7 +243,7 @@ void AndroidMain(AndroidState *state)
 	    case NATIVEWINDOWCREATED:
 	    {
 	       InitOpengl(state);
-	       glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	       glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 	       LOG_WRITE("BEGIN INIT");
 	       GameInit(gameState);

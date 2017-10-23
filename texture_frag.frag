@@ -1,4 +1,4 @@
-#version 330 core
+#include <glsl.h>
 
 in vec2 tex_uv;
 uniform sampler2D tex;

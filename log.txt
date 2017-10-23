@@ -1,4 +1,4 @@
-memory: 0000000B568F00008CD5Asset Loaded: 14
+memory: 000000F39DF20000WIDTH: 480, HEIGHT: 6408CD5Asset Loaded: 14
 Asset Loaded: 13
 Asset Released: 13
 Asset Released: 14

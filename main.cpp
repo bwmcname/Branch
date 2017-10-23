@@ -1198,13 +1198,19 @@ stbFont InitFont_stb(Asset font, StackAllocator *allocator)
    glGenTextures(1, &result.textureHandle);
    glBindTexture(GL_TEXTURE_2D, result.textureHandle);
 
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+   GLint value;
+   glGetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
+   LOG_WRITE("size: %d\n", value);
 
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, cast->width, cast->height, 0, GL_RED, GL_UNSIGNED_BYTE,
+   // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+   // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);   
+   LOG_WRITE("ERROR: %X, %d", glGetError(), __LINE__);
+   LOG_WRITE("width: %d, height: %d", cast->width, cast->height);
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, cast->width, cast->height, 0, GL_ALPHA, GL_UNSIGNED_BYTE,
 		font.mem + cast->imageOffset);
+   LOG_WRITE("ERROR: %X, %d", glGetError(), __LINE__);
    glBindTexture(GL_TEXTURE_2D, 0);
 
    return result;
@@ -1285,6 +1291,7 @@ void GameInit(GameState &state)
 
    InitCamera(state.camera);   
 
+
    Asset &defaultVert = state.assetManager.LoadStacked(AssetHeader::default_vert_ID);
    Asset &defaultFrag = state.assetManager.LoadStacked(AssetHeader::default_frag_ID);
    DefaultShader = CreateProgramFromAssets(defaultVert, defaultFrag);
@@ -1298,16 +1305,16 @@ void GameInit(GameState &state)
 
    state.assetManager.PopStacked(AssetHeader::Default_Instance_frag_ID);
    state.assetManager.PopStacked(AssetHeader::Default_Instance_vert_ID);
-
+   
    state.fontProgram = CreateTextProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::text_vert_ID),
-						   state.assetManager.LoadStacked(AssetHeader::text_frag_ID));
+						   state.assetManager.LoadStacked(AssetHeader::text_frag_ID));      
 
    state.bitmapFontProgram = CreateTextProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::bitmap_font_vert_ID),
-							 state.assetManager.LoadStacked(AssetHeader::bitmap_font_frag_ID));
-   
-   BreakBlockProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::BreakerBlock_vert_ID),
-					       state.assetManager.LoadStacked(AssetHeader::BreakerBlock_frag_ID));
+							 state.assetManager.LoadStacked(AssetHeader::bitmap_font_frag_ID));   
 
+   BreakBlockProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::BreakerBlock_vert_ID),
+					       state.assetManager.LoadStacked(AssetHeader::BreakerBlock_frag_ID));   
+   
    ButtonProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Button_vert_ID),
 					   state.assetManager.LoadStacked(AssetHeader::Button_frag_ID));
 
@@ -1321,28 +1328,28 @@ void GameInit(GameState &state)
 							   state.assetManager.LoadStacked(AssetHeader::Background_frag_ID));
 
    stack->pop();
-   stack->pop();
-   
-   state.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::wow_ID), stack);
-   
+   stack->pop();   
+
+   state.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::wow_ID), stack);      
+
    state.keyState = up;
-   Sphere = InitMeshObject(state.assetManager.LoadStacked(AssetHeader::sphere_ID).mem, stack);
+   Sphere = InitMeshObject(state.assetManager.LoadStacked(AssetHeader::sphere_ID).mem, stack);   
 
    GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
    GlobalBranchCurve = LEFT_CURVE;
    GlobalBreakCurve = BreakCurve();
    GlobalLeftCurve = LEFT_CURVE;
-   GlobalRightCurve = RIGHT_CURVE;
+   GlobalRightCurve = RIGHT_CURVE;   
 
    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, stack);
    GenerateTrackSegmentVertices(LinearTrack, GlobalLinearCurve, stack);
    GenerateTrackSegmentVertices(BreakTrack, GlobalBreakCurve, stack);
    GenerateTrackSegmentVertices(LeftBranchTrack, LEFT_CURVE, stack);
-   GenerateTrackSegmentVertices(RightBranchTrack, RIGHT_CURVE, stack);
+   GenerateTrackSegmentVertices(RightBranchTrack, RIGHT_CURVE, stack);   
 
    RectangleUVBuffer = UploadVertices(RectangleUVs, 6, 2);
    RectangleVertBuffer = UploadVertices(RectangleVerts, 6, 2);
-   ScreenVertBuffer = UploadVertices(ScreenVerts, 6, 2);
+   ScreenVertBuffer = UploadVertices(ScreenVerts, 6, 2);   
 
    InitTextBuffers();
    state.sphereGuy = InitPlayer();
@@ -1483,10 +1490,10 @@ void GameLoop(GameState &state)
 	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);
 
 	 glUseProgram(DefaultShader.programHandle); 
-	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+	 // RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
 	 glUseProgram(0);
 
-	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 // RenderTracks(state, (StackAllocator *)state.mainArena.base);
 
 	 glUseProgram(0);
 
@@ -1500,8 +1507,8 @@ void GameLoop(GameState &state)
 	    count = IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
 	 }
 	 
-	 RenderText_stb(framerate, count, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
-	 state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));	 
+	 // RenderText_stb(framerate, count, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
+	 // state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));	 
 	 // static char renderTimeSting[19];
 	 // size_t renderTimeCount = IntToString(renderTimeSting, state.TrackRenderTime);
 	 // RenderText_stb(renderTimeSting, (u32)renderTimeCount, -0.8f, 0.75f, state.bitmapFont, state.bitmapFontProgram);
@@ -1519,7 +1526,7 @@ void GameLoop(GameState &state)
 	 ResetGraph(state.tracks);
 	 FillGraph(state.tracks);
 
-	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 // RenderTracks(state, (StackAllocator *)state.mainArena.base);
       }break;
 
       case GameState::START:
@@ -1539,9 +1546,9 @@ void GameLoop(GameState &state)
 	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
 	 }
 
-	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 // RenderTracks(state, (StackAllocator *)state.mainArena.base);	 
 	 
-	 state.renderer.commands.PushDrawButton(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.buttonTex, ((StackAllocator *)state.mainArena.base));
+	 // state.renderer.commands.PushDrawButton(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.buttonTex, ((StackAllocator *)state.mainArena.base));
       }break;
       
       default:
@@ -1563,8 +1570,10 @@ void GameLoop(GameState &state)
    RenderObject(lightRenderable, state.sphereGuy.mesh, &SuperBrightProgram, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
    glUseProgram(0);
 
-   state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
-   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));   
+   // state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
+   // state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));
+
+   // RenderBlur(state.renderer, state.camera);
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }
    

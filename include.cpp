@@ -5,7 +5,7 @@
 #include <windows.h>
 #include <GL/GL.h>
 
-#define FRAMEBUFFER_FORMAT GL_RGBA16F
+#define FRAMEBUFFER_FORMAT GL_RGBA16f
 #endif
 
 #ifdef ANDROID_BUILD
@@ -19,7 +19,7 @@
 #include <EGL/egl.h>
 
 // currently opengles3 does not support floating point framebuffers
-#define FRAMEBUFFER_FORMAT GL_RGBA8
+#define FRAMEBUFFER_FORMAT GL_RGBA
 #endif
 
 #ifdef __GNUC__

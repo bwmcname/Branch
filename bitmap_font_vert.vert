@@ -1,4 +1,4 @@
-#version 330 core
+#include <glsl.h>
 #include <vertinc.h>
 
 layout(location=VERTEX_LOCATION) in vec2 vertex;

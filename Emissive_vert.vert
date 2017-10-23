@@ -1,4 +1,4 @@
-#version 330 core
+#include <glsl.h>
 #include <vertinc.h>
 
 uniform mat4 mvp;

@@ -1,4 +1,7 @@
-#version 330 core
+#version 300 es
+
+precision highp float;
+
 
 #define DEFAULT_COLOR 0
 #define BRIGHTNESS 1

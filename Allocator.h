@@ -34,7 +34,11 @@ void InitStackAllocator(StackAllocator *allocator)
 inline
 u8 *StackAllocator::push(size_t allocation)
 {
-   Chunk *newChunk = (Chunk *)(last->base + last->size);
+   u8 *ptr = (u8 *)(last->base + last->size);
+   // align the pointer on an 8 byte boundary
+   size_t align = 8 - ((size_t)ptr & 0x7);
+   Chunk *newChunk = (Chunk *)(ptr + align);
+   
    newChunk->base = ((u8 *)newChunk) + sizeof(Chunk);
    newChunk->size = allocation;
    newChunk->last = last;

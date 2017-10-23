@@ -1,4 +1,4 @@
-#version 330 core
+#include <glsl.h>
 #include <fraginc.h>
 #include <light.h>
 

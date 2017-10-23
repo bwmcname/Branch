@@ -1,8 +1,11 @@
-#version 330 core
+#version 300 es
+
+precision highp float;
+
 
 #define DEFAULT_COLOR 0
 #define BRIGHTNESS 1
-#define NORMAL 2
+#define NORMALS 2
 
 
 uniform sampler2D scene;
@@ -13,6 +16,5 @@ out vec4 color;
 
 void main()
 { 
-   color = vec4(texture2D(blur, out_uv).rgb + texture2D(scene, out_uv).rgb, 1.0);
-   //color = vec4(texture2D(blur, out_uv).rgb, 1.0);
+   color = vec4(texture(blur, out_uv).rgb + texture(scene, out_uv).rgb, 1.0);
 }

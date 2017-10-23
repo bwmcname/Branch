@@ -369,7 +369,7 @@ MeshBuilder ParseObj(char *obj, size_t size)
 
 void Model(char *filename)
 {
-   FILE *file = OpenForRead("filename");
+   FILE *file = OpenForRead(filename);
 
    long fileSize = FileSize(file);
    char *buffer = (char *)malloc(fileSize);
@@ -380,8 +380,10 @@ void Model(char *filename)
    size_t writeSize = b.icount * sizeof(v3) + sizeof(u32);
    void *writebuffer = malloc(writeSize);
 
-   *(u32 *)writebuffer = b.icount;
-   v3 *begin = (v3 *)(((u32 *)writebuffer) + 1);
+   *(i32 *)writebuffer = b.icount;
+
+   // make sure to be aligned on an 8 byte boundary
+   v3 *begin = (v3 *)(((u8 *)writebuffer) + 8);
 
    for(i32 i = 0; i < b.icount; ++i)
    {
