@@ -1490,10 +1490,10 @@ void GameLoop(GameState &state)
 	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);
 
 	 glUseProgram(DefaultShader.programHandle); 
-	 // RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
 	 glUseProgram(0);
 
-	 // RenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
 
 	 glUseProgram(0);
 
@@ -1526,7 +1526,7 @@ void GameLoop(GameState &state)
 	 ResetGraph(state.tracks);
 	 FillGraph(state.tracks);
 
-	 // RenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
       }break;
 
       case GameState::START:
@@ -1546,9 +1546,9 @@ void GameLoop(GameState &state)
 	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
 	 }
 
-	 // RenderTracks(state, (StackAllocator *)state.mainArena.base);	 
+	 RenderTracks(state, (StackAllocator *)state.mainArena.base);	 
 	 
-	 // state.renderer.commands.PushDrawButton(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.buttonTex, ((StackAllocator *)state.mainArena.base));
+	 state.renderer.commands.PushDrawButton(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.buttonTex, ((StackAllocator *)state.mainArena.base));
       }break;
       
       default:
@@ -1570,10 +1570,10 @@ void GameLoop(GameState &state)
    RenderObject(lightRenderable, state.sphereGuy.mesh, &SuperBrightProgram, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
    glUseProgram(0);
 
-   // state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
-   // state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));
+   state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
+   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));
 
-   // RenderBlur(state.renderer, state.camera);
+   RenderBlur(state.renderer, state.camera);
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }
    

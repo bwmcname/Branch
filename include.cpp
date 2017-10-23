@@ -5,7 +5,7 @@
 #include <windows.h>
 #include <GL/GL.h>
 
-#define FRAMEBUFFER_FORMAT GL_RGBA16f
+#define FRAMEBUFFER_FORMAT GL_RGBA16F
 #endif
 
 #ifdef ANDROID_BUILD

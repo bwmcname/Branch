@@ -1425,8 +1425,6 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 {
 	    BindProgramCommand *programCommand = (BindProgramCommand *)current;
 	    glUseProgram(programCommand->program->programHandle);
-	    GLenum error = glGetError();
-	    LOG_WRITE("GL_ERROR: %X", error);
 	 }break;
 
 	 case DrawString:
