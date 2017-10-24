@@ -190,32 +190,44 @@ void InitOpengl(AndroidState *state)
 {
    __android_log_print(ANDROID_LOG_INFO, "Branch", "Beginning Opengl init.");
    EGLint attribs[] = {
-      // EGL_BUFFER_SIZE, 4, // rgba
+      EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
       EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
       EGL_RED_SIZE, 8,
       EGL_BLUE_SIZE, 8,
       EGL_GREEN_SIZE, 8,
-      EGL_ALPHA_SIZE, 8,      
+      EGL_ALPHA_SIZE, 8,
+      EGL_DEPTH_SIZE, 24,
       EGL_NONE
    };
 
-   state->display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-   eglInitialize(state->display, 0, 0);
+   EGLint glAttribs[] = {
+      EGL_CONTEXT_CLIENT_VERSION, 3,
+      EGL_NONE
+   };
 
+   
+   state->display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+   
+   eglInitialize(state->display, 0, 0);
+   
    EGLConfig config;
    EGLint nConfigs;
    EGLint format;
    EGLBoolean success;
    eglChooseConfig(state->display, attribs, &config, 1, &nConfigs);
+   
    eglGetConfigAttrib(state->display, config, EGL_NATIVE_VISUAL_ID, &format);
 
-   ANativeWindow_setBuffersGeometry(state->window, 0, 0, format);
+   // ANativeWindow_setBuffersGeometry(state->window, 0, 0, format);
+   
    state->surface = eglCreateWindowSurface(state->display, config, state->window, 0);
-   state->context = eglCreateContext(state->display, config, 0, 0);      
+   
+   state->context = eglCreateContext(state->display, config, 0, glAttribs);
+   
    success = eglMakeCurrent(state->display, state->surface, state->surface, state->context);   
 
 #ifdef DEBUG
-   if(!success)
+   if(success == EGL_FALSE)
    {
       assert(false);
    }
@@ -258,7 +270,6 @@ void AndroidMain(AndroidState *state)
 	 // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	 GameLoop(gameState);
-
 	 eglSwapBuffers(state->display, state->surface);
       }
    }   

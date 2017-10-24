@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <EGL/egl.h>
+#include <EGL/eglext.h>
 
 // currently opengles3 does not support floating point framebuffers
 #define FRAMEBUFFER_FORMAT GL_RGBA

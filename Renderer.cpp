@@ -633,6 +633,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
 
    LOG_WRITE("WIDTH: %d, HEIGHT: %d", SCREEN_WIDTH, SCREEN_HEIGHT);
 
+   /*
    // init scene framebuffer with light attachment
    glGenFramebuffers(1, &result.fbo);
    glBindFramebuffer(GL_FRAMEBUFFER, result.fbo);   
@@ -705,7 +706,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    LOG_WRITE("%X", status);
    
    B_ASSERT(status == GL_FRAMEBUFFER_COMPLETE);
-   
+   */
    {
 
       result.fullScreenProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
@@ -730,12 +731,14 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
       assetManager.PopStacked(AssetHeader::ApplyBlur_vert_ID);
       assetManager.PopStacked(AssetHeader::ApplyBlur_frag_ID);
    }
+   
 
    glGenBuffers(1, &result.buttonVbo);
    glBindBuffer(GL_ARRAY_BUFFER, result.buttonVbo);
    glBufferData(GL_ARRAY_BUFFER, sizeof(v2) * 6, 0, GL_STATIC_DRAW);
+   
 
-   result.commands = InitCommandState(stack);
+   // result.commands = InitCommandState(stack);
    
    return result;
 }
@@ -811,29 +814,31 @@ m3 TextProjection(float screenWidth, float screenHeight)
 
 void RenderBackground(GameState &state)
 {   
-   glDisable(GL_DEPTH_TEST);   
+   glDisable(GL_DEPTH_TEST);
 
    LOG_WRITE("ERROR: %X, %d", glGetError(), __LINE__);
 
    glUseProgram(state.backgroundProgram);
 
    LOG_WRITE("ERROR: %X, %d", glGetError(), __LINE__);
-   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);   
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glBindBuffer(GL_ARRAY_BUFFER, 0);
    glUseProgram(0);
 
-   glEnable(GL_DEPTH_TEST);
+   // glEnable(GL_DEPTH_TEST);
 }
 
 void BeginFrame(GameState &state)
 {
-   glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo);
+   // glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo); // @Android merging!!
 
    // @we really only need to clear the color of the secondary buffer, can we do this?
-   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);   
+   // glClearColor(1.0f, 0.0f, 0.0, 0.0f);
+   // glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);   
    RenderBackground(state);
 }
 
@@ -1285,7 +1290,6 @@ MeshBuffers AllocateMeshBuffers(i32 count, i32 components = 3)
    glEnableVertexAttribArray(NORMAL_LOCATION);
    glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
    glBindVertexArray(0);
-
    return result;
 }
 
@@ -1300,8 +1304,8 @@ MeshObject AllocateMeshObject(i32 vertexCount, StackAllocator *allocator)
    result.mesh.normals = (v3 *)allocator->push(sizeof(v3) * vertexCount);
 
    result.handles = AllocateMeshBuffers(result.mesh.vcount, 3);
-   allocator->pop();
-   allocator->pop();
+   // allocator->pop();
+   // allocator->pop();
    return result;
 }
 
@@ -1316,7 +1320,7 @@ MeshObject InitMeshObject(u8 *buffer, StackAllocator *allocator)
    v3 *flat_normals = (v3 *)allocator->push(sizeof(v3) * mesh.vcount);
    flat_normals = Normals(mesh.vertices, flat_normals, mesh.vcount);   
    SmoothNormals((v3 *)mesh.vertices, flat_normals, mesh.normals, mesh.vcount, allocator);
-   allocator->pop();
+   // allocator->pop(); @spurreous?
 
    MeshBuffers handles = UploadStaticMesh(mesh.vertices, mesh.normals, mesh.vcount, 3);
    allocator->pop(); // pop normals
