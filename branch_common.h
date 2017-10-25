@@ -529,7 +529,7 @@ struct m4
       float e2[4][4];
    };
 
-   m4 operator*(m4 b);
+   inline m4 operator*(m4 b);
    v4 operator*(v4 a);
 };
 
@@ -706,7 +706,7 @@ m4 Translate(v3 pos)
    return result;
 }
 
-m4
+inline m4
 m4::operator*(m4 b)
 {
    m4 result;

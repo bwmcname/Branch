@@ -633,7 +633,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
 
    LOG_WRITE("WIDTH: %d, HEIGHT: %d", SCREEN_WIDTH, SCREEN_HEIGHT);
 
-   /*
+   
    // init scene framebuffer with light attachment
    glGenFramebuffers(1, &result.fbo);
    glBindFramebuffer(GL_FRAMEBUFFER, result.fbo);   
@@ -706,7 +706,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    LOG_WRITE("%X", status);
    
    B_ASSERT(status == GL_FRAMEBUFFER_COMPLETE);
-   */
+   
    {
 
       result.fullScreenProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
@@ -738,7 +738,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    glBufferData(GL_ARRAY_BUFFER, sizeof(v2) * 6, 0, GL_STATIC_DRAW);
    
 
-   // result.commands = InitCommandState(stack);
+   result.commands = InitCommandState(stack);
    
    return result;
 }
@@ -816,34 +816,31 @@ void RenderBackground(GameState &state)
 {   
    glDisable(GL_DEPTH_TEST);
 
-   LOG_WRITE("ERROR: %X, %d", glGetError(), __LINE__);
-
    glUseProgram(state.backgroundProgram);
 
-   LOG_WRITE("ERROR: %X, %d", glGetError(), __LINE__);
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);   
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glBindBuffer(GL_ARRAY_BUFFER, 0);
-   glUseProgram(0);
-
-   // glEnable(GL_DEPTH_TEST);
+   glUseProgram(0);   
 }
 
 void BeginFrame(GameState &state)
-{
-   // glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo); // @Android merging!!
+{   
+   glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo); // @Android merging!!
 
    // @we really only need to clear the color of the secondary buffer, can we do this?
-   // glClearColor(1.0f, 0.0f, 0.0, 0.0f);
-   // glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);   
+   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);   
    RenderBackground(state);
+   glEnable(GL_DEPTH_TEST);
 }
 
 void RenderBlur(RenderState &renderer, Camera &camera)
 {
+   glDisable(GL_DEPTH_TEST);
+
    glBindFramebuffer(GL_FRAMEBUFFER, renderer.horizontalFbo);
    
    glUseProgram(renderer.fullScreenProgram);
@@ -881,7 +878,7 @@ void RenderBlur(RenderState &renderer, Camera &camera)
    glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "ystep"), 1.0f / (float)(SCREEN_HEIGHT));
 
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-
+   
    // finally blit it to the screen
    // @should change programs!!!   
    glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -896,13 +893,12 @@ void RenderBlur(RenderState &renderer, Camera &camera)
 
    glActiveTexture(GL_TEXTURE0);
    glBindTexture(GL_TEXTURE_2D, renderer.mainColorTexture);
-      
+   glUniform1i(glGetUniformLocation(renderer.blurProgram, "scene"), 0);
+
    glActiveTexture(GL_TEXTURE1);
    glBindTexture(GL_TEXTURE_2D, renderer.verticalColorBuffer);
-
-   glUniform1i(glGetUniformLocation(renderer.blurProgram, "scene"), 0);
    glUniform1i(glGetUniformLocation(renderer.blurProgram, "blur"), 1);
-
+   
    // temporary to get Android build to work
    // @Support non SRGB framebuffers!
    #ifdef WIN32_BUILD

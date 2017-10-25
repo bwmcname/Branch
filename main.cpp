@@ -1206,11 +1206,8 @@ stbFont InitFont_stb(Asset font, StackAllocator *allocator)
    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);   
-   LOG_WRITE("ERROR: %X, %d", glGetError(), __LINE__);
-   LOG_WRITE("width: %d, height: %d", cast->width, cast->height);
    glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, cast->width, cast->height, 0, GL_ALPHA, GL_UNSIGNED_BYTE,
 		font.mem + cast->imageOffset);
-   LOG_WRITE("ERROR: %X, %d", glGetError(), __LINE__);
    glBindTexture(GL_TEXTURE_2D, 0);
 
    return result;
@@ -1283,7 +1280,7 @@ void GameInit(GameState &state)
    srand((u32)bclock());
 
    glEnable(GL_BLEND);
-   glEnable(GL_DEPTH_TEST);
+   // glEnable(GL_DEPTH_TEST);
    glEnable(GL_CULL_FACE);
 
    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1491,7 +1488,7 @@ void GameLoop(GameState &state)
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
 	 glUseProgram(0);
 
-	 // RenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
 
 	 glUseProgram(0);
 
@@ -1506,7 +1503,7 @@ void GameLoop(GameState &state)
 	 }
 	 
 	 // RenderText_stb(framerate, count, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
-	 // state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));	 
+	 state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));	 
 	 // static char renderTimeSting[19];
 	 // size_t renderTimeCount = IntToString(renderTimeSting, state.TrackRenderTime);
 	 // RenderText_stb(renderTimeSting, (u32)renderTimeCount, -0.8f, 0.75f, state.bitmapFont, state.bitmapFontProgram);
@@ -1524,7 +1521,7 @@ void GameLoop(GameState &state)
 	 ResetGraph(state.tracks);
 	 FillGraph(state.tracks);
 
-	 // RenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
       }break;
 
       case GameState::START:
@@ -1532,7 +1529,7 @@ void GameLoop(GameState &state)
 	 static float position = 0.0f;
 	 position += delta * 0.01f;	 
 
-	 if(ButtonUpdate(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.input) == Clicked)
+	 //if(ButtonUpdate(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.input) == Clicked)
 	 {
 	    state.state = GameState::LOOP;	    
 	    state.sphereGuy.trackIndex = 0;
@@ -1544,9 +1541,9 @@ void GameLoop(GameState &state)
 	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
 	 }
 
-	 // RenderTracks(state, (StackAllocator *)state.mainArena.base);	 
+	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
 	 
-	 // state.renderer.commands.PushDrawButton(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.buttonTex, ((StackAllocator *)state.mainArena.base));
+	 state.renderer.commands.PushDrawButton(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.buttonTex, ((StackAllocator *)state.mainArena.base));
       }break;
       
       default:
@@ -1564,14 +1561,14 @@ void GameLoop(GameState &state)
    lightRenderable.scale = V3(0.3f, 0.3f, 0.3f);
    lightRenderable.orientation = {0};
 
-   // glUseProgram(SuperBrightProgram.programHandle); 
-   // RenderObject(lightRenderable, state.sphereGuy.mesh, &SuperBrightProgram, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
-   // glUseProgram(0);
+   glUseProgram(SuperBrightProgram.programHandle); 
+   RenderObject(lightRenderable, state.sphereGuy.mesh, &SuperBrightProgram, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
+   glUseProgram(0);
 
-   // state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
-   // state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));
+   state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
+   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));
 
-   // state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
+   state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }
    
 void GameEnd(GameState &state)

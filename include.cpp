@@ -12,12 +12,14 @@
 #include <GLES3/gl3.h>
 #include <android/native_activity.h>
 #include <android/asset_manager.h>
+#include <android/input.h>
 #include <unistd.h>
 #include <android/log.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <time.h>
 
 // currently opengles3 does not support floating point framebuffers
 #define FRAMEBUFFER_FORMAT GL_RGBA
@@ -56,6 +58,13 @@
 #if defined(TIMERS) && defined(WIN32_BUILD)
 #define BEGIN_TIME() u64 LOCAL_TIME = __rdtsc()
 #define END_TIME() LOCAL_TIME = __rdtsc() - LOCAL_TIME
+#define READ_TIME(into) into = LOCAL_TIME
+#elif defined(TIMERS) && defined(ANDROID_BUILD)
+#define BEGIN_TIME() timespec LOCAL_BEGIN_TIME, LOCAL_END_TIME;	\
+   clock_gettime(CLOCK_MONOTONIC, &LOCAL_BEGIN_TIME)		
+#define END_TIME() clock_gettime(CLOCK_MONOTONIC, &LOCAL_END_TIME);	\
+   LONG LOCAL_TIME = LOCAL_END_TIME->tv_nsec - LOCAL_BEGIN_TIME->tv_nsec
+   
 #define READ_TIME(into) into = LOCAL_TIME
 #else
 #define BEGIN_TIME() 
