@@ -43,9 +43,6 @@ u8 *AndroidAllocateSystemMemory(size_t size, size_t *outSize)
    {
       pages = (size / pageSize) + 1;
    }
-
-   LOG_WRITE("memory: %u", pageSize * pages);
-
    
    return (u8 *)malloc(pages * pageSize);
 }
@@ -152,6 +149,7 @@ void OnNativeWindowDestroyed(ANativeActivity *activity, ANativeWindow *window)
 void OnInputQueueCreated(ANativeActivity *activity, AInputQueue *queue)
 {
    AndroidState *state = (AndroidState *)activity->instance;
+   state->iQueue = queue;
 
    state->events.Push({AndroidCommand::INPUTQUEUECREATED});
 }
@@ -214,16 +212,10 @@ void InitOpengl(AndroidState *state)
    EGLint nConfigs;
    EGLint format;
    EGLBoolean success;
-   eglChooseConfig(state->display, attribs, &config, 1, &nConfigs);
-   
+   eglChooseConfig(state->display, attribs, &config, 1, &nConfigs);   
    eglGetConfigAttrib(state->display, config, EGL_NATIVE_VISUAL_ID, &format);
-
-   // ANativeWindow_setBuffersGeometry(state->window, 0, 0, format);
-   
    state->surface = eglCreateWindowSurface(state->display, config, state->window, 0);
-   
    state->context = eglCreateContext(state->display, config, 0, glAttribs);
-   
    success = eglMakeCurrent(state->display, state->surface, state->surface, state->context);   
 
 #ifdef DEBUG
@@ -238,10 +230,17 @@ void AndroidMain(AndroidState *state)
 {
    bool drawing = false;
    GameState gameState;
+   bool queueReady = false;
+
+   // state.aLooper = ALooperPrepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
+
+   timespec begin, end;
 
    for(;;)
    {
-      AndroidCommand command;      
+      clock_gettime(CLOCK_MONOTONIC, &begin);
+      AndroidCommand command;
+
       if(state->events.Pop(&command))
       {
 	 switch(command.command)
@@ -262,16 +261,117 @@ void AndroidMain(AndroidState *state)
 	       
 	       drawing = true;
 	    }break;
+
+	    case RESUME:
+	    {
+	       LOG_WRITE("RESUME");
+	    }break;
+
+	    case SAVESTATE:
+	    {
+	       LOG_WRITE("SAVESTATE");
+	    }break;
+
+	    case PAUSE:
+	    {
+	       LOG_WRITE("PAUSE");
+	    }break;
+
+	    case STOP:
+	    {
+	       LOG_WRITE("STOP");
+	    }break;
+
+	    case DESTROY:
+	    {
+	       LOG_WRITE("DESTROY");
+	    }break;
+
+	    case WINDOWFOCUSCHANGE:
+	    {
+	       LOG_WRITE("WINDOWFOCUSCHANGE");
+	    }break;
+
+	    case NATIVEWINDOWDESTROYED:
+	    {
+	       LOG_WRITE("NATIVEWINDOWDESTROYED");
+	    }break;
+
+	    case NATIVEWINDOWRESIZED:
+	    {
+	       LOG_WRITE("NATIVEWINDOWRESIZED");
+	    }break;
+
+	    case NATIVEWINDOWREDRAWNEEDED:
+	    {
+	       LOG_WRITE("NATIVEREDRAWNEEDED");
+	    }break;
+
+	    case INPUTQUEUECREATED:
+	    {
+	       queueReady = true;
+	       LOG_WRITE("INPUTQUEUECREATED");
+	    }break;
+
+	    case INPUTQUEUEDESTROYED:
+	    {
+	       LOG_WRITE("INPUTQUEUEDESTROYED");
+	    }break;
+
+	    case CONTENTRECTCHANGED:
+	    {
+	       LOG_WRITE("CONTENTRECTCHANGED");
+	    }break;
+
+	    case CONFIGURATIONCHANGED:
+	    {
+	       LOG_WRITE("CONFIGURATIONCHANGED");
+	    }break;
+
+	    case LOWMEMORY:
+	    {
+	       LOG_WRITE("LOWMEMORY");
+	    }break;
+
+	    default:
+	    {
+	       LOG_WRITE("WUT");
+	       assert(false);
+	    }break;
 	 }
       }
 
+      if(queueReady)
+      {	 
+	 AInputEvent *event;
+	 while(AInputQueue_hasEvents(state->iQueue))
+	 {
+	    AInputQueue_getEvent(state->iQueue, &event);
+	    LOG_WRITE("input");
+	 }
+      }
+      
       if(drawing)
       {
-	 // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
 	 GameLoop(gameState);
 	 eglSwapBuffers(state->display, state->surface);
+	 // eglSwapInterval(state->display, 0);
       }
+
+      clock_gettime(CLOCK_MONOTONIC, &end);
+
+      float total;
+      if(end.tv_sec == begin.tv_sec)
+      {	 
+	 total = (float)(end.tv_nsec - begin.tv_nsec);	 
+      }
+      else
+      {
+	 long seconds = end.tv_sec - begin.tv_sec;
+	 total = (float)(((seconds * 1000000000) - begin.tv_nsec) + end.tv_nsec);
+      }
+      float totalMillis = total / 1000000.0f;
+      delta = totalMillis / 16.6666666667f;
    }   
 }
 
@@ -283,7 +383,10 @@ void *CreateApp(ANativeActivity *activity)
    manager = activity->assetManager;
 
    pthread_t t;
-   pthread_create(&t, 0, (pthread_func)AndroidMain, state);
+   pthread_attr_t attributes;
+   pthread_attr_init(&attributes);
+   pthread_attr_setdetachstate(&attributes, PTHREAD_CREATE_DETACHED);
+   pthread_create(&t, &attributes, (pthread_func)AndroidMain, state);
 
    return (void *)state;
 }

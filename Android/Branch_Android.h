@@ -69,4 +69,5 @@ struct AndroidState
    EGLDisplay display;
    EGLSurface surface;
    EGLContext context;
+   AInputQueue *iQueue;
 };
