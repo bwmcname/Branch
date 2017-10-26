@@ -67,6 +67,7 @@ enum RenderCommand
    DrawBlur,
    DrawButton,
    DrawLinearInstances,
+   DrawBranchInstances
 };
 
 struct CommandBase
@@ -101,7 +102,7 @@ struct DrawLinearCommand : public CommandBase
    Object obj;
 };
 
-struct LinearInstance
+struct TrackInstance
 {
    v3 position;
    quat rotation;
@@ -153,6 +154,10 @@ struct DrawLinearInstancesCommand : public CommandBase
 {
 };
 
+struct DrawBranchInstancesCommand : public CommandBase
+{
+};
+
 /*
 Different command we need.
 BindProgram
@@ -169,11 +174,16 @@ struct CommandState
    u32 count;
 
    u32 linearInstanceCount;
-   LinearInstance *linearInstances;
+   TrackInstance *linearInstances;
+
+   u32 branchInstanceCount;
+   TrackInstance *branchInstances;
+   
    GLuint instanceMVPBuffer;
    GLuint instanceColorBuffer;
    GLuint instanceModelMatrixBuffer;
-   GLuint instanceVao;
+   GLuint linearInstanceVao;
+   GLuint branchInstanceVao;
 
    CommandBase *first;
    CommandBase *last;
@@ -182,8 +192,11 @@ struct CommandState
    inline void PushDrawBreakTexture(v3 position, v3 scale, quat orientation, StackAllocator *allocator);
    inline void PushDrawLinear(Object obj, StackAllocator *allocator);
    inline void PushLinearInstance(Object obj, v3 color);
-   inline void PushRenderLinearInstances(StackAllocator *allocators);
-   void RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view);
+   inline void PushBranchInstance(Object obj, v3 color);
+   inline void PushRenderLinearInstances(StackAllocator *allocator);
+   inline void PushRenderBranchInstances(StackAllocator *allocator);
+   // void RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view);
+   void RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &view, u32 count, TrackInstance *instances, u32 vcount, GLuint instanceVao);
    inline void PushDrawSpeedup(Object obj, StackAllocator *allocator);
    inline void PushDrawBranch(Object obj, StackAllocator *allocator);
    inline void PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocator *allocator);

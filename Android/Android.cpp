@@ -228,6 +228,7 @@ void InitOpengl(AndroidState *state)
 
 void AndroidMain(AndroidState *state)
 {
+   LOG_WRITE("Worker thread: %ld", pthread_self());
    bool drawing = false;
    GameState gameState;
    bool queueReady = false;
@@ -341,13 +342,56 @@ void AndroidMain(AndroidState *state)
 	 }
       }
 
+      // Handle input
       if(queueReady)
       {	 
 	 AInputEvent *event;
+	 i32 success;
+	 bool interacted = false;
+
+	 if(gameState.input.Touched())
+	 {
+	    gameState.input.flags |= AndroidInputState::held;
+	 }
+
+	 if(gameState.input.UnTouched())
+	 {
+	    gameState.input.flags = 0;
+	 }
+
 	 while(AInputQueue_hasEvents(state->iQueue))
 	 {
-	    AInputQueue_getEvent(state->iQueue, &event);
-	    LOG_WRITE("input");
+	    AInputQueue_getEvent(state->iQueue, &event);	    
+	    if(!AInputQueue_preDispatchEvent(state->iQueue, event))
+	    {	       
+	       switch (AInputEvent_getType(event))
+	       {
+		  case AINPUT_EVENT_TYPE_MOTION:
+		  {
+		     switch(AMotionEvent_getAction(event))
+		     {
+			case AMOTION_EVENT_ACTION_DOWN:
+			{
+			   gameState.input.flags |= AndroidInputState::touched;
+
+			   gameState.input.touchCoords = {(i32)AMotionEvent_getX(event, 0),
+							  (i32)AMotionEvent_getY(event, 0)};
+			}break;
+
+			case AMOTION_EVENT_ACTION_UP:
+			{
+			   gameState.input.flags &= ~AndroidInputState::touched;
+			   gameState.input.flags |= AndroidInputState::released;
+
+			   gameState.input.touchCoords = {(i32)AMotionEvent_getX(event, 0),
+							  (i32)AMotionEvent_getY(event, 0)};
+			}break;
+		     }
+		  } break;
+	       }
+	       /* handle input */
+	       AInputQueue_finishEvent(state->iQueue, event, 1);
+	    }
 	 }
       }
       
@@ -381,6 +425,8 @@ void *CreateApp(ANativeActivity *activity)
    state->events = CreateAndroidEventQueue();
 
    manager = activity->assetManager;
+
+   LOG_WRITE("Main thread: %ld", pthread_self());
 
    pthread_t t;
    pthread_attr_t attributes;

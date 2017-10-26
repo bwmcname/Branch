@@ -185,8 +185,11 @@ CommandState InitCommandState(StackAllocator *allocator)
    result.first = 0;   
    result.last = 0;
    // 1024 for now, but we may be able to find tighter bounds!
-   result.linearInstances = (LinearInstance *)allocator->push(sizeof(LinearInstance) * 1024);
+   result.linearInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
    result.linearInstanceCount = 0;
+
+   result.branchInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
+   result.branchInstanceCount = 0;
 
    glGenBuffers(1, &result.instanceMVPBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
@@ -200,8 +203,8 @@ CommandState InitCommandState(StackAllocator *allocator)
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceColorBuffer);
    glBufferData(GL_ARRAY_BUFFER, sizeof(v3) * 1024, 0, GL_STREAM_DRAW);
 
-   glGenVertexArrays(1, &result.instanceVao);
-   glBindVertexArray(result.instanceVao);
+   glGenVertexArrays(1, &result.linearInstanceVao);
+   glBindVertexArray(result.linearInstanceVao);
    
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glBindBuffer(GL_ARRAY_BUFFER, LinearTrack.handles.vbo);
@@ -245,10 +248,57 @@ CommandState InitCommandState(StackAllocator *allocator)
    glVertexAttribDivisor(MATRIX2_LOCATION, 1);
    glVertexAttribDivisor(MATRIX2_LOCATION+1, 1);
    glVertexAttribDivisor(MATRIX2_LOCATION+2, 1);
-   glVertexAttribDivisor(MATRIX2_LOCATION+3, 1);   
+   glVertexAttribDivisor(MATRIX2_LOCATION+3, 1);
 
    glBindVertexArray(0);
 
+   // now do the same for branch instances
+   glGenVertexArrays(1, &result.branchInstanceVao);   
+   glBindVertexArray(result.branchInstanceVao);
+
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, BranchTrack.handles.vbo);
+   glVertexAttribPointer(VERTEX_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+   
+   glEnableVertexAttribArray(NORMAL_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, BranchTrack.handles.nbo);
+   glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+      
+   glEnableVertexAttribArray(COLOR_INPUT_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceColorBuffer);
+   glVertexAttribPointer(COLOR_INPUT_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);      
+
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
+   glEnableVertexAttribArray(MATRIX1_LOCATION);
+   glVertexAttribPointer(MATRIX1_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 1);
+   glVertexAttribPointer(MATRIX1_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 2);
+   glVertexAttribPointer(MATRIX1_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 3);
+   glVertexAttribPointer(MATRIX1_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
+
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceModelMatrixBuffer);
+   glEnableVertexAttribArray(MATRIX2_LOCATION);
+   glVertexAttribPointer(MATRIX2_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
+   glEnableVertexAttribArray(MATRIX2_LOCATION + 1);
+   glVertexAttribPointer(MATRIX2_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
+   glEnableVertexAttribArray(MATRIX2_LOCATION + 2);
+   glVertexAttribPointer(MATRIX2_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
+   glEnableVertexAttribArray(MATRIX2_LOCATION + 3);
+   glVertexAttribPointer(MATRIX2_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
+
+   glVertexAttribDivisor(VERTEX_LOCATION, 0);
+   glVertexAttribDivisor(NORMAL_LOCATION, 0);
+   glVertexAttribDivisor(COLOR_INPUT_LOCATION, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+1, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+2, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+3, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION+1, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION+2, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION+3, 1);
    return result;
 }
 
@@ -297,6 +347,16 @@ void CommandState::PushLinearInstance(Object obj, v3 color)
 {
    B_ASSERT(linearInstanceCount < 1024);
    linearInstances[linearInstanceCount++] = {obj.worldPos,
+					     obj.orientation,
+					     obj.scale,
+					     color};
+}
+
+inline
+void CommandState::PushBranchInstance(Object obj, v3 color)
+{
+   B_ASSERT(branchInstanceCount < 1024);
+   branchInstances[branchInstanceCount++] = {obj.worldPos,
 					     obj.orientation,
 					     obj.scale,
 					     color};
@@ -443,6 +503,20 @@ CommandState::PushRenderLinearInstances(StackAllocator *allocator)
    last->next = (CommandBase *)allocator->push(sizeof(DrawLinearInstancesCommand));
    DrawLinearInstancesCommand *command = (DrawLinearInstancesCommand *)last->next;
    command->command = DrawLinearInstances;
+
+   last = command;
+   ++count;
+}
+
+inline void
+CommandState::PushRenderBranchInstances(StackAllocator *allocator)
+{
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawBranchInstancesCommand));
+   DrawBranchInstancesCommand *command = (DrawBranchInstancesCommand *)last->next;
+   command->command = DrawBranchInstances;
 
    last = command;
    ++count;
@@ -832,7 +906,7 @@ void BeginFrame(GameState &state)
    glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo); // @Android merging!!
 
    // @we really only need to clear the color of the secondary buffer, can we do this?
-   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);   
+   glClear(GL_DEPTH_BUFFER_BIT);   
    RenderBackground(state);
    glEnable(GL_DEPTH_TEST);
 }
@@ -875,9 +949,12 @@ void RenderBlur(RenderState &renderer, Camera &camera)
    glUniform1i(glGetUniformLocation(renderer.fullScreenProgram, "image2"), 0);
 
    glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "xstep"), 0.0f);
-   glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "ystep"), 1.0f / (float)(SCREEN_HEIGHT));
+   glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "ystep"), 1.0f / (float)(SCREEN_HEIGHT));   
 
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
+
+   GLuint attachment = GL_COLOR_ATTACHMENT0;
+   glInvalidateFramebuffer(renderer.horizontalFbo, 1, &attachment);
    
    // finally blit it to the screen
    // @should change programs!!!   
@@ -906,6 +983,14 @@ void RenderBlur(RenderState &renderer, Camera &camera)
    #endif
    
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
+
+   glInvalidateFramebuffer(renderer.verticalFbo, 1, &attachment);
+
+   GLuint attachList[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_DEPTH_STENCIL_ATTACHMENT};
+   glInvalidateFramebuffer(renderer.fbo, 4, attachList);
+
+   attachment = GL_DEPTH_STENCIL_ATTACHMENT;
+   glInvalidateFramebuffer(0, 1, &attachment);
 
    #ifdef WIN32_BUILD
    glDisable(GL_FRAMEBUFFER_SRGB);
@@ -1418,7 +1503,20 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
 	 case DrawLinearInstances:
 	 {
-	    RenderLinearInstances(allocator, lightPos, camera.view);
+	    RenderTrackInstances(allocator, lightPos, camera.view,
+				 linearInstanceCount, linearInstances, LinearTrack.mesh.vcount, linearInstanceVao);
+
+	    // reset instance count
+	    linearInstanceCount = 0;
+	 }break;
+
+	 case DrawBranchInstances:
+	 {
+	    RenderTrackInstances(allocator, lightPos, camera.view,
+				 branchInstanceCount, branchInstances, BranchTrack.mesh.vcount, branchInstanceVao);
+
+	    // result instance count
+	    branchInstanceCount = 0;
 	 }break;
 
 	 case BindProgram:
@@ -1459,48 +1557,49 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
    // if no DrawLinearInstances command was issued, then clean command list
    linearInstanceCount = 0;
+   branchInstanceCount = 0;
 }
 
 void
-CommandState::RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view)
+CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &view,
+				   u32 instanceCount, TrackInstance *instances, u32 vcount, GLuint instanceVao)
 {
    glUseProgram(DefaultInstanced.programHandle);
 
-   m4 *transforms = (m4 *)allocator->push(sizeof(m4) * linearInstanceCount);
-   m4 *MVPs = (m4 *)allocator->push(sizeof(m4) * linearInstanceCount);
-   v3 *color = (v3 *)allocator->push(sizeof(v3) * linearInstanceCount);
+   m4 *transforms = (m4 *)allocator->push(sizeof(m4) * instanceCount);
+   m4 *MVPs = (m4 *)allocator->push(sizeof(m4) * instanceCount);
+   v3 *color = (v3 *)allocator->push(sizeof(v3) * instanceCount);
 
    m4 vp = InfiniteProjection * view;
 
    glUniform3fv(DefaultInstanced.lightPosUniform, 1, lightPos.e);
    glUniformMatrix4fv(DefaultInstanced.viewUniform, 1, GL_FALSE, view.e);
 
-   for(u32 i = 0; i < linearInstanceCount; ++i)
+   for(u32 i = 0; i < instanceCount; ++i)
    {
-      color[i] = linearInstances[i].color;
+      color[i] = instances[i].color;
 
-      m4 orientation = M4(linearInstances[i].rotation);
-      m4 scale = Scale(linearInstances[i].scale);
-      m4 translation = Translate(linearInstances[i].position);   
+      m4 orientation = M4(instances[i].rotation);
+      m4 scale = Scale(instances[i].scale);
+      m4 translation = Translate(instances[i].position);   
 
       transforms[i] = (translation * scale * orientation);
       MVPs[i] = vp * transforms[i];
    }
 
    glBindBuffer(GL_ARRAY_BUFFER, instanceMVPBuffer);
-   glBufferSubData(GL_ARRAY_BUFFER, 0, linearInstanceCount * sizeof(m4), MVPs);
+   glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), MVPs);
 
    glBindBuffer(GL_ARRAY_BUFFER, instanceModelMatrixBuffer);
-   glBufferSubData(GL_ARRAY_BUFFER, 0, linearInstanceCount * sizeof(m4), transforms);
+   glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), transforms);
 
    glBindBuffer(GL_ARRAY_BUFFER, instanceColorBuffer);
-   glBufferSubData(GL_ARRAY_BUFFER, 0, linearInstanceCount * sizeof(v3),  color);
+   glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(v3),  color);
 
    glBindVertexArray(instanceVao);   
-   glDrawArraysInstanced(GL_TRIANGLES, 0, LinearTrack.mesh.vcount, linearInstanceCount);
+   glDrawArraysInstanced(GL_TRIANGLES, 0, vcount, instanceCount);
    glBindVertexArray(0);
-   linearInstanceCount = 0;
-
+   
    allocator->pop();
    allocator->pop();
    allocator->pop();
@@ -1530,7 +1629,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	       }
 	       else
 	       {
-		  state.renderer.commands.PushDrawBranch(state.tracks.elements[i].renderable, allocator);
+		  state.renderer.commands.PushBranchInstance(state.tracks.elements[i].renderable, NORMAL_COLOR);
 	       }
 	    }
 	 }
@@ -1565,7 +1664,8 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
       }	 
    }
 
-   state.renderer.commands.PushRenderLinearInstances(allocator);   
+   state.renderer.commands.PushRenderLinearInstances(allocator);
+   state.renderer.commands.PushRenderBranchInstances(allocator);
    END_TIME();
    READ_TIME(state.TrackRenderTime);
 

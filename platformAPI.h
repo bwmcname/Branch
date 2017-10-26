@@ -72,7 +72,7 @@ static size_t AndroidFileSize(char *filename);
 
 typedef AAsset * BranchFileHandle;
 
-struct Android_Input_State
+struct AndroidInputState
 {
    enum : u32
    {
@@ -115,6 +115,6 @@ struct Android_Input_State
    }
 };
 
-typedef Android_Input_State Platform_Input_State;
+typedef AndroidInputState Platform_Input_State;
 
 #endif

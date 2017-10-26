@@ -107,6 +107,7 @@ typedef void (*glFramebufferRenderbuffer_t) (GLenum, GLenum, GLenum, GLuint);
 typedef void (*glDrawBuffers_t) (GLsizei, const GLenum *);
 typedef void (*glDrawArraysInstanced_t) (GLenum, GLint, GLsizei, GLsizei);
 typedef void (*glVertexAttribDivisor_t) (GLuint, GLuint);
+typedef void (*glInvalidateFramebuffer_t) (GLenum, GLsizei, const GLenum *);
 
 wglChoosePixelFormatARB_t wglChoosePixelFormatARB;
 glCreateProgram_t glCreateProgram;
@@ -150,6 +151,7 @@ glFramebufferRenderbuffer_t glFramebufferRenderbuffer;
 glDrawBuffers_t glDrawBuffers;
 glDrawArraysInstanced_t glDrawArraysInstanced;
 glVertexAttribDivisor_t glVertexAttribDivisor;
+glInvalidateFramebuffer_t glInvalidateFramebuffer;
 
 HMODULE glDll = 0;
 

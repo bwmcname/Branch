@@ -291,6 +291,7 @@ int OpenglCreate(HWND WindowHandle)
    WinGetGlExtension(glDrawArraysInstanced);
    WinGetGlExtension(glVertexAttribDivisor);
    WinGetGlExtension(glDisableVertexAttribArray);
+   WinGetGlExtension(glInvalidateFramebuffer);
    return true;
 }
 
@@ -500,8 +501,7 @@ int CALLBACK WinMain(HINSTANCE Instance,
       }           
 
       GameLoop(state);
-      SwapBuffers(hdc);
-      glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+      SwapBuffers(hdc);      
 
       QueryPerformanceCounter(&Elapsed);
       Elapsed.QuadPart -= Begin.QuadPart;
