@@ -77,12 +77,12 @@
 #include "log.h"
 #include "branch_common.h"
 #include "platformAPI.h"
+#include "PlatformThread.h"
 #include "AssetHeader.h"
 #include "Allocator.h"
 #include "map.h"
 #include "Renderer.h"
 #include "Assets.h"
-
 #include "main.h"
 
 #ifdef ANDROID_BUILD
