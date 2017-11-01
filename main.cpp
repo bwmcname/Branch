@@ -569,6 +569,7 @@ i32 OtherSideOfBranchHasBreak(NewTrackGraph &graph, u16 ancestor, u16 thisSide)
    }
 }
 
+// Generate Tracks
 void FillGraph(NewTrackGraph &graph)
 {
    while(graph.availableIDs.size > 0 &&
@@ -636,7 +637,7 @@ void FillGraph(NewTrackGraph &graph)
 	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});	    
 	    LocationInfo &inFront = graph.taken.get({item.x, item.y+1});
 	    
-	    // Sometimes linear tracks lead up to an already place break.
+	    // Sometimes linear tracks can lead up to a break
 	    if(inFront.hasBreak())
 	    {
 	       u16 index = inFront.ID;
@@ -785,8 +786,7 @@ void NewSetReachable(NewTrackGraph &graph, StackAllocator &allocator, u16 start)
 
 #define NotReachableVisible(flags) (((flags) & Attribute::invisible) && !((flags) & Attribute::reachable))
 #define NotReachable(flags) (!((flags) & Attribute::reachable))
-#define NotVisible(flags) ((flags) & Attribute::invisible)
-				
+#define NotVisible(flags) ((flags) & Attribute::invisible)				
 
 void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator, v3 cameraPos)
 {
@@ -938,27 +938,6 @@ void NewUpdateTrackGraph(NewTrackGraph &graph, StackAllocator &allocator, Player
    NewSortTracks(graph, allocator, camera.position);
 
    FillGraph(graph);   
-}
-
-// the globalName "LoadImage" is already taken
-static 
-Image LoadImageFile(char *filename, StackAllocator *allocator)
-{
-   size_t fileSize = FileSize(filename);
-   // @leak
-   u8 *buffer = allocator->push(fileSize);
-
-   FileRead(filename, buffer, fileSize);
-
-   ImageHeader *header = (ImageHeader *)buffer;
-   Image result;
-
-   result.x = header->x;
-   result.y = header->y;
-   result.channels = header->channels;
-   result.data = buffer + sizeof(header);
-
-   return result;
 }
 
 static

@@ -21,9 +21,13 @@ void VirtualCoordHashTable::Swap(u32 a, u32 b)
 u32 VirtualCoordHashTable::IncrementPointer(u32 ptr)
 {
    if(ptr == capacity - 1)
+   {
       return 0;
+   }
    else
+   {
       return ptr + 1;
+   }
 }
 
 VirtualCoordHashTable InitVirtualCoordHashTable(u32 capacity, StackAllocator *allocator)
