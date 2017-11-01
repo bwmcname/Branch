@@ -36,7 +36,7 @@
 // Only used for getting character quads out of a font bitmap
 // STB_TRUETYPE is used in the Asset Packing tool (ap)
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
+#include "libs/stb_truetype.h"
 
 // REMOVE!!!
 #include <math.h>
