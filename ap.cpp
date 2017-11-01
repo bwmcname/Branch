@@ -14,6 +14,10 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
+#define ASSET_DIRECTORY "ProcessedAssets/"
+#define TO_ASSET_PATH(filename) (ASSET_DIRECTORY ## filename)
+
+
 // vertex bits
 #define VERTEX 1
 #define UV (1 << 1)
@@ -390,7 +394,7 @@ void Model(char *filename)
       begin[i] = b.vertices[b.indices[i].e[0]];
    }
 
-   file = OpenForWrite("assets/sphere.brian");
+   file = OpenForWrite(TO_ASSET_PATH("sphere.brian"));
    fwrite(writebuffer, writeSize, 1, file);
    fclose(file);
 
@@ -515,7 +519,7 @@ void Shader(char *filename)
    if(outBuffer)
    {
       char path[64];
-      sprintf(path, "assets/%sp", filename);
+      sprintf(path, "%s/%sp", ASSET_DIRECTORY, filename);
       file = OpenForWrite(path);
       fwrite(outBuffer, outSize, 1, file);
       fclose(file);
@@ -566,7 +570,7 @@ int Font(char *fontName, u32 width, u32 height, float pointSize)
    printf("height:     %d\n", result->height);
    printf("point_size: %f\n", pointSize);
 
-   FILE *outFont = OpenForWrite("Assets/wow.font");
+   FILE *outFont = OpenForWrite(TO_ASSET_PATH("wow.font"));
    fwrite(result, outFileSize, 1, outFont);
 
    free(outBuffer);
@@ -745,7 +749,7 @@ void Image(char *fileName)
       }
 
       char outname[32];
-      sprintf(outname, "assets/%s", fileName);
+      sprintf(outname, "%s/%s", ASSET_DIRECTORY, fileName);
 
       FILE *outFile = OpenForWrite(outname);
       fwrite(result, sizeof(Branch_Image_Header) + pixelsSize, 1, outFile);
@@ -760,7 +764,7 @@ void Image(char *fileName)
 void Build(int count, char **arguments)
 {
    FILE *header = OpenForWrite("AssetHeader.h");
-   FILE *packed = OpenForWrite("Assets/Packed.assets");
+   FILE *packed = OpenForWrite(TO_ASSET_PATH("Packed.assets"));
 
    char head[] = "//BUILT BY AP.EXE, DO NOT EDIT\nstruct AssetHeader\n{\n";
    fwrite(head, strlen(head), 1, header);
@@ -773,7 +777,7 @@ void Build(int count, char **arguments)
    char *entry = (char *)malloc(128);
    for(int i = 0; i < count; ++i)
    {
-      sprintf(path, "Assets/%s", arguments[i]);
+      sprintf(path, "%s/%s", ASSET_DIRECTORY, arguments[i]);
       FILE *asset = OpenForRead(path);
       size_t size = FileSize(asset);
       sizes[i] = size;

@@ -1,6 +1,0 @@
-Notes on Grammars
-
-(A)
-(a[0]A)
-(a[0]b[1](B)(B))
-(a[0]b[1](a[2]A)(a[3]A))

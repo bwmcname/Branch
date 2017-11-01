@@ -6,7 +6,7 @@
 #define AllocateSystemMemory(size, dest) (Win32AllocateMemory(size, dest))
 #define FreeSystemMemory(mem) (Win32FreeMemory(mem))
 #define FileOpen(fileName) (Win32FileOpen(fileName))
-#define ASSET_PATH(filename) ("assets/" ## filename)
+#define ASSET_PATH(filename) ("ProcessedAssets/" ## filename)
 typedef HANDLE BranchFileHandle;
 
 struct Win32_Input_State
