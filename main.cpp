@@ -4,6 +4,82 @@
 #define SCREEN_RIGHT 1.0f
 #define SCREEN_LEFT -1.0f
 
+// Save the state of the application
+// needed for android.
+RebuildState *SaveState(GameState *state)
+{
+   RebuildState *saving = (RebuildState *)malloc(sizeof(RebuildState));
+
+   saving->camera = state->camera;
+   saving->player = state->sphereGuy;
+   memcpy(saving->trackAttributes, state->tracks.adjList, sizeof(Attribute) * 1024);
+   memcpy(saving->tracks, state->tracks.elements, sizeof(Track) * 1024);
+
+   saving->availableIDsBegin = state->tracks.availableIDs.begin;
+   saving->availableIDsEnd = state->tracks.availableIDs.end;
+   saving->availableIDsSize = state->tracks.availableIDs.size;
+   memcpy(saving->availableIDs, state->tracks.availableIDs.elements, sizeof(u16) * 1024);
+
+   saving->ordersBegin = state->tracks.orders.begin;
+   saving->ordersEnd = state->tracks.orders.end;
+   saving->ordersSize = state->tracks.orders.size;
+   memcpy(saving->orders, state->tracks.orders.elements, sizeof(NewTrackOrder) * 1024);
+
+   saving->newBranchesBegin = state->tracks.newBranches.begin;
+   saving->newBranchesEnd = state->tracks.newBranches.end;
+   saving->newBranchesSize = state->tracks.newBranches.size;
+   memcpy(saving->newBranches, state->tracks.newBranches.elements, sizeof(u16) * 256);
+
+   memcpy(saving->takenElements, state->tracks.taken.e, sizeof(Element) * 1024);
+   saving->takenSize = state->tracks.taken.size;
+
+   memcpy(saving->IDtable, state->tracks.IDtable, sizeof(u16) * 1024);
+   memcpy(saving->reverseIDtable, state->tracks.reverseIDtable, sizeof(u16) * 1024);
+
+   saving->switchDelta = state->tracks.switchDelta;
+   saving->beginLerp = state->tracks.beginLerp;
+   saving->endLerp = state->tracks.endLerp;
+
+   return saving;
+}
+
+// Restore state of application
+void ReloadState(RebuildState *saved, GameState &result)
+{
+   result.camera = saved->camera;
+   result.sphereGuy = saved->player;
+   memcpy(result.tracks.adjList, saved->trackAttributes, sizeof(Attribute) * 1024);
+   memcpy(result.tracks.elements, saved->tracks, sizeof(Track) * 1024);
+
+   result.tracks.availableIDs.begin = saved->availableIDsBegin;
+   result.tracks.availableIDs.end = saved->availableIDsEnd;
+   result.tracks.availableIDs.size = saved->availableIDsSize;
+   result.tracks.availableIDs.max = 1024;
+   memcpy(result.tracks.availableIDs.elements, saved->availableIDs, sizeof(u16) * 1024);
+
+   result.tracks.orders.begin = saved->ordersBegin;
+   result.tracks.orders.end = saved->ordersEnd;
+   result.tracks.orders.size = saved->ordersSize;
+   result.tracks.orders.max = 1024;
+   memcpy(result.tracks.orders.elements, saved->orders, sizeof(NewTrackOrder) * 1024);
+
+   result.tracks.newBranches.begin = saved->newBranchesBegin;
+   result.tracks.newBranches.end = saved->newBranchesEnd;
+   result.tracks.newBranches.size = saved->newBranchesSize;
+   result.tracks.newBranches.max = 256;
+   memcpy(result.tracks.newBranches.elements, saved->newBranches, sizeof(u16) * 256);
+
+   memcpy(result.tracks.taken.e, saved->takenElements, sizeof(Element) * 1024);
+   result.tracks.taken.size = saved->takenSize;
+
+   memcpy(result.tracks.IDtable, saved->IDtable, sizeof(u16) * 1024);
+   memcpy(result.tracks.reverseIDtable, saved->reverseIDtable, sizeof(u16) * 1024);
+
+   result.tracks.switchDelta = saved->switchDelta;
+   result.tracks.beginLerp = saved->beginLerp;
+   result.tracks.endLerp = saved->endLerp;
+}
+
 void
 Camera::UpdateView()
 {
@@ -34,7 +110,7 @@ void InitCamera(Camera &camera)
    camera.UpdateView();
 };
 
-static inline
+static B_INLINE
 tri2 Tri2(v2 a, v2 b, v2 c)
 {
    tri2 result;
@@ -46,13 +122,13 @@ tri2 Tri2(v2 a, v2 b, v2 c)
    return result;
 }
 
-static inline
+static B_INLINE
 v3 V3(v2 a, float z)
 {
    return {a.x, a.y, z}; 
 }
 
-static inline
+static B_INLINE
 Curve InvertX(Curve c)
 {
    Curve result;
@@ -96,7 +172,7 @@ v2 CubicBezier(Curve c, float t)
    return CubicBezier(c.p1, c.p2, c.p3, c.p4, t);
 }
 
-static inline
+static B_INLINE
 Track CreateTrack(v3 position, v3 scale, Curve *bezier)
 {
    Object obj;
@@ -113,7 +189,7 @@ Track CreateTrack(v3 position, v3 scale, Curve *bezier)
 }
 
 template <typename T>
-inline i32 CircularQueue<T>::IncrementIndex(i32 index)
+B_INLINE i32 CircularQueue<T>::IncrementIndex(i32 index)
 {
    if(index == max) return 0;
    else return index + 1;
@@ -176,14 +252,14 @@ void CircularQueue<T>::ClearToZero()
    memset(elements, 0, max * sizeof(T));
 }
 
-static inline
+static B_INLINE
 v2 VirtualToReal(i32 x, i32 y)
 {
    return V2((float)x * TRACK_SEGMENT_SIZE, (float)y * TRACK_SEGMENT_SIZE);
 }
 
 // returns a linear bezier curve
-static inline
+static B_INLINE
 Curve LinearCurve(i32 x1, i32 y1,
 		  i32 x2, i32 y2)
 {
@@ -202,7 +278,7 @@ Curve LinearCurve(i32 x1, i32 y1,
    return result;
 }
 
-static inline
+static B_INLINE
 Curve BreakCurve()
 {
 
@@ -217,7 +293,7 @@ Curve BreakCurve()
    return result;
 }
 
-static inline
+static B_INLINE
 Curve BranchCurve(i32 x1, i32 y1,
 		  i32 x2, i32 y2)
 {
@@ -235,7 +311,7 @@ Curve BranchCurve(i32 x1, i32 y1,
    return result;
 }
 
-inline void
+B_INLINE void
 Attribute::removeEdge(u16 edgeID)
 {
    if(hasLeft())
@@ -257,14 +333,14 @@ Attribute::removeEdge(u16 edgeID)
    }
 }
 
-inline void
+B_INLINE void
 Attribute::addAncestor(u16 ancestorID)
 {
    B_ASSERT(ancestorCount < 3);
    ancestors[ancestorCount++] = ancestorID;   
 }
 
-inline void
+B_INLINE void
 Attribute::removeAncestor(u16 ancestorID)
 {
    B_ASSERT(ancestorCount > 0);
@@ -286,32 +362,32 @@ Attribute::removeAncestor(u16 ancestorID)
    }
 }
 
-inline Attribute &
+B_INLINE Attribute &
 NewTrackGraph::GetTrack(u16 id)
 {
    return adjList[IDtable[id]];
 }
 
-inline void
+B_INLINE void
 NewTrackGraph::SetID(u16 virt, u16 actual)
 {
    IDtable[virt] = actual;
    reverseIDtable[actual] = virt;
 }
 
-inline u16
+B_INLINE u16
 NewTrackGraph::GetActualID(u16 virt)
 {
    return IDtable[virt];
 }
 
-inline u16
+B_INLINE u16
 NewTrackGraph::GetVirtualID(u16 actual)
 {
    return reverseIDtable[actual];
 }
 
-inline u16
+B_INLINE u16
 NewTrackGraph::HasLinearAncestor(u16 actual)
 {
    for(u16 i = 0; i < adjList[actual].ancestorCount; ++i)
@@ -323,7 +399,7 @@ NewTrackGraph::HasLinearAncestor(u16 actual)
    return false;
 }
 
-inline void
+B_INLINE void
 NewTrackGraph::Move(u16 src, u16 dst)
 {
    elements[dst] = elements[src];
@@ -332,7 +408,7 @@ NewTrackGraph::Move(u16 src, u16 dst)
    SetID(virt, dst);
 }
 
-inline void
+B_INLINE void
 NewTrackGraph::Swap2(u16 a, u16 b)
 {
    // Tracks
@@ -789,7 +865,7 @@ void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator, v3 cameraPos
       // now remove all removed items in hashtable
       for(u16 i = 0; i < graph.capacity; ++i)
       {
-	 if(graph.taken.e[i].flags & VirtualCoordHashTable::Element::occupied)
+	 if(graph.taken.e[i].flags & Element::occupied)
 	 {
 	    for(u16 j = 0; j < removedTop; ++j)
 	    {
@@ -904,16 +980,6 @@ FontData LoadFontFile(char *filename, StackAllocator *allocator)
    return result;
 }
 
-static inline
-Object SpherePrimitive(v3 position, v3 scale, quat orientation)
-{
-   Object result;
-   result.worldPos = position;
-   result.scale = scale;
-   result.orientation = orientation;
-   return result;
-}
-
 static B_INLINE
 v3 GetPositionOnTrack(Track &track, float t)
 {   
@@ -923,7 +989,7 @@ v3 GetPositionOnTrack(Track &track, float t)
 	     track.renderable.worldPos.z);
 }
 
-inline
+B_INLINE
 void ResetPlayer(Player &player)
 {
    player.trackIndex = 0;
@@ -1110,7 +1176,7 @@ void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier, StackAl
    alloc->pop();
 }
 
-static inline
+static B_INLINE
 void GenerateTrackSegmentVertices(Track &track, MeshObject meshBuffers, StackAllocator *allocator)
 {
    GenerateTrackSegmentVertices(meshBuffers, *track.bezier, allocator);
@@ -1213,13 +1279,13 @@ stbFont InitFont_stb(Asset font, StackAllocator *allocator)
    return result;
 }
 
-inline
+B_INLINE
 Player InitPlayer()
 {
    Player result;
-   result.renderable = SpherePrimitive(V3(0.0f, -2.0f, 5.0f),
-				       V3(1.0f, 1.0f, 1.0f),
-				       Quat(1.0f, 0.0f, 0.0f, 0.0f));
+   result.renderable = {V3(0.0f, -2.0f, 5.0f),
+			V3(1.0f, 1.0f, 1.0f),
+			Quat(1.0f, 0.0f, 0.0f, 0.0f)};
 
    result.mesh = Sphere;
    result.velocity = 0.15f;
@@ -1231,7 +1297,7 @@ Player InitPlayer()
    return result;
 }
 
-static inline
+static B_INLINE
 Branch_Image_Header *LoadImageFromAsset(Asset &asset)
 {
    return (Branch_Image_Header *)asset.mem;
@@ -1249,7 +1315,26 @@ GLuint LoadImageIntoTexture(Branch_Image_Header *header)
    return result;
 }
 
-void GameInit(GameState &state)
+void SetTrackMeshesForRebuild(Track *tracks, u32 count)
+{
+   for(u32 i = 0; i < count; ++i)
+   {
+      if(tracks[i].flags & Track::branch)
+      {
+	 tracks[i].bezier = &GlobalBranchCurve;
+      }
+      else if(tracks[i].flags & Track::breaks)
+      {
+	 tracks[i].bezier = &GlobalBreakCurve;
+      }
+      else // linear
+      {
+	 tracks[i].bezier = &GlobalLinearCurve;
+      }
+   }
+}
+
+void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
 {
    INIT_LOG();
    
@@ -1273,19 +1358,19 @@ void GameInit(GameState &state)
    InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
 
    state.state = GameState::START;
-   state.tracks = InitNewTrackGraph(stack);
 
    B_ASSERT(state.mainArena.base);
 
    srand((u32)bclock());
 
    glEnable(GL_BLEND);
-   // glEnable(GL_DEPTH_TEST);
-   glEnable(GL_CULL_FACE);
+   glEnable(GL_DEPTH_TEST);
 
-   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+   glFrontFace(GL_CCW);
+   glCullFace(GL_BACK);
+   glEnable(GL_CULL_FACE);   
 
-   InitCamera(state.camera);
+   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);   
 
    Asset &defaultVert = state.assetManager.LoadStacked(AssetHeader::default_vert_ID);
    Asset &defaultFrag = state.assetManager.LoadStacked(AssetHeader::default_frag_ID);
@@ -1331,7 +1416,23 @@ void GameInit(GameState &state)
    Sphere = InitMeshObject(state.assetManager.LoadStacked(AssetHeader::sphere_ID).mem, stack);   
 
    GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
-   GlobalBranchCurve = LEFT_CURVE;
+   
+   if(!rebuild)
+   {
+      GlobalBranchCurve = LEFT_CURVE;
+   }
+   else
+   {
+      if(rebuild->trackGraphFlags & NewTrackGraph::left)
+      {
+	 GlobalBranchCurve = LEFT_CURVE;
+      }
+      else
+      {
+	 GlobalBranchCurve = RIGHT_CURVE;
+      }
+   }
+      
    GlobalBreakCurve = BreakCurve();
    GlobalLeftCurve = LEFT_CURVE;
    GlobalRightCurve = RIGHT_CURVE;   
@@ -1347,8 +1448,24 @@ void GameInit(GameState &state)
    ScreenVertBuffer = UploadVertices(ScreenVerts, 6, 2);   
 
    InitTextBuffers();
-   state.sphereGuy = InitPlayer();
-   FillGraph(state.tracks);
+
+   LOG_WRITE("%zu : %zu", sizeof(RebuildState), rebuildSize);
+
+   if(!rebuild)
+   {
+      state.tracks = InitNewTrackGraph(stack);
+      InitCamera(state.camera);
+      state.sphereGuy = InitPlayer();
+      FillGraph(state.tracks);
+   }
+   else
+   {
+      
+      ReloadState(rebuild, state);
+      state.sphereGuy.mesh = Sphere;
+
+      SetTrackMeshesForRebuild(state.tracks.elements, 1024);
+   }
 }
 
 template <typename int_type> static B_INLINE
@@ -1382,7 +1499,7 @@ int_type IntToString(char *dest, int_type num)
    return count;
 }
 
-inline
+B_INLINE
 v2 ScreenToClip(v2i screen)
 {
    float x = (float)screen.x;
@@ -1529,7 +1646,7 @@ void GameLoop(GameState &state)
 	 static float position = 0.0f;
 	 position += delta * 0.01f;	 
 
-	 //if(ButtonUpdate(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.input) == Clicked)
+	 if(ButtonUpdate(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.input) == Clicked)
 	 {
 	    state.state = GameState::LOOP;	    
 	    state.sphereGuy.trackIndex = 0;

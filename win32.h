@@ -16,43 +16,36 @@
 
 #define GL_VERTEX_SHADER 0x8B31
 #define GL_FRAGMENT_SHADER 0x8B30
-
 #define GL_ARRAY_BUFFER 0x8892
 #define GL_STATIC_DRAW 0x88E4
 #define GL_DYNAMIC_DRAW 0x88E8
 #define GL_STREAM_DRAW 0x88E0
-
 #define GL_TEXTURE_BUFFER 0x8C2A
 #define GL_CLAMP_TO_EDGE 0x812F
 #define GL_CLAMP_TO_BORDER 0x812D
-
 #define GL_TEXTURE_WRAP_R 0x8072
-
 #define GL_TEXTURE0 0x84C0
 #define GL_TEXTURE1 0x84C1
 #define GL_TEXTURE2 0x84C2
 #define GL_TEXTURE3 0x84C3
-
 #define GL_MULTISAMPLE 0x809D
-
 #define GL_FRAMEBUFFER 0x8D40
 #define GL_RGBA16F 0x881A
-
 #define GL_COLOR_ATTACHMENT0 0x8CE0
 #define GL_COLOR_ATTACHMENT1 0x8CE1
 #define GL_COLOR_ATTACHMENT2 0x8CE2
-
 #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
-
 #define GL_DRAW_FRAMEBUFFER 0x8CA9
 #define GL_READ_FRAMEBUFFER 0x8CA8
-
 #define GL_RENDERBUFFER 0x8D41
 #define GL_DEPTH24_STENCIL8 0x88F0
-
 #define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
-
 #define GL_FRAMEBUFFER_SRGB 0x8DB9
+#define GL_MAP_WRITE_BIT 0x0002
+#define GL_MAP_INVALIDATE_BUFFER_BIT 0x0008
+#define GL_MAP_PERSISTENT_BIT 0x0040
+#define GL_DYNAMIC_STORAGE_BIT 0x0100
+#define GL_MAP_COHERENT_BIT 0x0080
 
 typedef uint32_t GLenum;
 typedef int32_t GLint;
@@ -64,6 +57,7 @@ typedef unsigned char GLboolean;
 typedef int GLsizei;
 typedef ptrdiff_t GLsizeiptr;
 typedef ptrdiff_t GLintptr;
+typedef unsigned int GLbitfield;
 
 typedef BOOL (*wglChoosePixelFormatARB_t)(HDC, const int *, const FLOAT *, UINT, int *, UINT *);
 typedef GLuint (*glCreateProgram_t)(void);
@@ -107,7 +101,10 @@ typedef void (*glFramebufferRenderbuffer_t) (GLenum, GLenum, GLenum, GLuint);
 typedef void (*glDrawBuffers_t) (GLsizei, const GLenum *);
 typedef void (*glDrawArraysInstanced_t) (GLenum, GLint, GLsizei, GLsizei);
 typedef void (*glVertexAttribDivisor_t) (GLuint, GLuint);
-typedef void (*glInvalidateFramebuffer_t) (GLenum, GLsizei, const GLenum *);
+typedef void *(*glInvalidateFramebuffer_t) (GLenum, GLsizei, const GLenum *);
+typedef void *(*glMapBufferRange_t) (GLenum, GLintptr, GLsizeiptr, GLbitfield);
+typedef GLboolean (*glUnmapBuffer_t) (GLenum);
+typedef void (*glBufferStorage_t) (GLenum, GLsizeiptr, const GLvoid *, GLbitfield);
 
 wglChoosePixelFormatARB_t wglChoosePixelFormatARB;
 glCreateProgram_t glCreateProgram;
@@ -152,6 +149,9 @@ glDrawBuffers_t glDrawBuffers;
 glDrawArraysInstanced_t glDrawArraysInstanced;
 glVertexAttribDivisor_t glVertexAttribDivisor;
 glInvalidateFramebuffer_t glInvalidateFramebuffer;
+glMapBufferRange_t glMapBufferRange;
+glUnmapBuffer_t glUnmapBuffer;
+glBufferStorage_t glBufferStorage;
 
 HMODULE glDll = 0;
 

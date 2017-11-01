@@ -20,6 +20,7 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <time.h>
+#include <semaphore.h>
 
 // currently opengles3 does not support floating point framebuffers
 #define FRAMEBUFFER_FORMAT GL_RGBA

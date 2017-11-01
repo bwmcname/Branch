@@ -70,4 +70,8 @@ struct AndroidState
    EGLSurface surface;
    EGLContext context;
    AInputQueue *iQueue;
+   sem_t savingStateSem;
+
+   size_t savedStateSize;
+   RebuildState *savedState;
 };

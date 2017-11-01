@@ -31,20 +31,20 @@ struct LocationInfo
    }
 };
 
+struct Element
+{      
+   VirtualCoord k;
+   LocationInfo v;
+   u8 flags;
+
+   enum
+   {
+      occupied = 0x1,
+   };
+};
+
 struct VirtualCoordHashTable
 {
-   struct Element
-   {      
-      VirtualCoord k;
-      LocationInfo v;
-      u8 flags;
-
-      enum
-      {
-	 occupied = 0x1,
-      };
-   };
-
    Element *e;
    u32 capacity;
    u32 size;

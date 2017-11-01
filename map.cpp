@@ -29,8 +29,8 @@ u32 VirtualCoordHashTable::IncrementPointer(u32 ptr)
 VirtualCoordHashTable InitVirtualCoordHashTable(u32 capacity, StackAllocator *allocator)
 {
    VirtualCoordHashTable v;
-   v.e = (VirtualCoordHashTable::Element *)allocator->push(sizeof(VirtualCoordHashTable::Element) * capacity);
-   memset(v.e, 0, sizeof(VirtualCoordHashTable::Element) * capacity);
+   v.e = (Element *)allocator->push(sizeof(Element) * capacity);
+   memset(v.e, 0, sizeof(Element) * capacity);
    v.capacity = capacity;
    v.size = 0;
 

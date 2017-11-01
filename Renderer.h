@@ -67,7 +67,8 @@ enum RenderCommand
    DrawBlur,
    DrawButton,
    DrawLinearInstances,
-   DrawBranchInstances
+   DrawBranchInstances,
+   DrawBreakInstances,
 };
 
 struct CommandBase
@@ -158,13 +159,16 @@ struct DrawBranchInstancesCommand : public CommandBase
 {
 };
 
+struct DrawBreakInstancesCommand : public CommandBase
+{
+};
+
 /*
 Different command we need.
 BindProgram
 Draw Mesh
 Draw Bright break thing
  */
-
 struct RenderState;
 struct Camera;
 
@@ -178,12 +182,16 @@ struct CommandState
 
    u32 branchInstanceCount;
    TrackInstance *branchInstances;
+
+   u32 breakInstanceCount;
+   TrackInstance *breakInstances;
    
    GLuint instanceMVPBuffer;
    GLuint instanceColorBuffer;
    GLuint instanceModelMatrixBuffer;
    GLuint linearInstanceVao;
    GLuint branchInstanceVao;
+   GLuint breakInstanceVao;
 
    CommandBase *first;
    CommandBase *last;
@@ -193,9 +201,10 @@ struct CommandState
    inline void PushDrawLinear(Object obj, StackAllocator *allocator);
    inline void PushLinearInstance(Object obj, v3 color);
    inline void PushBranchInstance(Object obj, v3 color);
+   inline void PushBreakInstance(Object obj, v3 color);
    inline void PushRenderLinearInstances(StackAllocator *allocator);
    inline void PushRenderBranchInstances(StackAllocator *allocator);
-   // void RenderLinearInstances(StackAllocator *allocator, v3 lightPos, m4 &view);
+   inline void PushRenderBreakInstances(StackAllocator *allocator);
    void RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &view, u32 count, TrackInstance *instances, u32 vcount, GLuint instanceVao);
    inline void PushDrawSpeedup(Object obj, StackAllocator *allocator);
    inline void PushDrawBranch(Object obj, StackAllocator *allocator);

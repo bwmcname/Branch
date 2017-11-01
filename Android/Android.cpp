@@ -77,93 +77,111 @@ void OnResume(ANativeActivity *activity)
    AndroidState *state = (AndroidState *)activity->instance;
    __android_log_print(ANDROID_LOG_INFO, "Branch", "RESUME");
    state->events.Push({AndroidCommand::RESUME});
+   
 }
 
 void *OnSaveInstanceState(ANativeActivity *activity, size_t *size)
 {
    AndroidState *state = (AndroidState *)activity->instance;
-
+   
    state->events.Push({AndroidCommand::SAVESTATE});
+   sem_wait(&state->savingStateSem);   
 
-   return 0;
+   RebuildState *saved = state->savedState;
+   if(!saved)
+   {
+      LOG_WRITE("FUCK");
+   }
+   *size = sizeof(RebuildState);
+
+   state->savedState = 0;
+   
+   return saved;
 }
 
 void OnPause(ANativeActivity *activity)
 {
-   AndroidState *state = (AndroidState *)activity->instance;
-
+   AndroidState *state = (AndroidState *)activity->instance; 
+   
    state->events.Push({AndroidCommand::PAUSE});
+   
 }
 
 void OnStop(ANativeActivity *activity)
 {
-   AndroidState *state = (AndroidState *)activity->instance;
+   AndroidState *state = (AndroidState *)activity->instance;   
 
    state->events.Push({AndroidCommand::STOP});
+   
 }
 
 void OnDestroy(ANativeActivity *activity)
 {
-   AndroidState *state = (AndroidState *)activity->instance;
-
+   AndroidState *state = (AndroidState *)activity->instance;   
+   
    state->events.Push({AndroidCommand::DESTROY});
+   
 }
 
 void OnWindowFocusChanged(ANativeActivity *activity, int hasFocus)
 {
-   AndroidState *state = (AndroidState *)activity->instance;
+   AndroidState *state = (AndroidState *)activity->instance;   
 
    state->events.Push({AndroidCommand::WINDOWFOCUSCHANGE});
+   
 }
 
 void OnNativeWindowCreated(ANativeActivity *activity, ANativeWindow *window)
 {
-   AndroidState *state = (AndroidState *)activity->instance;
+   AndroidState *state = (AndroidState *)activity->instance;   
+
    state->window = window;
    SCREEN_WIDTH = ANativeWindow_getWidth(window);
    SCREEN_HEIGHT = ANativeWindow_getHeight(window);
    state->events.Push({AndroidCommand::NATIVEWINDOWCREATED});
+   
 }
 
 void OnNativeWindowResized(ANativeActivity *activity, ANativeWindow *window)
 {
-   AndroidState *state = (AndroidState *)activity->instance;
+   AndroidState *state = (AndroidState *)activity->instance;   
 
-   state->events.Push({AndroidCommand::NATIVEWINDOWRESIZED});
+   state->events.Push({AndroidCommand::NATIVEWINDOWRESIZED});   
 }
 
 void OnNativeWindowRedrawNeeded(ANativeActivity *activity, ANativeWindow *window)
 {
-   AndroidState *state = (AndroidState *)activity->instance;
+   AndroidState *state = (AndroidState *)activity->instance;   
 
-   state->events.Push({AndroidCommand::NATIVEWINDOWREDRAWNEEDED});
+   state->events.Push({AndroidCommand::NATIVEWINDOWREDRAWNEEDED});   
 }
 
 void OnNativeWindowDestroyed(ANativeActivity *activity, ANativeWindow *window)
 {
-   AndroidState *state = (AndroidState *)activity->instance;
-   
-   state->events.Push({AndroidCommand::NATIVEWINDOWDESTROYED});
+   AndroidState *state = (AndroidState *)activity->instance;   
+
+   state->events.Push({AndroidCommand::NATIVEWINDOWDESTROYED});   
 }
 
 void OnInputQueueCreated(ANativeActivity *activity, AInputQueue *queue)
 {
    AndroidState *state = (AndroidState *)activity->instance;
+   
    state->iQueue = queue;
 
-   state->events.Push({AndroidCommand::INPUTQUEUECREATED});
+   state->events.Push({AndroidCommand::INPUTQUEUECREATED});   
 }
 
 void OnInputQueueDestroyed(ANativeActivity *activity, AInputQueue *queue)
 {
-   AndroidState *state = (AndroidState *)activity->instance;
+   AndroidState *state = (AndroidState *)activity->instance;   
 
-   state->events.Push({AndroidCommand::INPUTQUEUEDESTROYED});
+   state->events.Push({AndroidCommand::INPUTQUEUEDESTROYED});   
 }
 
 void OnContentRectChanged(ANativeActivity *activity, const ARect *rect)
 {
-   AndroidState *state = (AndroidState *)activity->instance;
+   AndroidState *state = (AndroidState *)activity->instance;   
 
    state->events.Push({AndroidCommand::CONTENTRECTCHANGED});
 }
@@ -171,7 +189,7 @@ void OnContentRectChanged(ANativeActivity *activity, const ARect *rect)
 void OnConfigurationChanged(ANativeActivity *activity)
 {
    AndroidState *state = (AndroidState *)activity->instance;
-
+   
    state->events.Push({AndroidCommand::CONFIGURATIONCHANGED});
 }
 
@@ -202,7 +220,6 @@ void InitOpengl(AndroidState *state)
       EGL_CONTEXT_CLIENT_VERSION, 3,
       EGL_NONE
    };
-
    
    state->display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
    
@@ -227,14 +244,11 @@ void InitOpengl(AndroidState *state)
 }
 
 void AndroidMain(AndroidState *state)
-{
-   LOG_WRITE("Worker thread: %ld", pthread_self());
+{   
    bool drawing = false;
    GameState gameState;
    bool queueReady = false;
-
-   // state.aLooper = ALooperPrepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
-
+   RebuildState *tempSaved = state->savedState;
    timespec begin, end;
 
    for(;;)
@@ -253,12 +267,12 @@ void AndroidMain(AndroidState *state)
 	    }break;
 
 	    case NATIVEWINDOWCREATED:
-	    {
+	    {	  
 	       InitOpengl(state);
 	       glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 	       LOG_WRITE("BEGIN INIT");
-	       GameInit(gameState);
+	       GameInit(gameState, tempSaved, state->savedStateSize);
 	       
 	       drawing = true;
 	    }break;
@@ -266,11 +280,18 @@ void AndroidMain(AndroidState *state)
 	    case RESUME:
 	    {
 	       LOG_WRITE("RESUME");
+	       delta = 1.0f;
 	    }break;
 
 	    case SAVESTATE:
 	    {
 	       LOG_WRITE("SAVESTATE");
+
+	       state->savedState = SaveState(&gameState);
+	       tempSaved = (RebuildState *)malloc(sizeof(RebuildState));
+	       *tempSaved = *state->savedState;
+	       LOG_WRITE("WRITTEN_TO");
+	       sem_post(&state->savingStateSem);	       
 	    }break;
 
 	    case PAUSE:
@@ -281,6 +302,8 @@ void AndroidMain(AndroidState *state)
 	    case STOP:
 	    {
 	       LOG_WRITE("STOP");
+	       drawing = false;
+	       free(gameState.mainArena.base); 
 	    }break;
 
 	    case DESTROY:
@@ -290,7 +313,7 @@ void AndroidMain(AndroidState *state)
 
 	    case WINDOWFOCUSCHANGE:
 	    {
-	       LOG_WRITE("WINDOWFOCUSCHANGE");
+	       LOG_WRITE("WINDOWFOCUSCHANGE");	       
 	    }break;
 
 	    case NATIVEWINDOWDESTROYED:
@@ -399,6 +422,9 @@ void AndroidMain(AndroidState *state)
       {
 	 GameLoop(gameState);
 	 eglSwapBuffers(state->display, state->surface);
+	 // GLuint attachment = GL_DEPTH_STENCIL_ATTACHMENT;
+	 // glInvalidateFramebuffer(0, 1, &attachment);
+	 
 	 // eglSwapInterval(state->display, 0);
       }
 
@@ -419,21 +445,21 @@ void AndroidMain(AndroidState *state)
    }   
 }
 
-void *CreateApp(ANativeActivity *activity)
+void *CreateApp(ANativeActivity *activity, void *savedState, size_t savedStateSize)
 {
    AndroidState *state = (AndroidState *)malloc(sizeof(AndroidState));
    state->events = CreateAndroidEventQueue();
-
+   state->savedState = (RebuildState *)savedState;
+   state->savedStateSize = savedStateSize;
+   sem_init(&state->savingStateSem, 0, 0);
    manager = activity->assetManager;
-
-   LOG_WRITE("Main thread: %ld", pthread_self());
 
    pthread_t t;
    pthread_attr_t attributes;
    pthread_attr_init(&attributes);
    pthread_attr_setdetachstate(&attributes, PTHREAD_CREATE_DETACHED);
    pthread_create(&t, &attributes, (pthread_func)AndroidMain, state);
-
+   
    return (void *)state;
 }
 
@@ -451,7 +477,9 @@ void ANativeActivity_onCreate(ANativeActivity *activity, void *savedState, size_
    activity->callbacks->onNativeWindowCreated = OnNativeWindowCreated;
    activity->callbacks->onInputQueueCreated = OnInputQueueCreated;
    activity->callbacks->onInputQueueDestroyed = OnInputQueueDestroyed;
-   activity->instance = CreateApp(activity);
+   activity->instance = CreateApp(activity, savedState, savedStateSize);
+
+   LOG_WRITE("START FROM ONCREATE");
 }
 
 inline u32

@@ -191,17 +191,23 @@ CommandState InitCommandState(StackAllocator *allocator)
    result.branchInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
    result.branchInstanceCount = 0;
 
+   result.breakInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
+   result.breakInstanceCount = 0;
+
    glGenBuffers(1, &result.instanceMVPBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
-   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_STREAM_DRAW);
+   // glBufferStorage(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_MAP_WRITE_BIT);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_DYNAMIC_DRAW);
 
    glGenBuffers(1, &result.instanceModelMatrixBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceModelMatrixBuffer);
-   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_STREAM_DRAW);
+   // glBufferStorage(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_MAP_WRITE_BIT);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_DYNAMIC_DRAW);
 
    glGenBuffers(1, &result.instanceColorBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceColorBuffer);
-   glBufferData(GL_ARRAY_BUFFER, sizeof(v3) * 1024, 0, GL_STREAM_DRAW);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(v3) * 1024, 0, GL_DYNAMIC_DRAW);
+   // glBufferStorage(GL_ARRAY_BUFFER, sizeof(v3) * 1024, 0, GL_MAP_WRITE_BIT);
 
    glGenVertexArrays(1, &result.linearInstanceVao);
    glBindVertexArray(result.linearInstanceVao);
@@ -299,6 +305,55 @@ CommandState InitCommandState(StackAllocator *allocator)
    glVertexAttribDivisor(MATRIX2_LOCATION+1, 1);
    glVertexAttribDivisor(MATRIX2_LOCATION+2, 1);
    glVertexAttribDivisor(MATRIX2_LOCATION+3, 1);
+
+   // Now do the same for break instances
+   glGenVertexArrays(1, &result.breakInstanceVao);   
+   glBindVertexArray(result.breakInstanceVao);
+
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, BreakTrack.handles.vbo);
+   glVertexAttribPointer(VERTEX_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+   
+   glEnableVertexAttribArray(NORMAL_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, BreakTrack.handles.nbo);
+   glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+      
+   glEnableVertexAttribArray(COLOR_INPUT_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceColorBuffer);
+   glVertexAttribPointer(COLOR_INPUT_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);      
+
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
+   glEnableVertexAttribArray(MATRIX1_LOCATION);
+   glVertexAttribPointer(MATRIX1_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 1);
+   glVertexAttribPointer(MATRIX1_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 2);
+   glVertexAttribPointer(MATRIX1_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 3);
+   glVertexAttribPointer(MATRIX1_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
+
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceModelMatrixBuffer);
+   glEnableVertexAttribArray(MATRIX2_LOCATION);
+   glVertexAttribPointer(MATRIX2_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
+   glEnableVertexAttribArray(MATRIX2_LOCATION + 1);
+   glVertexAttribPointer(MATRIX2_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
+   glEnableVertexAttribArray(MATRIX2_LOCATION + 2);
+   glVertexAttribPointer(MATRIX2_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
+   glEnableVertexAttribArray(MATRIX2_LOCATION + 3);
+   glVertexAttribPointer(MATRIX2_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
+
+   glVertexAttribDivisor(VERTEX_LOCATION, 0);
+   glVertexAttribDivisor(NORMAL_LOCATION, 0);
+   glVertexAttribDivisor(COLOR_INPUT_LOCATION, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+1, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+2, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+3, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION+1, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION+2, 1);
+   glVertexAttribDivisor(MATRIX2_LOCATION+3, 1);
+
    return result;
 }
 
@@ -361,6 +416,16 @@ void CommandState::PushBranchInstance(Object obj, v3 color)
 					     obj.scale,
 					     color};
 }
+
+inline
+void CommandState::PushBreakInstance(Object obj, v3 color)
+{
+   B_ASSERT(breakInstanceCount < 1024);
+   breakInstances[breakInstanceCount++] = {obj.worldPos,
+					   obj.orientation,
+					   obj.scale,
+					   color};
+};
 
 inline void
 CommandState::PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocator *allocator)
@@ -517,6 +582,20 @@ CommandState::PushRenderBranchInstances(StackAllocator *allocator)
    last->next = (CommandBase *)allocator->push(sizeof(DrawBranchInstancesCommand));
    DrawBranchInstancesCommand *command = (DrawBranchInstancesCommand *)last->next;
    command->command = DrawBranchInstances;
+
+   last = command;
+   ++count;
+}
+
+inline void
+CommandState::PushRenderBreakInstances(StackAllocator *allocator)
+{
+   B_ASSERT(first);
+   B_ASSERT(currentProgram);
+
+   last->next = (CommandBase *)allocator->push(sizeof(DrawBreakInstancesCommand));
+   DrawBreakInstancesCommand *command = (DrawBreakInstancesCommand *)last->next;
+   command->command = DrawBreakInstances;
 
    last = command;
    ++count;
@@ -903,7 +982,8 @@ void RenderBackground(GameState &state)
 
 void BeginFrame(GameState &state)
 {   
-   glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo); // @Android merging!!
+   // glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo); // @Android merging!!
+   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
    // @we really only need to clear the color of the secondary buffer, can we do this?
    glClear(GL_DEPTH_BUFFER_BIT);   
@@ -915,6 +995,7 @@ void RenderBlur(RenderState &renderer, Camera &camera)
 {
    glDisable(GL_DEPTH_TEST);
 
+   #if 0
    glBindFramebuffer(GL_FRAMEBUFFER, renderer.horizontalFbo);
    
    glUseProgram(renderer.fullScreenProgram);
@@ -953,8 +1034,8 @@ void RenderBlur(RenderState &renderer, Camera &camera)
 
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
 
-   GLuint attachment = GL_COLOR_ATTACHMENT0;
-   glInvalidateFramebuffer(renderer.horizontalFbo, 1, &attachment);
+   // GLuint attachment = GL_COLOR_ATTACHMENT0;
+   // glInvalidateFramebuffer(renderer.horizontalFbo, 1, &attachment);
    
    // finally blit it to the screen
    // @should change programs!!!   
@@ -984,13 +1065,10 @@ void RenderBlur(RenderState &renderer, Camera &camera)
    
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
 
-   glInvalidateFramebuffer(renderer.verticalFbo, 1, &attachment);
+   // glInvalidateFramebuffer(renderer.verticalFbo, 1, &attachment);
 
    GLuint attachList[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_DEPTH_STENCIL_ATTACHMENT};
-   glInvalidateFramebuffer(renderer.fbo, 4, attachList);
-
-   attachment = GL_DEPTH_STENCIL_ATTACHMENT;
-   glInvalidateFramebuffer(0, 1, &attachment);
+   // glInvalidateFramebuffer(renderer.fbo, 4, attachList);
 
    #ifdef WIN32_BUILD
    glDisable(GL_FRAMEBUFFER_SRGB);
@@ -1016,6 +1094,7 @@ void RenderBlur(RenderState &renderer, Camera &camera)
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glEnable(GL_DEPTH_TEST);
    */
+   #endif
 }
 
 void RenderMesh(ShaderProgram *p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
@@ -1068,9 +1147,10 @@ void RenderSpeedup(DrawSpeedupCommand *command, Camera &camera, v3 lightPos, Pro
 }
 
 static
-void RenderBreak(DrawBreakCommand *command, Camera &camera, v3 lightPos, ProgramBase *currentProgram)
+void RenderBreakTexture(DrawBreakCommand *command, Camera &camera, v3 lightPos, ProgramBase *currentProgram)
 {
-   RenderObject(command->obj, BreakTrack, (ShaderProgram *)currentProgram, camera.view, lightPos, NORMAL_COLOR);
+   // @old!
+   // RenderObject(command->obj, BreakTrack, (ShaderProgram *)currentProgram, camera.view, lightPos, NORMAL_COLOR);
 
    m4 translation = Translate(V3(command->obj.worldPos.x, command->obj.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, command->obj.worldPos.z));
    m4 orientation = M4(Rotation(V3(-1.0f, 0.0f, 0.0f), 1.5708f));
@@ -1498,7 +1578,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
 	 case DrawBreak:
 	 {
-	    RenderBreak((DrawBreakCommand *)current, camera, lightPos, currentProgram);
+	    RenderBreakTexture((DrawBreakCommand *)current, camera, lightPos, currentProgram);
 	 }break;
 
 	 case DrawLinearInstances:
@@ -1517,6 +1597,14 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
 	    // result instance count
 	    branchInstanceCount = 0;
+	 }break;
+
+	 case DrawBreakInstances:
+	 {
+	    RenderTrackInstances(allocator, lightPos, camera.view,
+				 breakInstanceCount, breakInstances, BreakTrack.mesh.vcount, breakInstanceVao);
+
+	    breakInstanceCount = 0;
 	 }break;
 
 	 case BindProgram:
@@ -1558,6 +1646,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
    // if no DrawLinearInstances command was issued, then clean command list
    linearInstanceCount = 0;
    branchInstanceCount = 0;
+   breakInstanceCount = 0;
 }
 
 void
@@ -1575,6 +1664,17 @@ CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &v
    glUniform3fv(DefaultInstanced.lightPosUniform, 1, lightPos.e);
    glUniformMatrix4fv(DefaultInstanced.viewUniform, 1, GL_FALSE, view.e);
 
+   /*
+   glBindBuffer(GL_ARRAY_BUFFER, instanceMVPBuffer);
+   m4 *transforms = (m4 *)glMapBufferRange(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), GL_MAP_WRITE_BIT);
+
+   glBindBuffer(GL_ARRAY_BUFFER, instanceModelMatrixBuffer);
+   m4 *MVPs = (m4 *)glMapBufferRange(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), GL_MAP_WRITE_BIT);
+   
+   glBindBuffer(GL_ARRAY_BUFFER, instanceColorBuffer);
+   v3 *color = (v3 *)glMapBufferRange(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(v3), GL_MAP_WRITE_BIT);
+   */
+
    for(u32 i = 0; i < instanceCount; ++i)
    {
       color[i] = instances[i].color;
@@ -1587,6 +1687,30 @@ CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &v
       MVPs[i] = vp * transforms[i];
    }
 
+   /*
+   glBindBuffer(GL_ARRAY_BUFFER, instanceMVPBuffer);
+   if(!glUnmapBuffer(GL_ARRAY_BUFFER))
+   {
+      GLuint error = glGetError();
+      LOG_WRITE("%d\n", error);
+   }
+
+   glBindBuffer(GL_ARRAY_BUFFER, instanceModelMatrixBuffer);
+   if(!glUnmapBuffer(GL_ARRAY_BUFFER))
+   {
+      GLuint error = glGetError();
+      LOG_WRITE("%d\n", error);
+   }
+
+   glBindBuffer(GL_ARRAY_BUFFER, instanceColorBuffer);
+   if(!glUnmapBuffer(GL_ARRAY_BUFFER))
+   {
+      GLuint error = glGetError();
+      LOG_WRITE("%d\n", error);
+   }
+   */
+   
+   
    glBindBuffer(GL_ARRAY_BUFFER, instanceMVPBuffer);
    glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), MVPs);
 
@@ -1595,11 +1719,12 @@ CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &v
 
    glBindBuffer(GL_ARRAY_BUFFER, instanceColorBuffer);
    glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(v3),  color);
-
+   
+   
    glBindVertexArray(instanceVao);   
    glDrawArraysInstanced(GL_TRIANGLES, 0, vcount, instanceCount);
    glBindVertexArray(0);
-   
+
    allocator->pop();
    allocator->pop();
    allocator->pop();
@@ -1613,6 +1738,9 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
    TrackFrustum frustum = CreateTrackFrustum(InfiniteProjection * state.camera.view);
 
    state.renderer.commands.PushBindProgram(&DefaultShader, allocator);
+   state.renderer.commands.PushRenderLinearInstances(allocator);
+   state.renderer.commands.PushRenderBranchInstances(allocator);
+   state.renderer.commands.PushRenderBreakInstances(allocator);
    for(i32 i = 0; i < state.tracks.capacity; ++i)
    {	    
       if(!(state.tracks.adjList[i].flags & Attribute::invisible) &&
@@ -1646,6 +1774,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	    BBox box = BreakBBox(state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
 	    {
+	       state.renderer.commands.PushBreakInstance(state.tracks.elements[i].renderable, NORMAL_COLOR);
 	       state.renderer.commands.PushDrawBreak(state.tracks.elements[i].renderable, allocator);
 	    }
 	 }
@@ -1663,9 +1792,7 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
 	 }	 
       }	 
    }
-
-   state.renderer.commands.PushRenderLinearInstances(allocator);
-   state.renderer.commands.PushRenderBranchInstances(allocator);
+   
    END_TIME();
    READ_TIME(state.TrackRenderTime);
 

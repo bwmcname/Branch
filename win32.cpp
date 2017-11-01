@@ -292,6 +292,10 @@ int OpenglCreate(HWND WindowHandle)
    WinGetGlExtension(glVertexAttribDivisor);
    WinGetGlExtension(glDisableVertexAttribArray);
    WinGetGlExtension(glInvalidateFramebuffer);
+   WinGetGlExtension(glMapBufferRange);
+   WinGetGlExtension(glUnmapBuffer);
+   WinGetGlExtension(glBufferStorage);
+
    return true;
 }
 
@@ -388,7 +392,7 @@ int CALLBACK WinMain(HINSTANCE Instance,
    
    GameState state;
    state.input = {};
-   GameInit(state);
+   GameInit(state, 0, 0);
    
    MSG Message = {};
 

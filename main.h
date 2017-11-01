@@ -288,7 +288,47 @@ struct GameState
    #endif
 };
 
+struct RebuildState
+{
+   Camera camera;
+   Player player;
+   v3 lightPos;
+   Attribute trackAttributes[1024];
+   Track tracks[1024];
+
+   // max = 1024
+   i32 availableIDsBegin;
+   i32 availableIDsEnd;
+   i32 availableIDsSize;
+   u16 availableIDs[1024];
+
+   // max = 1024
+   i32 ordersBegin;
+   i32 ordersEnd;
+   i32 ordersSize;
+   NewTrackOrder orders[1024];
+
+   // max = 1024
+   i32 newBranchesBegin;
+   i32 newBranchesEnd;
+   i32 newBranchesSize;
+   u16 newBranches[256];
+
+   // capacity = 1024
+   Element takenElements[1024];
+   u32 takenSize;
+
+   u16 IDtable[1024];
+   u16 reverseIDtable[1024];
+   u8 trackGraphFlags;
+
+   float switchDelta;
+   Curve beginLerp;
+   Curve endLerp;
+};
+
 void GameLoop(GameState &state);
-void GameInit(GameState &state);
+void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize);
 void GameEnd(GameState &state);
+RebuildState *SaveState(GameState *state);
 inline v2 ScreenToClip(v2i input);
