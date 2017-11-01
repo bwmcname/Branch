@@ -1,6 +1,20 @@
-#include <glsl.h>
-#include <fraginc.h>
-#include <light.h>
+#version 300 es
+
+precision highp float;
+
+
+#define DEFAULT_COLOR 0
+#define BRIGHTNESS 1
+#define NORMALS 2
+
+
+#define light(normal, fragPos, diffuseColor, lightPos, outColor)	\
+   float distance = length(lightPos - fragPos);				\
+   vec3 lightDir = normalize(lightPos - fragPos);			\
+   float power = max(dot(normal, lightDir), 0.0) / distance;		\
+   vec3 ambient = 0.2 * diffuseColor;					\
+   outColor = vec4(((power * 2.0) * diffuseColor) + ambient, 1.0)
+
 
 in vec3 norm;
 in vec3 fragPos;

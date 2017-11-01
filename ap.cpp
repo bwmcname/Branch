@@ -21,9 +21,9 @@
 #define TO_PACKED_ASSET_PATH(filename) (PACKED_ASSET_DIRECTORY ## filename)
 
 // vertex bits
-#define VERTEX 1
-#define UV (1 << 1)
-#define NORMAL (1 << 2)
+#define VERTEX 0x1
+#define UV     0x2
+#define NORMAL 0x4
 
 FILE *OpenForRead(char *file)
 {
@@ -520,9 +520,9 @@ void Shader(char *filename)
 
    if(outBuffer)
    {
-      // char path[64];
-      // sprintf(path, "%s/%sp", PACKED_ASSET_DIRECTORY, filename);
-      file = OpenForWrite(filename);
+      char path[64];
+      sprintf(path, "%s/%sp", PACKED_ASSET_DIRECTORY, filename);
+      file = OpenForWrite(path);
       fwrite(outBuffer, outSize, 1, file);
       fclose(file);
       free(outBuffer);
