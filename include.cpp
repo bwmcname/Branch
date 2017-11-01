@@ -25,7 +25,7 @@
 #include <semaphore.h>
 #endif
 
-#pragma warning(pop, 1)
+#pragma warning(pop)
 
 #ifdef __GNUC__
 #define B_INLINE __attribute__((always_inline))
@@ -50,16 +50,16 @@
 #define DEBUG_DO(expr)
 #endif
 
-#include "log.h"
-#include "branch_common.h"
+#include "Log.h"
+#include "BranchCommon.h"
 #include "PlatformAPI.h"
 #include "PlatformThread.h"
 #include "AssetHeader.h"
 #include "Allocator.h"
-#include "map.h"
+#include "Map.h"
 #include "Renderer.h"
 #include "Assets.h"
-#include "main.h"
+#include "Main.h"
 
 #ifdef ANDROID_BUILD
 #include "Android/Branch_Android.h"
@@ -67,13 +67,13 @@
 #endif
 
 #ifdef WIN32_BUILD
-#include "win32.h"
-#include "win32.cpp"
+#include "Win32.h"
+#include "Win32.cpp"
 #endif
 
-#include "map.cpp"
+#include "Map.cpp"
 #include "assets/vertinc.h"
 #include "Assets.cpp"
 #include "Renderer.cpp"
 #include "Gui.cpp"
-#include "main.cpp"
+#include "Main.cpp"
