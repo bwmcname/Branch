@@ -1,9 +1,10 @@
+/* ap.cpp */
+/* Quick tool I made to process assets */
+
 #include <share.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "stb_truetype.h"
-#include "branch_common.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -14,9 +15,10 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-#define ASSET_DIRECTORY "ProcessedAssets/"
-#define TO_ASSET_PATH(filename) (ASSET_DIRECTORY ## filename)
+#include "branch_common.h"
 
+#define PACKED_ASSET_DIRECTORY "../ProcessedAssets/"
+#define TO_PACKED_ASSET_PATH(filename) (PACKED_ASSET_DIRECTORY ## filename)
 
 // vertex bits
 #define VERTEX 1
@@ -394,7 +396,7 @@ void Model(char *filename)
       begin[i] = b.vertices[b.indices[i].e[0]];
    }
 
-   file = OpenForWrite(TO_ASSET_PATH("sphere.brian"));
+   file = OpenForWrite(TO_PACKED_ASSET_PATH("sphere.brian"));
    fwrite(writebuffer, writeSize, 1, file);
    fclose(file);
 
@@ -518,9 +520,9 @@ void Shader(char *filename)
 
    if(outBuffer)
    {
-      char path[64];
-      sprintf(path, "%s/%sp", ASSET_DIRECTORY, filename);
-      file = OpenForWrite(path);
+      // char path[64];
+      // sprintf(path, "%s/%sp", PACKED_ASSET_DIRECTORY, filename);
+      file = OpenForWrite(filename);
       fwrite(outBuffer, outSize, 1, file);
       fclose(file);
       free(outBuffer);
@@ -570,7 +572,7 @@ int Font(char *fontName, u32 width, u32 height, float pointSize)
    printf("height:     %d\n", result->height);
    printf("point_size: %f\n", pointSize);
 
-   FILE *outFont = OpenForWrite(TO_ASSET_PATH("wow.font"));
+   FILE *outFont = OpenForWrite(TO_PACKED_ASSET_PATH("wow.font"));
    fwrite(result, outFileSize, 1, outFont);
 
    free(outBuffer);
@@ -749,7 +751,7 @@ void Image(char *fileName)
       }
 
       char outname[32];
-      sprintf(outname, "%s/%s", ASSET_DIRECTORY, fileName);
+      sprintf(outname, "%s/%s", PACKED_ASSET_DIRECTORY, fileName);
 
       FILE *outFile = OpenForWrite(outname);
       fwrite(result, sizeof(Branch_Image_Header) + pixelsSize, 1, outFile);
@@ -763,8 +765,9 @@ void Image(char *fileName)
 
 void Build(int count, char **arguments)
 {
-   FILE *header = OpenForWrite("AssetHeader.h");
-   FILE *packed = OpenForWrite(TO_ASSET_PATH("Packed.assets"));
+   // we should only call build when we are in the assets folder
+   FILE *header = OpenForWrite("../AssetHeader.h");
+   FILE *packed = OpenForWrite(TO_PACKED_ASSET_PATH("Packed.assets"));
 
    char head[] = "//BUILT BY AP.EXE, DO NOT EDIT\nstruct AssetHeader\n{\n";
    fwrite(head, strlen(head), 1, header);
@@ -777,7 +780,7 @@ void Build(int count, char **arguments)
    char *entry = (char *)malloc(128);
    for(int i = 0; i < count; ++i)
    {
-      sprintf(path, "%s/%s", ASSET_DIRECTORY, arguments[i]);
+      sprintf(path, "%s/%s", PACKED_ASSET_DIRECTORY, arguments[i]);
       FILE *asset = OpenForRead(path);
       size_t size = FileSize(asset);
       sizes[i] = size;

@@ -1,8 +1,18 @@
-
-#define SCREEN_TOP ((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
-#define SCREEN_BOTTOM -((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
-#define SCREEN_RIGHT 1.0f
-#define SCREEN_LEFT -1.0f
+/* main.cpp */
+/* Most gameplay code is implemented here
+ * Track generation
+ * Track sorting
+ * Track mesh generation
+ * State loading
+ * Camera update
+ * Player update
+ *
+ * This source file implements two central functions
+ * GameInit
+ * GameLoop
+ * 
+ * Both of these functions must be called by the platform layer.
+ */
 
 // Save the state of the application
 // needed for android.
@@ -938,25 +948,6 @@ void NewUpdateTrackGraph(NewTrackGraph &graph, StackAllocator &allocator, Player
    NewSortTracks(graph, allocator, camera.position);
 
    FillGraph(graph);   
-}
-
-static
-FontData LoadFontFile(char *filename, StackAllocator *allocator)
-{
-   size_t fileSize = FileSize(filename);
-
-   u8 *buffer = allocator->push(fileSize);
-   FileRead(filename, buffer, fileSize);
-
-   FontHeader *header = (FontHeader *)buffer;
-   FontData result;
-
-   result.count = header->count;
-   result.mapWidth = header->mapWidth;
-   result.mapHeight = header->mapHeight;
-   result.data = (CharInfo *)(buffer + sizeof(FontHeader));
-
-   return result;
 }
 
 static B_INLINE

@@ -1,3 +1,5 @@
+/* Gui.cpp */
+/* handles button state */
 
 enum ButtonUpdateResult
 {
@@ -14,7 +16,7 @@ bool TestPoint(v2 boxPosition, v2 boxScale, v2 point)
       point.y < (boxPosition.y + boxScale.y) && point.y > (boxPosition.y - boxScale.y);
 }
 
-ButtonUpdateResult ButtonUpdate(v2 position, v2 scale, Platform_Input_State state)
+ButtonUpdateResult ButtonUpdate(v2 position, v2 scale, PlatformInputState state)
 {
    if(state.Touched())
    {

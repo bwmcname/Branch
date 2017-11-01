@@ -1,11 +1,13 @@
+/* include.cpp */
+/* This is the main build file for the game
+ * All source files are included here.
+ */
 
 #pragma warning(push, 0)
 
 #ifdef WIN32_BUILD
 #include <windows.h>
 #include <GL/GL.h>
-
-#define FRAMEBUFFER_FORMAT GL_RGBA16F
 #endif
 
 #ifdef ANDROID_BUILD
@@ -21,10 +23,9 @@
 #include <EGL/eglext.h>
 #include <time.h>
 #include <semaphore.h>
-
-// currently opengles3 does not support floating point framebuffers
-#define FRAMEBUFFER_FORMAT GL_RGBA
 #endif
+
+#pragma warning(pop, 1)
 
 #ifdef __GNUC__
 #define B_INLINE __attribute__((always_inline))
@@ -32,9 +33,8 @@
 #define B_INLINE __forceinline
 #endif
 
-#define STB_RECT_PACK_IMPLEMENTATION
-#include "stb_rect_pack.h"
-
+// Only used for getting character quads out of a font bitmap
+// STB_TRUETYPE is used in the Asset Packing tool (ap)
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
@@ -43,40 +43,16 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+// Debug and timers
 #ifdef DEBUG
-#ifdef WIN32_BUILD
-#define B_ASSERT(x) ((x) ? 0 : *((char *)0) = 'x')
-#define DEBUG_DO(x) x
-#elif defined(ANDROID_BUILD)
-#define B_ASSERT(x) if (!(x)) __android_log_assert("Assertion Failed", "Branch", "%s: %d", __FILE__, __LINE__);
-#define DEBUG_DO(x) x
-#endif
+#define DEBUG_DO(expr) expr
 #else
-#define B_ASSERT(x)
-#define DEBUG_DO(x)
+#define DEBUG_DO(expr)
 #endif
-
-#if defined(TIMERS) && defined(WIN32_BUILD)
-#define BEGIN_TIME() u64 LOCAL_TIME = __rdtsc()
-#define END_TIME() LOCAL_TIME = __rdtsc() - LOCAL_TIME
-#define READ_TIME(into) into = LOCAL_TIME
-#elif defined(TIMERS) && defined(ANDROID_BUILD)
-#define BEGIN_TIME() timespec LOCAL_BEGIN_TIME, LOCAL_END_TIME;	\
-   clock_gettime(CLOCK_MONOTONIC, &LOCAL_BEGIN_TIME)		
-#define END_TIME() clock_gettime(CLOCK_MONOTONIC, &LOCAL_END_TIME);	\
-   LONG LOCAL_TIME = LOCAL_END_TIME->tv_nsec - LOCAL_BEGIN_TIME->tv_nsec
-   
-#define READ_TIME(into) into = LOCAL_TIME
-#else
-#define BEGIN_TIME() 
-#define END_TIME() 
-#define READ_TIME(into)
-#endif
-#pragma warning(pop)
 
 #include "log.h"
 #include "branch_common.h"
-#include "platformAPI.h"
+#include "PlatformAPI.h"
 #include "PlatformThread.h"
 #include "AssetHeader.h"
 #include "Allocator.h"
@@ -96,7 +72,7 @@
 #endif
 
 #include "map.cpp"
-#include "vertinc.h"
+#include "assets/vertinc.h"
 #include "Assets.cpp"
 #include "Renderer.cpp"
 #include "Gui.cpp"

@@ -47,14 +47,12 @@ HANDLE Win32CreateThread(thread_func func)
 typedef pthread_t* thread;
 typedef sem_t* sem;
 typedef pthread_mutex_t* mutex;
-typedef void thread_return_type;
+typedef void* thread_return_type;
 typedef thread_return_type (*thread_func)(void *);
 
 B_INLINE
-pthread_t *AndroidCreateThread(thread_func func)
+pthread_t AndroidCreateThread(thread_func func)
 {
-   pthread_attribute_t attribute;
-
    pthread_t handle;
    int result = pthread_create(&handle, 0, func, 0);
 
@@ -69,7 +67,4 @@ pthread_t *AndroidCreateThread(thread_func func)
 #define MUTEX_LOCK(mut) pthread_mutex_lock(mut)
 #define MUTEX_UNLOCK(mut) pthread_mutex_unlock(mut)
 #define MUTEX_DESTROY(mut) pthread_mutex_destroy(mut)
-
-#define CREATE_THREAD(func) 
-
 #endif

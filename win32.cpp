@@ -406,19 +406,19 @@ int CALLBACK WinMain(HINSTANCE Instance,
    {
       QueryPerformanceCounter(&Begin);
 
-      if(state.input.flags & Win32_Input_State::clickDown)
+      if(state.input.flags & Win32InputState::clickDown)
       {
-	 state.input.flags &= ~Win32_Input_State::clickDown;
-	 state.input.flags |= Win32_Input_State::clickHold;
+	 state.input.flags &= ~Win32InputState::clickDown;
+	 state.input.flags |= Win32InputState::clickHold;
       }
 
-      if(state.input.flags & Win32_Input_State::escapeDown)
+      if(state.input.flags & Win32InputState::escapeDown)
       {
-	 state.input.flags &= ~Win32_Input_State::escapeDown;
-	 state.input.flags |= Win32_Input_State::escapeHeld;
+	 state.input.flags &= ~Win32InputState::escapeDown;
+	 state.input.flags |= Win32InputState::escapeHeld;
       }
 
-      state.input.flags &= ~(Win32_Input_State::clickUp | Win32_Input_State::escapeUp);
+      state.input.flags &= ~(Win32InputState::clickUp | Win32InputState::escapeUp);
 
       POINT p;			      
       GetCursorPos(&p);
@@ -453,17 +453,17 @@ int CALLBACK WinMain(HINSTANCE Instance,
 	       {
 		  case VK_SPACE:
 		  {
-		     if(!(state.input.flags & Win32_Input_State::clickHold))
+		     if(!(state.input.flags & Win32InputState::clickHold))
 		     {
-			state.input.flags |= Win32_Input_State::clickDown;			
+			state.input.flags |= Win32InputState::clickDown;			
 		     }
 		  }break;
 
 		  case VK_ESCAPE:
 		  {
-		     if(!(state.input.flags & Win32_Input_State::escapeHeld))
+		     if(!(state.input.flags & Win32InputState::escapeHeld))
 		     {
-			state.input.flags |= Win32_Input_State::escapeHeld;
+			state.input.flags |= Win32InputState::escapeHeld;
 		     }
 		  }
 	       }
@@ -475,31 +475,31 @@ int CALLBACK WinMain(HINSTANCE Instance,
 	       {
 		  case VK_SPACE:
 		  {		     
-		     state.input.flags &= ~(Win32_Input_State::clickDown | Win32_Input_State::clickHold);
-		     state.input.flags |= Win32_Input_State::clickUp;		     
+		     state.input.flags &= ~(Win32InputState::clickDown | Win32InputState::clickHold);
+		     state.input.flags |= Win32InputState::clickUp;		     
 		  }break;
 
 		  case VK_ESCAPE:
 		  {
-		     state.input.flags &= ~(Win32_Input_State::escapeDown | Win32_Input_State::escapeHeld);
-		     state.input.flags |= Win32_Input_State::escapeUp;
+		     state.input.flags &= ~(Win32InputState::escapeDown | Win32InputState::escapeHeld);
+		     state.input.flags |= Win32InputState::escapeUp;
 		  }break;
 	       }
 	    }break;
 
 	    case WM_LBUTTONDOWN:
 	    {
-	       if(!(state.input.flags & Win32_Input_State::clickHold))
+	       if(!(state.input.flags & Win32InputState::clickHold))
 	       {
-		  state.input.flags |= Win32_Input_State::clickDown;
+		  state.input.flags |= Win32InputState::clickDown;
 	       }
 	    }break;
 
 	    case WM_LBUTTONUP:
 	    {
-	       assert(state.input.flags & (Win32_Input_State::clickDown | Win32_Input_State::clickHold));
-	       state.input.flags &= ~(Win32_Input_State::clickDown | Win32_Input_State::clickHold);
-	       state.input.flags |= Win32_Input_State::clickUp;
+	       assert(state.input.flags & (Win32InputState::clickDown | Win32InputState::clickHold));
+	       state.input.flags &= ~(Win32InputState::clickDown | Win32InputState::clickHold);
+	       state.input.flags |= Win32InputState::clickUp;
 	    }break;
 	 }
       }           
@@ -517,14 +517,6 @@ int CALLBACK WinMain(HINSTANCE Instance,
 
       delta = time / target;
    }
-
-   /*
-   // delete threads
-   for(i32 i = 0; i < state.threadCount; ++i)
-   {
-      CloseHandle(state.threadPool[i].handle);
-   }
-   */
 
    OnWindowsExit();
    GameEnd(state);

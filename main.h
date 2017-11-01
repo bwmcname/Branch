@@ -1,4 +1,10 @@
 #define TRACK_SEGMENT_SIZE 12.0f
+
+#define SCREEN_TOP ((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
+#define SCREEN_BOTTOM -((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
+#define SCREEN_RIGHT 1.0f
+#define SCREEN_LEFT -1.0f
+
 static float delta;
 
 struct Camera
@@ -252,7 +258,7 @@ Player::OnSwitch(NewTrackGraph &tracks)
 struct GameState
 {
    RenderState renderer;
-   Platform_Input_State input;
+   PlatformInputState input;
 
    Camera camera;
    Player sphereGuy;
