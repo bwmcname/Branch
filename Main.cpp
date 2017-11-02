@@ -292,13 +292,13 @@ static B_INLINE
 Curve BreakCurve()
 {
 
-   float length = 0.7f * TRACK_SEGMENT_SIZE;
+   float length = 0.5f * TRACK_SEGMENT_SIZE;
 
    Curve result;
    result.p1 = {0.0f, 0.0f};
-   result.p2 = 0.333333f * V2(0.0f, length);
-   result.p3 = 0.666666f * V2(0.0f, length);
-   result.p4 = {1.0f, length};
+   result.p2 = {0.0f, 0.333333f * length};
+   result.p3 = {0.0f, 0.666666f * length};
+   result.p4 = {0.0f, length};
 
    return result;
 }
@@ -1373,6 +1373,11 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
 
    Branch_Image_Header *buttonHeader = LoadImageFromAsset(state.assetManager.LoadStacked(AssetHeader::button_ID));
    state.buttonTex = LoadImageIntoTexture(buttonHeader);
+   stack->pop();
+
+   Branch_Image_Header *breakHeader = LoadImageFromAsset(state.assetManager.LoadStacked(AssetHeader::Block_ID));
+   state.renderer.commands.blockTex = LoadImageIntoTexture(breakHeader);
+   stack->pop();
 
    state.backgroundProgram = CreateSimpleProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Background_vert_ID),
 							   state.assetManager.LoadStacked(AssetHeader::Background_frag_ID));

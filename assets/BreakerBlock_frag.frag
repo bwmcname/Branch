@@ -1,18 +1,14 @@
-#version 300 es
+#include <glsl.h>
+#include <fraginc.h>
 
-precision highp float;
-
-
-#define DEFAULT_COLOR 0
-#define BRIGHTNESS 1
-#define NORMALS 2
-
+uniform sampler2D tex;
+in vec2 out_uv;
 
 layout(location=DEFAULT_COLOR) out vec4 color;
 layout(location=BRIGHTNESS) out vec4 color2;
 
 void main()
 {
-   color = vec4(3.0, 3.0, 3.0, 1.0);
+   color = texture(tex, out_uv);
    color2 = vec4(4.0f, 0.0, 1.0, 1.0);
 }

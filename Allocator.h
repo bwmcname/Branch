@@ -1,3 +1,8 @@
+/* Allocator.h */
+/* Allocator structures and implementation
+ * currently only a stack allocator
+ */
+
 struct Arena
 {
    size_t size;
@@ -5,6 +10,9 @@ struct Arena
    u8 *current;
 };
 
+// NOT THREAD SAFE
+// Do not use the same StackAllocator across threads.
+// One thread may pop an allocation made by another thread.
 struct StackAllocator
 {
    struct Chunk

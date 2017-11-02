@@ -193,6 +193,8 @@ struct CommandState
    GLuint branchInstanceVao;
    GLuint breakInstanceVao;
 
+   GLuint blockTex;
+
    CommandBase *first;
    CommandBase *last;
    inline void PushBindProgram(ProgramBase *base, StackAllocator *allocator);
@@ -225,6 +227,8 @@ struct RenderState
    GLuint blurTexture;
    GLuint depthBuffer;
    GLuint buttonVbo;
+
+   GLuint blockVBO;
 
    GLuint fullScreenProgram;
    GLuint blurProgram;

@@ -1,3 +1,7 @@
+/* Map.h */
+/* Hashmap structures for track location information
+ */
+
 struct LocationInfo
 {
    enum

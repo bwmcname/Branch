@@ -1,3 +1,6 @@
+/* Map.cpp */
+/* Hashmap implementation for track location information
+ */
 
 inline
 i32 Compare(VirtualCoord a, VirtualCoord b)

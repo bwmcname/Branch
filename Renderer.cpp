@@ -889,7 +889,6 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    glGenBuffers(1, &result.buttonVbo);
    glBindBuffer(GL_ARRAY_BUFFER, result.buttonVbo);
    glBufferData(GL_ARRAY_BUFFER, sizeof(v2) * 6, 0, GL_STATIC_DRAW);
-   
 
    result.commands = InitCommandState(stack);
    
@@ -1147,7 +1146,7 @@ void RenderSpeedup(DrawSpeedupCommand *command, Camera &camera, v3 lightPos, Pro
 }
 
 static
-void RenderBreakTexture(DrawBreakCommand *command, Camera &camera, v3 lightPos, ProgramBase *currentProgram)
+void RenderBreakTexture(DrawBreakCommand *command, Camera &camera, v3 lightPos, ProgramBase *currentProgram, GLuint texture)
 {
    // @old!
    // RenderObject(command->obj, BreakTrack, (ShaderProgram *)currentProgram, camera.view, lightPos, NORMAL_COLOR);
@@ -1159,15 +1158,21 @@ void RenderBreakTexture(DrawBreakCommand *command, Camera &camera, v3 lightPos, 
    m4 model = translation * orientation * scale;
    m4 mvp = InfiniteProjection * camera.view * model;
 
+   glUseProgram(BreakBlockProgram.programHandle);
    glBindBuffer(GL_ARRAY_BUFFER, RectangleVertBuffer);
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
-   glUseProgram(BreakBlockProgram.programHandle);
+   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
+   glEnableVertexAttribArray(UV_LOCATION);
+   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+   glActiveTexture(GL_TEXTURE0);
+   glBindTexture(GL_TEXTURE_2D, texture);
+   glUniform1i(glGetUniformLocation(BreakBlockProgram.programHandle, "tex"), 0);
+
    glUniformMatrix4fv(BreakBlockProgram.MVPUniform, 1, GL_FALSE, mvp.e);
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glBindBuffer(GL_ARRAY_BUFFER, 0);
-   glUseProgram(0);
 
    glUseProgram(currentProgram->programHandle);
 }
@@ -1578,7 +1583,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
 	 case DrawBreak:
 	 {
-	    RenderBreakTexture((DrawBreakCommand *)current, camera, lightPos, currentProgram);
+	    RenderBreakTexture((DrawBreakCommand *)current, camera, lightPos, currentProgram, blockTex);
 	 }break;
 
 	 case DrawLinearInstances:
