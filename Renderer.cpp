@@ -1,4 +1,4 @@
-
+S
 #define NORMAL_COLOR  (V3(0.0f, 1.0f, 1.0f))
 #define SPEEDUP_COLOR (V3(0.0f, 1.0f, 0.0f))
  
@@ -177,6 +177,7 @@ bool BBoxFrustumTest(TrackFrustum &f, BBox &b)
    return false;
 }
 
+static
 CommandState InitCommandState(StackAllocator *allocator)
 {
    CommandState result;
@@ -636,7 +637,8 @@ LoadProgramFiles(char *vert, char *frag,
    FileRead(frag, (u8 *)(*outFragSource), *outFragSize);   
 }
 
-GLuint
+
+static GLuint
 MakeProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize,
 	    GLuint *outVertexHandle, GLuint *outFragmentHandle)
 {
@@ -667,7 +669,7 @@ GLuint CreateSimpleProgramFromAssets(Asset &vert, Asset &frag)
 		      &dummyVert, &dummyFrag);
 }
 
-ShaderProgram
+static ShaderProgram
 CreateProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize)
 {
    ShaderProgram result;
@@ -717,7 +719,7 @@ ShaderProgram LoadFilesAndCreateProgram(char *vertex, char *fragment, StackAlloc
    return result;
 }
 
-TextProgram
+static TextProgram
 CreateTextProgram(char *vertexSource, size_t vsize, char *fragmentSource, size_t fsize)
 {
    TextProgram result;
@@ -786,8 +788,38 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
 
    LOG_WRITE("WIDTH: %d, HEIGHT: %d", SCREEN_WIDTH, SCREEN_HEIGHT);
 
-   
-   // init scene framebuffer with light attachment
+   glGenFramebuffers(1, &result.fbo);
+   glBindFramebuffer(GL_FRAMEBUFFER, result.fbo);
+   GLuint attachments[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+   glDrawBuffers(2, attachments);
+
+   glGenTextures(1, &result.mainColorTexture);
+   glBindTexture(GL_TEXTURE_2D, result.mainColorTexture);
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.mainColorTexture, 0);
+   glBindTexture(GL_TEXTURE_2D, 0);
+
+   glGenRenderbuffers(1, &result.depthBuffer);
+   glBindRenderbuffer(GL_RENDERBUFFER, result.depthBuffer);
+   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
+   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, result.depthBuffer);
+
+   glGenTextures(1, &result.blurTexture);   
+   glBindTexture(GL_TEXTURE_2D, result.blurTexture);   
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, result.blurTexture, 0);
+   glBindTexture(GL_TEXTURE_2D, 0);
+
+   GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+   LOG_WRITE("Framebuffer status %d", status);
+
+   // OLD!!! two pass blur
+   // init scene framebuffer
+   /*
    glGenFramebuffers(1, &result.fbo);
    glBindFramebuffer(GL_FRAMEBUFFER, result.fbo);   
    GLuint attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
@@ -884,7 +916,8 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
       assetManager.PopStacked(AssetHeader::ApplyBlur_vert_ID);
       assetManager.PopStacked(AssetHeader::ApplyBlur_frag_ID);
    }
-   
+
+   */   
 
    glGenBuffers(1, &result.buttonVbo);
    glBindBuffer(GL_ARRAY_BUFFER, result.buttonVbo);
@@ -964,6 +997,7 @@ m3 TextProjection(float screenWidth, float screenHeight)
 	 -1.0f, 1.0f, 1.0f};
 }
 
+static
 void RenderBackground(GameState &state)
 {   
    glDisable(GL_DEPTH_TEST);
@@ -979,10 +1013,11 @@ void RenderBackground(GameState &state)
    glUseProgram(0);   
 }
 
+static
 void BeginFrame(GameState &state)
 {   
    // glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo); // @Android merging!!
-   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+   // glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
    // @we really only need to clear the color of the secondary buffer, can we do this?
    glClear(GL_DEPTH_BUFFER_BIT);   
@@ -990,9 +1025,19 @@ void BeginFrame(GameState &state)
    glEnable(GL_DEPTH_TEST);
 }
 
+static
 void RenderBlur(RenderState &renderer, Camera &camera)
 {
    glDisable(GL_DEPTH_TEST);
+
+   glUseProgram(renderer.fullScreenProgram);
+   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
+   glEnableVertexAttribArray(UV_LOCATION);
+   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
    #if 0
    glBindFramebuffer(GL_FRAMEBUFFER, renderer.horizontalFbo);
@@ -1096,6 +1141,7 @@ void RenderBlur(RenderState &renderer, Camera &camera)
    #endif
 }
 
+static
 void RenderMesh(ShaderProgram *p, MeshObject b, m4 &transform, m4 &view, v3 lightPos, v3 diffuseColor = V3(0.3f, 0.3f, 0.3f))
 {
    static float time = 0.0f;
@@ -1218,6 +1264,7 @@ void RenderButton(DrawButtonCommand *command, GLuint vbo, GLuint program)
    glEnable(GL_DEPTH_TEST);
 }
 
+static
 void RenderTexture(GLuint texture, ShaderProgram &program)
 {
    glUseProgram(program.programHandle);
@@ -1415,7 +1462,7 @@ GLuint UploadVertices(float *vertices, i32 count, i32 components = 3)
    return result;
 }
 
-MeshBuffers
+static MeshBuffers
 UploadStaticMesh(float *vertices, v3 *normals, i32 count, i32 components = 3)
 {
    MeshBuffers result;
@@ -1439,6 +1486,7 @@ UploadStaticMesh(float *vertices, v3 *normals, i32 count, i32 components = 3)
 
 // like the previous function, but does not upload any data, just allocates the buffers
 // NOT NECASSARY TO CREATING MESH BUFFERS (you may want to use the function above)
+static
 MeshBuffers AllocateMeshBuffers(i32 count, i32 components = 3)
 {
    MeshBuffers result;
@@ -1462,6 +1510,7 @@ MeshBuffers AllocateMeshBuffers(i32 count, i32 components = 3)
 // Allocates Mesh object and vertex buffers
 // NOT NECASSARY TO CREATING A MESH OBJECT
 // Only for allocating dynamic gpu buffers
+static
 MeshObject AllocateMeshObject(i32 vertexCount, StackAllocator *allocator)
 {   
    MeshObject result;
@@ -1476,6 +1525,7 @@ MeshObject AllocateMeshObject(i32 vertexCount, StackAllocator *allocator)
 }
 
 // Inits Mesh Object and uploads to vertex buffers
+static
 MeshObject InitMeshObject(u8 *buffer, StackAllocator *allocator)
 {
    Mesh mesh;
@@ -1500,6 +1550,7 @@ MeshObject InitMeshObject(u8 *buffer, StackAllocator *allocator)
 }
 
 #if defined(DEBUG) && defined(WIN32_BUILD)
+static
 void RenderBBoxes(GameState &state)
 {  
    glLoadMatrixf((InfiniteProjection * state.camera.view).e);

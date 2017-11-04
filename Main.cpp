@@ -1244,8 +1244,6 @@ stbFont InitFont_stb(Asset font, StackAllocator *allocator)
    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
    LOG_WRITE("size: %d\n", value);
 
-   // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-   // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);   
    glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, cast->width, cast->height, 0, GL_ALPHA, GL_UNSIGNED_BYTE,
