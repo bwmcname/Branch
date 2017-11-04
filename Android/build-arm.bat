@@ -12,7 +12,7 @@ set INCLUDES="C:\\Program Files\\android-ndk-r15c\\platforms\\android-21\\arch-a
 
 del Branch.apk
 
-copy ..\assets\Packed.assets assets\assets\
+copy ..\ProcessedAssets\Packed.assets assets\assets\
 
 call ndk-build NDK_DEBUG=1 APP_BUILD_SCRIPT=Android.mk NDK_APPLICATION_MK=Application.mk NDK_LIBS_OUT=output\lib\lib
 

@@ -50,6 +50,8 @@ RebuildState *SaveState(GameState *state)
    saving->beginLerp = state->tracks.beginLerp;
    saving->endLerp = state->tracks.endLerp;
 
+   saving->trackGraphFlags = state->tracks.flags;
+   
    return saving;
 }
 
@@ -513,16 +515,9 @@ void StartTracks(NewTrackGraph &g)
    }
 }
 
-NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
+void AllocateTrackGraphBuffers(NewTrackGraph &g, StackAllocator *allocator)
 {
-   NewTrackGraph g;
    g.adjList = (Attribute *)allocator->push(sizeof(Attribute) * 1024);
-
-   for(u32 i = 0; i < g.capacity; ++i)
-   {
-      g.adjList[i] = {0, Attribute::unused, 0, 0, {}, {}};
-   }
-
    g.availableIDs = InitCircularQueue<u16>(1024, allocator); //@ could be smaller?
    g.orders = InitCircularQueue<NewTrackOrder>(1024, allocator); //@ could be smaller
    g.newBranches = InitCircularQueue<u16>(256, allocator);
@@ -530,6 +525,18 @@ NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
    g.IDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
    g.reverseIDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
    g.elements = (Track *)allocator->push(sizeof(Track) * 1024);
+}
+
+NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
+{
+   NewTrackGraph g;
+
+   AllocateTrackGraphBuffers(g, allocator);
+
+   for(u32 i = 0; i < g.capacity; ++i)
+   {
+      g.adjList[i] = {0, Attribute::unused, 0, 0, {}, {}};
+   }
 
    StartTracks(g);
 
@@ -778,7 +785,6 @@ void NewSetReachable(NewTrackGraph &graph, StackAllocator &allocator, u16 start)
       if(!(graph.adjList[index].flags & Attribute::reachable))
       {
 	 graph.adjList[index].flags |= Attribute::reachable;
-
 	 if(graph.adjList[index].hasLeft())
 	 {
 	    stack[top++] = graph.GetActualID(graph.adjList[index].leftEdge());
@@ -1316,7 +1322,6 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    
    state.assetManager.Init(stack);   
 
-   // @leak
    LinearTrack = AllocateMeshObject(80 * 3, stack);
    BranchTrack = AllocateMeshObject(80 * 3, stack);
    BreakTrack = AllocateMeshObject(80 * 3, stack);
@@ -1326,8 +1331,6 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    state.renderer = InitRenderState(stack, state.assetManager);
    Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
    InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
-
-   state.state = GameState::START;
 
    B_ASSERT(state.mainArena.base);
 
@@ -1395,6 +1398,7 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    if(!rebuild)
    {
       GlobalBranchCurve = LEFT_CURVE;
+      state.state = GameState::START;
    }
    else
    {
@@ -1406,6 +1410,8 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
       {
 	 GlobalBranchCurve = RIGHT_CURVE;
       }
+
+      state.state = GameState::LOOP;
    }
       
    GlobalBreakCurve = BreakCurve();
@@ -1435,6 +1441,7 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    }
    else
    {
+      AllocateTrackGraphBuffers(state.tracks, stack);
       
       ReloadState(rebuild, state);
       state.sphereGuy.mesh = Sphere;

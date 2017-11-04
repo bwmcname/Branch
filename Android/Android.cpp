@@ -251,6 +251,9 @@ void AndroidMain(AndroidState *state)
    RebuildState *tempSaved = state->savedState;
    timespec begin, end;
 
+   // resume always gets called twice in a row for some reason.
+   bool resumeToggle = true;
+
    for(;;)
    {
       clock_gettime(CLOCK_MONOTONIC, &begin);
@@ -267,20 +270,30 @@ void AndroidMain(AndroidState *state)
 	    }break;
 
 	    case NATIVEWINDOWCREATED:
-	    {	  
-	       InitOpengl(state);
-	       glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	    {
+	       if(!drawing)
+	       {
+		  InitOpengl(state);
+		  glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
-	       LOG_WRITE("BEGIN INIT");
-	       GameInit(gameState, tempSaved, state->savedStateSize);
+		  LOG_WRITE("BEGIN INIT");
+		  GameInit(gameState, tempSaved, state->savedStateSize);
 	       
-	       drawing = true;
+		  drawing = true;
+	       }
 	    }break;
 
 	    case RESUME:
 	    {
-	       LOG_WRITE("RESUME");
-	       delta = 1.0f;
+	       if(resumeToggle)
+	       {
+		  LOG_WRITE("RESUME");
+		  delta = 1.0f;
+	       }
+	       else
+	       {
+		  resumeToggle = true;
+	       }
 	    }break;
 
 	    case SAVESTATE:
@@ -288,10 +301,14 @@ void AndroidMain(AndroidState *state)
 	       LOG_WRITE("SAVESTATE");
 
 	       state->savedState = SaveState(&gameState);
+
+	       // No totally sure on the right way to deallocate this.
+	       // Is 
 	       tempSaved = (RebuildState *)malloc(sizeof(RebuildState));
 	       *tempSaved = *state->savedState;
+		
 	       LOG_WRITE("WRITTEN_TO");
-	       sem_post(&state->savingStateSem);	       
+	       sem_post(&state->savingStateSem);
 	    }break;
 
 	    case PAUSE:
