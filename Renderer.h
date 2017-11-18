@@ -223,9 +223,13 @@ struct RenderState
 {
    GLuint fbo;
    GLuint mainColorTexture;
-   GLuint normalTexture;
    GLuint blurTexture;
    GLuint depthBuffer;
+
+
+   GLuint blurReceiveFbo;
+   GLuint blurReceiveTexture;
+
    GLuint buttonVbo;
 
    GLuint blockVBO;

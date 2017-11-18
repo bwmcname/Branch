@@ -1,7 +1,4 @@
-#version 300 es
-
-precision highp float;
-
+#include <glsl.h>
 
 in vec2 frag_uv;
 uniform sampler2D tex;

@@ -15,6 +15,8 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "libs/stb_truetype.h"
 
+#include "BranchTypes.h"
+#include "BranchMath.h"
 #include "BranchCommon.h"
 
 #define PACKED_ASSET_DIRECTORY "../ProcessedAssets/"

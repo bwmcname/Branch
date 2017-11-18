@@ -50,7 +50,9 @@
 #define DEBUG_DO(expr)
 #endif
 
+#include "BranchTypes.h"
 #include "Log.h"
+#include "BranchMath.h"
 #include "BranchCommon.h"
 #include "PlatformAPI.h"
 #include "PlatformThread.h"

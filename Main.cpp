@@ -1370,7 +1370,7 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
 					   state.assetManager.LoadStacked(AssetHeader::Button_frag_ID));
 
    SuperBrightProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Emissive_vert_ID),
-						state.assetManager.LoadStacked(AssetHeader::Emissive_frag_ID)); 
+						state.assetManager.LoadStacked(AssetHeader::Emissive_frag_ID));
 
    Branch_Image_Header *buttonHeader = LoadImageFromAsset(state.assetManager.LoadStacked(AssetHeader::button_ID));
    state.buttonTex = LoadImageIntoTexture(buttonHeader);

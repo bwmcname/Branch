@@ -1,12 +1,5 @@
-#version 300 es
-
-precision highp float;
-
-
-#define DEFAULT_COLOR 0
-#define BRIGHTNESS 1
-#define NORMALS 2
-
+#include <glsl.h>
+#include <fraginc.h>
 
 layout(location=DEFAULT_COLOR) out vec4 color;
 layout(location=BRIGHTNESS) out vec4 brightness;

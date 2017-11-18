@@ -1,4 +1,4 @@
-S
+
 #define NORMAL_COLOR  (V3(0.0f, 1.0f, 1.0f))
 #define SPEEDUP_COLOR (V3(0.0f, 1.0f, 0.0f))
  
@@ -815,7 +815,34 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    glBindTexture(GL_TEXTURE_2D, 0);
 
    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+   LOG_WRITE("Framebuffer status %d", status); 
+
+   glGenFramebuffers(1, &result.blurReceiveFbo);
+   glBindFramebuffer(GL_FRAMEBUFFER, result.blurReceiveFbo);
+   GLuint attachment = GL_COLOR_ATTACHMENT0;
+   glDrawBuffers(1, &attachment);
+
+   glGenTextures(1, &result.blurReceiveTexture);
+   glBindTexture(GL_TEXTURE_2D, result.blurReceiveTexture);
+   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH >> 2, SCREEN_HEIGHT >> 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.blurReceiveTexture, 0);
+   glBindTexture(GL_TEXTURE_2D, 0);
+
+   status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
    LOG_WRITE("Framebuffer status %d", status);
+
+   result.fullScreenProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
+							    assetManager.LoadStacked(AssetHeader::ScreenTexture_frag_ID));
+
+   result.blurProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
+						      assetManager.LoadStacked(AssetHeader::fast_blur_frag_ID));
+
+   assetManager.PopStacked(AssetHeader::fast_blur_frag_ID);
+   assetManager.PopStacked(AssetHeader::ScreenTexture_vert_ID);
+   assetManager.PopStacked(AssetHeader::ScreenTexture_frag_ID);
+   
 
    // OLD!!! two pass blur
    // init scene framebuffer
@@ -893,8 +920,8 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    B_ASSERT(status == GL_FRAMEBUFFER_COMPLETE);
    
    {
-
-      result.fullScreenProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
+   
+   result.fullScreenProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
 							       assetManager.LoadStacked(AssetHeader::ScreenTexture_frag_ID));
 
       assetManager.PopStacked(AssetHeader::ScreenTexture_vert_ID);
@@ -955,7 +982,8 @@ v3 *Normals(float *vertices, i32 count, StackAllocator *allocator)
    return Normals(vertices, buffer, count);
 }
 
-// n^2 operation
+// @n^2 operation
+// Don't do this on a frame by frame basis!
 // flat normals -> smooth normals
 v3 *SmoothNormals(v3 *verts, v3 *normals, v3 *outNormals, u32 count, StackAllocator *alloc)
 {
@@ -1015,12 +1043,11 @@ void RenderBackground(GameState &state)
 
 static
 void BeginFrame(GameState &state)
-{   
-   // glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo); // @Android merging!!
-   // glBindFramebuffer(GL_FRAMEBUFFER, 0);
+{
+   glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo);
 
    // @we really only need to clear the color of the secondary buffer, can we do this?
-   glClear(GL_DEPTH_BUFFER_BIT);   
+   glClear(GL_DEPTH_BUFFER_BIT);
    RenderBackground(state);
    glEnable(GL_DEPTH_TEST);
 }
@@ -1030,15 +1057,51 @@ void RenderBlur(RenderState &renderer, Camera &camera)
 {
    glDisable(GL_DEPTH_TEST);
 
+   glBindFramebuffer(GL_FRAMEBUFFER, renderer.blurReceiveFbo);
+   glUseProgram(renderer.blurProgram);
+   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
+   glEnableVertexAttribArray(UV_LOCATION);
+   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glBindTexture(GL_TEXTURE_2D, renderer.blurTexture);
+   glActiveTexture(GL_TEXTURE0);
+   glUniform1i(glGetUniformLocation(renderer.blurProgram, "bright"), 0);
+   glUniform1f(glGetUniformLocation(renderer.blurProgram, "xOff"), 1.0f / (float)(SCREEN_WIDTH));
+   glUniform1f(glGetUniformLocation(renderer.blurProgram, "yOff"), 1.0f / (float)(SCREEN_HEIGHT));
+   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
+
+   // blit to default framebuffer
+   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
    glUseProgram(renderer.fullScreenProgram);
    glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
-   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
    glEnableVertexAttribArray(UV_LOCATION);
    glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
+   glActiveTexture(GL_TEXTURE0);
+   glBindTexture(GL_TEXTURE_2D, renderer.blurReceiveTexture);
+   glUniform1i(glGetUniformLocation(renderer.fullScreenProgram, "image1"), 0);
+
+   glActiveTexture(GL_TEXTURE1);
+   glBindTexture(GL_TEXTURE_2D, renderer.mainColorTexture);
+   glUniform1i(glGetUniformLocation(renderer.fullScreenProgram, "image2"), 1);
+
+   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
+   GLuint attachments[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+
+   // glBindFramebuffer(GL_FRAMEBUFFER, renderer.fbo);
+   // glInvalidateFramebuffer(GL_FRAMEBUFFER, 2, attachments);
+
+   glEnable(GL_DEPTH_TEST);
+   
    #if 0
    glBindFramebuffer(GL_FRAMEBUFFER, renderer.horizontalFbo);
    

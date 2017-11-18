@@ -26,11 +26,12 @@ struct AssetHeader
    static const u32 Emissive_vert_ID = 23;
    static const u32 Emissive_frag_ID = 24;
    static const u32 outline_frag_ID = 25;
-   static const u32 sphere_ID = 26;
-   static const u32 wow_ID = 27;
+   static const u32 fast_blur_frag_ID = 26;
+   static const u32 sphere_ID = 27;
+   static const u32 wow_ID = 28;
    static const u32 offsetTable[];
    static const u32 sizeTable[];
-   static const u32 entries = 27;
+   static const u32 entries = 28;
 };
-const u32 AssetHeader::offsetTable[] = {0,835,1411,1839,2174,2495,2928,3421,3601,4094,4405,4935,5425,5841,6545,6960,7263,7674,7827,40611,1089203,1089948,1090801,1091253,1091662,1092050,1103574,};
-const u32 AssetHeader::sizeTable[] = {835,576,428,335,321,433,493,180,493,311,530,490,416,704,415,303,411,153,32784,1048592,745,853,452,409,388,11524,1055756,};
+const u32 AssetHeader::offsetTable[] = {0,835,1411,1851,2242,2563,2996,3489,3669,4162,4473,5003,5415,5820,6067,6482,6785,7196,7349,40133,1088725,1089470,1090311,1090763,1091172,1091560,1092427,1103951,};
+const u32 AssetHeader::sizeTable[] = {835,576,440,391,321,433,493,180,493,311,530,412,405,247,415,303,411,153,32784,1048592,745,841,452,409,388,867,11524,1055756,};

@@ -1,12 +1,5 @@
-#version 300 es
-
-precision highp float;
-
-
-#define DEFAULT_COLOR 0
-#define BRIGHTNESS 1
-#define NORMALS 2
-
+#include <glsl.h>
+#include <fraginc.h>
 
 uniform sampler2D scene;
 uniform sampler2D blur;
