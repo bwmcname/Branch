@@ -37,6 +37,11 @@ struct Asset
    AssetData data;
 };
 
+struct MapItem
+{
+   u32 x0, y0, x1, y1;
+};
+
 struct AssetManager
 {      
    Asset *assets;

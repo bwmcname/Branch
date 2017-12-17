@@ -594,8 +594,33 @@ int WriteIntoTexture(u32 *map, u32 map_width, u32 map_height, char *filename, u3
    return 1;
 }
 
+// replaces 'pattern' with 'replacement'
+// allocates a new string
+char *ReplaceExtension(char *original, char *replacement)
+{
+   int original_length = strlen(original);
+
+   for(int i = 0; i < original_length; ++i)
+   {
+      if(original[i] == '.')
+      {
+	 int replacement_length = strlen(replacement);
+	 int new_length = i + replacement_length + 1;
+	 char *new_string = (char *)malloc(new_length);
+	 memcpy(new_string, original, i);
+	 memcpy(&new_string[i], replacement, replacement_length);
+	 new_string[new_length-1] = '\0';
+
+	 return new_string;
+      }
+   }
+
+   // could not find extension
+   return 0;
+}
+
 // Right now texture maps only support 4 channel textures
-int Map(u32 map_width, u32 map_height, char **images, int num_images)
+int Map(char *map_name, u32 map_width, u32 map_height, char **images, int num_images)
 {
    stbrp_context context;
 
@@ -639,7 +664,7 @@ int Map(u32 map_width, u32 map_height, char **images, int num_images)
       return 0;
    }
 
-   // no longer need nodes
+    // no longer need nodes
    free(node);
 
    Branch_Image_Header *texture_map = (Branch_Image_Header *)malloc((sizeof(u32) * map_width * map_height) + sizeof(Branch_Image_Header));
@@ -662,13 +687,30 @@ int Map(u32 map_width, u32 map_height, char **images, int num_images)
       }
    }
 
+   // Create Header
+   static char header_name[32];
+   sprintf(header_name, "%s.h", map_name);
+   FILE *header = OpenForWrite(header_name);
+   fprintf(header, "struct %s\n{\n", map_name);
+
+   for(int i = 0; i < num_images; ++i)
+   {
+      char *field_name = ReplaceExtension(images[i], "_box");
+      fprintf(header, "   static MapItem %s = {%d, %d, %d, %d};\n", field_name, rects[i].x, rects[i].y, rects[i].x + rects[i].w, rects[i].y + rects[i].h);
+      free(field_name);
+   }
+   
+   fprintf(header, "};\n");
+   fclose(header);
+
    free(rects);
 
    FILE *out = OpenForWrite(TO_PACKED_ASSET_PATH("TemporaryMap"));
    fwrite(texture_map, texture_map->size + sizeof(Branch_Image_Header), 1, out);
    fclose(out);
 
-   stbi_write_bmp("TemporaryMap.bmp", map_width, map_height, 4, (void *)texture);
+   // Debug
+   // stbi_write_bmp("TemporaryMap.bmp", map_width, map_height, 4, (void *)texture);
 
    free(texture_map);
 
@@ -1074,17 +1116,18 @@ void main(int argc, char **argv)
 
 		     if(map == 0)
 		     {
-			int num_images = argc - 4;
+			
+			int num_images = argc - 5;
 			if(num_images < 1)
 			{
 			   printf("Incorrect argument format\n");
 			}
 			else
 			{
-			   int width = atoi(argv[2]);
-			   int height = atoi(argv[3]);
+			   int width = atoi(argv[3]);
+			   int height = atoi(argv[4]);
 
-			   Map(width, height, &argv[4], num_images);
+			   Map(argv[2], width, height, &argv[5], num_images);
 			}
 		     }
 		  }
