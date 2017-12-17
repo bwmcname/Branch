@@ -1158,6 +1158,7 @@ void GenerateTrackSegmentVertices(Track &track, MeshObject meshBuffers, StackAll
    GenerateTrackSegmentVertices(meshBuffers, *track.bezier, allocator);
 }
 
+static
 GLuint UploadDistanceTexture(Image &image)
 {
    GLuint result;
@@ -1174,6 +1175,7 @@ GLuint UploadDistanceTexture(Image &image)
    return result;
 }
 
+static
 GLuint UploadTexture(Image &image, i32 channels = 4)
 {
    GLuint result;
@@ -1556,8 +1558,7 @@ void ProcessInput(GameState &state)
 
 void GameLoop(GameState &state)
 {
-   BeginFrame(state);   
-
+   BeginFrame(state);
    ProcessInput(state);
 
    switch(state.state)
@@ -1592,19 +1593,22 @@ void GameLoop(GameState &state)
 	 static char framerate[8];
 	 static float time = 120.0f;
 	 time += delta;
-	 static i32 count = 0;
+	 static i32 framerate_string_count = 0;
 	 if(time > 30.0f)
 	 {
 	    time = 0.0f;
-	    count = IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
+	    framerate_string_count = IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
 	 }
+	 // framerate
+	 state.renderer.commands.PushRenderText(framerate, framerate_string_count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
+
+	 // distance
+	 static char print_string[32];
+	 i32 print_string_count = 0;
+	 memcpy(print_string, "Distance: ", 10);
+	 print_string_count = IntToString((char *)print_string + 10, (u32)state.sphereGuy.renderable.worldPos.y / 10);
+	 state.renderer.commands.PushRenderText(print_string, print_string_count + 10, V2(-0.8f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
 	 
-	 // RenderText_stb(framerate, count, -0.8f, 0.8f, state.bitmapFont, state.bitmapFontProgram);
-	 state.renderer.commands.PushRenderText(framerate, count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));	 
-	 // static char renderTimeSting[19];
-	 // size_t renderTimeCount = IntToString(renderTimeSting, state.TrackRenderTime);
-	 // RenderText_stb(renderTimeSting, (u32)renderTimeCount, -0.8f, 0.75f, state.bitmapFont, state.bitmapFontProgram);
-	 // state.renderer.commands.PushRenderText(renderTimeSting, (u32)renderTimeCount, V2(-0.8f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
       }break;
 
       case GameState::RESET:
@@ -1623,6 +1627,8 @@ void GameLoop(GameState &state)
 
       case GameState::START:
       {
+	 // Start menu of the game
+	 
 	 static float position = 0.0f;
 	 position += delta * 0.01f;	 
 

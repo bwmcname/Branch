@@ -1172,11 +1172,6 @@ void RenderBlur(RenderState &renderer, Camera &camera)
    
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
 
-   // glInvalidateFramebuffer(renderer.verticalFbo, 1, &attachment);
-
-   GLuint attachList[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_DEPTH_STENCIL_ATTACHMENT};
-   // glInvalidateFramebuffer(renderer.fbo, 4, attachList);
-
    #ifdef WIN32_BUILD
    glDisable(GL_FRAMEBUFFER_SRGB);
    #endif

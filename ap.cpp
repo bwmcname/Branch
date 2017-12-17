@@ -15,6 +15,9 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "libs/stb_truetype.h"
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "libs/stb_image_write.h"
+
 #include "BranchTypes.h"
 #include "BranchMath.h"
 #include "BranchCommon.h"
@@ -202,18 +205,18 @@ char *LoadIntoBuffer(char *fileName, size_t *outSize)
 {
    FILE *file = OpenForRead(fileName);
 
+   if(!file)
+   {
+      printf("Could not open file %s\n", fileName);
+      return 0;
+   }
+
    *outSize = FileSize(file);
 
    char *buffer = (char *)malloc(*outSize);
    fread(buffer, *outSize, 1, file);
    fclose(file);
    return buffer;
-}
-
-static void
-PackFont(char *fontFile, u32 width, u32 height)
-{
-   
 }
 
 MeshBuilder ParseObj(char *obj, size_t size)
@@ -537,6 +540,141 @@ void Shader(char *filename)
    free(buffer);
 }
 
+void *LoadImage(char *filename, size_t *size, int *width, int *height, int *channels)
+{
+   unsigned char *buffer = (unsigned char *)LoadIntoBuffer(filename, size);
+
+   return stbi_load_from_memory(buffer, (int)*size, width, height, channels, 4);
+}
+
+int WriteIntoTexture(u32 *map, u32 map_width, u32 map_height, char *filename, u32 x, u32 y)
+{
+   size_t fileSize;
+
+   size_t image_size;
+   int image_width;
+   int image_height;
+   int image_channels;
+   u32 *image = (u32 *)LoadImage(filename, &image_size, &image_width, &image_height, &image_channels);
+
+   if(!image)
+   {
+      printf("Could not find image %s\n", filename);
+      return 0;
+   }
+
+   if(image_channels != 4)
+   {
+      printf("Unsupported image format of %s\n", filename);
+      printf("Require channels %d, given %d\n", 4, image_channels);
+      return 0;
+   }
+
+   if(image_width > map_width || image_height > map_height)
+   {
+      printf("image to large (or may not be an image at all)\n");
+      free(image);
+      return 0;
+   }
+
+   u32 *map_row = map + (map_width * y) + x;
+   u32 *image_row = image;
+   u32 row = 0;
+
+   while(row <= image_height)
+   {
+      // write rows of image into rows of the map
+      memcpy(map_row, image_row, image_width * sizeof(u32));
+      map_row += map_width;
+      image_row += image_width;
+      ++row;
+   }
+
+   free(image);
+   return 1;
+}
+
+// Right now texture maps only support 4 channel textures
+int Map(u32 map_width, u32 map_height, char **images, int num_images)
+{
+   stbrp_context context;
+
+   // The api says to allow num_nodes to be >= width
+   int num_nodes = map_width << 1;
+   stbrp_node *node = (stbrp_node *)malloc(num_nodes * sizeof(stbrp_node));
+
+   if(!node)
+   {
+      printf("Pack nodes could not be allocated\n");
+      return 0;
+   }
+
+   stbrp_init_target(&context, map_width, map_height, node, num_nodes);
+
+   stbrp_rect *rects = (stbrp_rect *)malloc(sizeof(stbrp_rect) * num_images);
+
+   if(!rects)
+   {
+      printf("Could not allocate rectangles for pack\n");
+      free(node);
+      return 0;
+   }
+
+   for(int i = 0; i < num_images; ++i)
+   {
+      int width, height, channels;
+      stbi_info(images[i], &width, &height, &channels);
+
+      rects[i].id = i;
+      rects[i].w = width;
+      rects[i].h = height;
+   }
+
+   if(!stbrp_pack_rects(&context, rects, num_images))
+   {
+      free(rects);
+      free(node);
+      
+      printf("Could not pack rectangles\n");
+      return 0;
+   }
+
+   // no longer need nodes
+   free(node);
+
+   Branch_Image_Header *texture_map = (Branch_Image_Header *)malloc((sizeof(u32) * map_width * map_height) + sizeof(Branch_Image_Header));
+   texture_map->size = map_width * map_height * 4; // 4 channels
+   texture_map->width = map_width;
+   texture_map->height = map_height;
+   texture_map->channels = 4; // should we support more???
+   
+   u32 *texture = (u32 *)(texture_map + 1);
+   memset(texture, 0, sizeof(u32) * map_width * map_height);
+
+   for(int i = 0; i < num_images; ++i)
+   {
+      if(!WriteIntoTexture(texture, map_width, map_height, images[rects[i].id], rects[i].x, rects[i].y))
+      {
+	 free(texture_map);
+	 free(rects);
+	 printf("Unable to insert texture %s into map\n", images[rects[i].id]);
+	 return 0;
+      }
+   }
+
+   free(rects);
+
+   FILE *out = OpenForWrite(TO_PACKED_ASSET_PATH("TemporaryMap"));
+   fwrite(texture_map, texture_map->size + sizeof(Branch_Image_Header), 1, out);
+   fclose(out);
+
+   stbi_write_bmp("TemporaryMap.bmp", map_width, map_height, 4, (void *)texture);
+
+   free(texture_map);
+
+   return 1;
+}
+
 int Font(char *fontName, u32 width, u32 height, float pointSize)
 {
    FILE *font = OpenForRead(fontName);
@@ -720,16 +858,15 @@ int BFont(char *filename, int point, int width, int height)
    return 1;
 }
 */
+
 void Image(char *fileName)
 {
    size_t size;
-   unsigned char *buffer = (unsigned char *)LoadIntoBuffer(fileName, &size);
-
    int width, height;
    int channels;
    unsigned char *pixels;
    Branch_Image_Header header;
-   if(pixels = stbi_load_from_memory(buffer, (int)size, &width, &height, &channels, 4))
+   if(pixels = (u8 *)LoadImage(fileName, &size, &width, &height, &channels))
    {
       header.size = size;
       header.width = width;
@@ -931,7 +1068,27 @@ void main(int argc, char **argv)
 			printf("No Assets specified to build");
 		     }
 		  }
-	       }	       
+		  else
+		  {
+		     int map = strcmp(parse, "map");
+
+		     if(map == 0)
+		     {
+			int num_images = argc - 4;
+			if(num_images < 1)
+			{
+			   printf("Incorrect argument format\n");
+			}
+			else
+			{
+			   int width = atoi(argv[2]);
+			   int height = atoi(argv[3]);
+
+			   Map(width, height, &argv[4], num_images);
+			}
+		     }
+		  }
+	       }      
 	    }
 	 }
       }

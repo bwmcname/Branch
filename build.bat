@@ -46,6 +46,7 @@ rem calls to asset packer to build assets
 
 ..\ap image Block.png
 
+..\ap map 2048 2048 Button.png Block.png
 
 rem pack asset file
 ..\ap build default_frag.fragp default_vert.vertp BreakerBlock_vert.vertp BreakerBlock_frag.fragp texture_frag.fragp texture_vert.vertp bitmap_font_vert.vertp bitmap_font_frag.fragp text_vert.vertp text_frag.fragp Background_vert.vertp Background_frag.fragp ScreenTexture_vert.vertp ScreenTexture_frag.fragp ApplyBlur_vert.vertp ApplyBlur_frag.fragp Button_vert.vertp Button_frag.fragp button Block Default_Instance_vert.vertp Default_Instance_frag.fragp Emissive_vert.vertp Emissive_frag.fragp outline_frag.fragp fast_blur_frag.fragp sphere.brian wow.font
