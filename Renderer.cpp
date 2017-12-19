@@ -429,17 +429,18 @@ void CommandState::PushBreakInstance(Object obj, v3 color)
 };
 
 inline void
-CommandState::PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocator *allocator)
+CommandState::PushDrawGUI(v2 position, v2 scale, GLuint texture, GLuint uvs, StackAllocator *allocator)
 {
    B_ASSERT(first);
    B_ASSERT(currentProgram);
 
-   last->next = (CommandBase *)allocator->push(sizeof(DrawButtonCommand));
-   DrawButtonCommand *command = (DrawButtonCommand *)last->next;
-   command->command = DrawButton;
+   last->next = (CommandBase *)allocator->push(sizeof(DrawGUICommand));
+   DrawGUICommand *command = (DrawGUICommand *)last->next;
+   command->command = DrawGUI;
    command->position = position;
    command->scale = scale;
    command->texture = texture;
+   command->uvs = uvs;
    last = command;
    ++count;
 }
@@ -599,15 +600,6 @@ CommandState::PushRenderBreakInstances(StackAllocator *allocator)
    command->command = DrawBreakInstances;
 
    last = command;
-   ++count;
-}
-
-inline void
-CommandState::PushRenderBlur(StackAllocator *allocator)
-{
-   last->next = (CommandBase *)allocator->push(sizeof(CommandBase));
-   last->next->command = DrawBlur;
-   last = last->next;
    ++count;
 }
 
@@ -806,29 +798,8 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, result.depthBuffer);
 
-   glGenTextures(1, &result.blurTexture);   
-   glBindTexture(GL_TEXTURE_2D, result.blurTexture);   
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, result.blurTexture, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
-
    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
    LOG_WRITE("Framebuffer status %d", status); 
-
-   glGenFramebuffers(1, &result.blurReceiveFbo);
-   glBindFramebuffer(GL_FRAMEBUFFER, result.blurReceiveFbo);
-   GLuint attachment = GL_COLOR_ATTACHMENT0;
-   glDrawBuffers(1, &attachment);
-
-   glGenTextures(1, &result.blurReceiveTexture);
-   glBindTexture(GL_TEXTURE_2D, result.blurReceiveTexture);
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH >> 2, SCREEN_HEIGHT >> 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.blurReceiveTexture, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
 
    status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
    LOG_WRITE("Framebuffer status %d", status);
@@ -836,119 +807,14 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    result.fullScreenProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
 							    assetManager.LoadStacked(AssetHeader::ScreenTexture_frag_ID));
 
-   result.blurProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
-						      assetManager.LoadStacked(AssetHeader::fast_blur_frag_ID));
-
-   assetManager.PopStacked(AssetHeader::fast_blur_frag_ID);
    assetManager.PopStacked(AssetHeader::ScreenTexture_vert_ID);
    assetManager.PopStacked(AssetHeader::ScreenTexture_frag_ID);
-   
-
-   // OLD!!! two pass blur
-   // init scene framebuffer
-   /*
-   glGenFramebuffers(1, &result.fbo);
-   glBindFramebuffer(GL_FRAMEBUFFER, result.fbo);   
-   GLuint attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
-   glDrawBuffers(3, attachments);
-   
-   glGenTextures(1, &result.mainColorTexture);
-   glBindTexture(GL_TEXTURE_2D, result.mainColorTexture);
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.mainColorTexture, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
-
-   glGenRenderbuffers(1, &result.depthBuffer);
-   glBindRenderbuffer(GL_RENDERBUFFER, result.depthBuffer);
-   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
-   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, result.depthBuffer);
-      
-   glGenTextures(1, &result.blurTexture);   
-   glBindTexture(GL_TEXTURE_2D, result.blurTexture);   
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, result.blurTexture, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
-   
-   glGenTextures(1, &result.normalTexture);   
-   glBindTexture(GL_TEXTURE_2D, result.normalTexture);   
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);   
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, result.normalTexture, 0);   
-   glBindTexture(GL_TEXTURE_2D, 0);   
-
-   DEBUG_DO(GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER));
-   LOG_WRITE("%X", status);
-
-   B_ASSERT(status == GL_FRAMEBUFFER_COMPLETE);
-
-   // init horizontal and vertical blur framebuffers
-   glGenFramebuffers(1, &result.horizontalFbo);
-   glBindFramebuffer(GL_FRAMEBUFFER, result.horizontalFbo);
-   glDrawBuffers(1, attachments);   
-   glGenTextures(1, &result.horizontalColorBuffer);
-   glBindTexture(GL_TEXTURE_2D, result.horizontalColorBuffer);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.horizontalColorBuffer, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
-
-   DEBUG_DO(status = glCheckFramebufferStatus(GL_FRAMEBUFFER));
-   LOG_WRITE("%X", status);
-
-   B_ASSERT(status == GL_FRAMEBUFFER_COMPLETE);
-
-   glGenFramebuffers(1, &result.verticalFbo);
-   glBindFramebuffer(GL_FRAMEBUFFER, result.verticalFbo);
-   glDrawBuffers(1, attachments);
-   glGenTextures(1, &result.verticalColorBuffer);
-   glBindTexture(GL_TEXTURE_2D, result.verticalColorBuffer);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);   
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.verticalColorBuffer, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
-
-   DEBUG_DO(status = glCheckFramebufferStatus(GL_FRAMEBUFFER));
-   LOG_WRITE("%X", status);
-   
-   B_ASSERT(status == GL_FRAMEBUFFER_COMPLETE);
-   
-   {
-   
-   result.fullScreenProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
-							       assetManager.LoadStacked(AssetHeader::ScreenTexture_frag_ID));
-
-      assetManager.PopStacked(AssetHeader::ScreenTexture_vert_ID);
-      assetManager.PopStacked(AssetHeader::ScreenTexture_frag_ID);
-   }
-
-   {
-      result.outlineProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
-							    assetManager.LoadStacked(AssetHeader::outline_frag_ID));
-
-      assetManager.PopStacked(AssetHeader::ScreenTexture_vert_ID);
-      assetManager.PopStacked(AssetHeader::outline_frag_ID);
-   }
-
-   {
-      result.blurProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ApplyBlur_vert_ID),
-							 assetManager.LoadStacked(AssetHeader::ApplyBlur_frag_ID));
-
-      assetManager.PopStacked(AssetHeader::ApplyBlur_vert_ID);
-      assetManager.PopStacked(AssetHeader::ApplyBlur_frag_ID);
-   }
-
-   */   
 
    glGenBuffers(1, &result.buttonVbo);
    glBindBuffer(GL_ARRAY_BUFFER, result.buttonVbo);
    glBufferData(GL_ARRAY_BUFFER, sizeof(v2) * 6, 0, GL_STATIC_DRAW);
+
+   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
    result.commands = InitCommandState(stack);
    
@@ -1044,159 +910,12 @@ void RenderBackground(GameState &state)
 static
 void BeginFrame(GameState &state)
 {
-   glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo);
+   // glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo);
 
    // @we really only need to clear the color of the secondary buffer, can we do this?
    glClear(GL_DEPTH_BUFFER_BIT);
    RenderBackground(state);
    glEnable(GL_DEPTH_TEST);
-}
-
-static
-void RenderBlur(RenderState &renderer, Camera &camera)
-{
-   glDisable(GL_DEPTH_TEST);
-
-   glBindFramebuffer(GL_FRAMEBUFFER, renderer.blurReceiveFbo);
-   glUseProgram(renderer.blurProgram);
-   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
-   glEnableVertexAttribArray(UV_LOCATION);
-   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glBindTexture(GL_TEXTURE_2D, renderer.blurTexture);
-   glActiveTexture(GL_TEXTURE0);
-   glUniform1i(glGetUniformLocation(renderer.blurProgram, "bright"), 0);
-   glUniform1f(glGetUniformLocation(renderer.blurProgram, "xOff"), 1.0f / (float)(SCREEN_WIDTH));
-   glUniform1f(glGetUniformLocation(renderer.blurProgram, "yOff"), 1.0f / (float)(SCREEN_HEIGHT));
-   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-
-   // blit to default framebuffer
-   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-   glUseProgram(renderer.fullScreenProgram);
-   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
-   glEnableVertexAttribArray(UV_LOCATION);
-   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, renderer.blurReceiveTexture);
-   glUniform1i(glGetUniformLocation(renderer.fullScreenProgram, "image1"), 0);
-
-   glActiveTexture(GL_TEXTURE1);
-   glBindTexture(GL_TEXTURE_2D, renderer.mainColorTexture);
-   glUniform1i(glGetUniformLocation(renderer.fullScreenProgram, "image2"), 1);
-
-   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-   GLuint attachments[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-
-   // glBindFramebuffer(GL_FRAMEBUFFER, renderer.fbo);
-   // glInvalidateFramebuffer(GL_FRAMEBUFFER, 2, attachments);
-
-   glEnable(GL_DEPTH_TEST);
-   
-   #if 0
-   glBindFramebuffer(GL_FRAMEBUFFER, renderer.horizontalFbo);
-   
-   glUseProgram(renderer.fullScreenProgram);
-   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
-   glEnableVertexAttribArray(UV_LOCATION);
-   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, renderer.blurTexture);
-   glUniform1i(glGetUniformLocation(renderer.fullScreenProgram, "image2"), 0);
-
-   glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "xstep"), 1.0f / (float)(SCREEN_WIDTH));
-   glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "ystep"), 0.0f);
-
-   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-
-   glBindFramebuffer(GL_FRAMEBUFFER, renderer.verticalFbo);
-   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
-   glEnableVertexAttribArray(UV_LOCATION);
-   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, renderer.horizontalColorBuffer);
-   glUniform1i(glGetUniformLocation(renderer.fullScreenProgram, "image2"), 0);
-
-   glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "xstep"), 0.0f);
-   glUniform1f(glGetUniformLocation(renderer.fullScreenProgram, "ystep"), 1.0f / (float)(SCREEN_HEIGHT));   
-
-   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-
-   // GLuint attachment = GL_COLOR_ATTACHMENT0;
-   // glInvalidateFramebuffer(renderer.horizontalFbo, 1, &attachment);
-   
-   // finally blit it to the screen
-   // @should change programs!!!   
-   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-   glUseProgram(renderer.blurProgram);
-   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
-   glEnableVertexAttribArray(UV_LOCATION);
-   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, renderer.mainColorTexture);
-   glUniform1i(glGetUniformLocation(renderer.blurProgram, "scene"), 0);
-
-   glActiveTexture(GL_TEXTURE1);
-   glBindTexture(GL_TEXTURE_2D, renderer.verticalColorBuffer);
-   glUniform1i(glGetUniformLocation(renderer.blurProgram, "blur"), 1);
-   
-   // temporary to get Android build to work
-   // @Support non SRGB framebuffers!
-   #ifdef WIN32_BUILD
-   glEnable(GL_FRAMEBUFFER_SRGB);
-   #endif
-   
-   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-
-   #ifdef WIN32_BUILD
-   glDisable(GL_FRAMEBUFFER_SRGB);
-   #endif
-
-   // maybe a good opportunity to do this at the same time as the blur
-   /*
-   glUseProgram(renderer.outlineProgram);
-
-   glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
-   glEnableVertexAttribArray(UV_LOCATION);
-   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-   glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, renderer.normalTexture);
-   glUniform1i(glGetUniformLocation(renderer.outlineProgram, "normals"), 0);
-   glUniform3fv(glGetUniformLocation(renderer.outlineProgram, "forward"), 1, camera.forward.e);
-   glDisable(GL_DEPTH_TEST);
-   glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
-   glEnable(GL_DEPTH_TEST);
-   */
-   #endif
 }
 
 static
@@ -1231,25 +950,25 @@ void RenderObject(Object &obj, MeshObject buffers, ShaderProgram *program, m4 &c
    RenderMesh(program, buffers, transform, camera, lightPos, diffuseColor);
 }
 
-static
+static B_INLINE
 void RenderBranch(DrawBranchCommand *command, Camera &camera, v3 lightPos, ProgramBase *program, MeshObject buffers = BranchTrack)
 {
    RenderObject(command->obj, buffers, (ShaderProgram *)program, camera.view, lightPos, NORMAL_COLOR);
 }
 
-static
+static B_INLINE
 void RenderLinear(DrawLinearCommand *command, Camera &camera, v3 lightPos, ProgramBase *current)
 {
    RenderObject(command->obj, LinearTrack, (ShaderProgram *)current, camera.view, lightPos, NORMAL_COLOR);
 }
 
-static
+static B_INLINE
 void RenderSpeedup(DrawSpeedupCommand *command, Camera &camera, v3 lightPos, ProgramBase *program)
 {
    RenderObject(command->obj, LinearTrack, (ShaderProgram *)program, camera.view, lightPos, SPEEDUP_COLOR);
 }
 
-static
+static B_INLINE
 void RenderBreakTexture(DrawBreakCommand *command, Camera &camera, v3 lightPos, ProgramBase *currentProgram, GLuint texture)
 {
    // @old!
@@ -1282,7 +1001,7 @@ void RenderBreakTexture(DrawBreakCommand *command, Camera &camera, v3 lightPos, 
 }
 
 static
-void RenderButton(DrawButtonCommand *command, GLuint vbo, GLuint program)
+void RenderGUI(DrawGUICommand *command, GLuint vbo, GLuint program)
 {
    glDisable(GL_DEPTH_TEST);
    glUseProgram(ButtonProgram.programHandle);
@@ -1308,7 +1027,7 @@ void RenderButton(DrawButtonCommand *command, GLuint vbo, GLuint program)
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, command->uvs);
    glEnableVertexAttribArray(UV_LOCATION);
    glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
@@ -1329,7 +1048,7 @@ void RenderTexture(GLuint texture, ShaderProgram &program)
 
    B_ASSERT(glIsTexture(texture));
 
-   glBindBuffer(GL_ARRAY_BUFFER, RectangleVertBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
    glBindBuffer(GL_ARRAY_BUFFER, RectangleUVBuffer);
@@ -1675,6 +1394,8 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
    {
       switch(current->command)
       {
+
+#if 0 // These are all instanced now, so we don't need them any longer.	 
 	 case DrawLinear:
 	 {
 	    RenderLinear((DrawLinearCommand *)current, camera, lightPos, currentProgram);
@@ -1689,6 +1410,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 {
 	    RenderSpeedup((DrawSpeedupCommand *)current, camera, lightPos, currentProgram);
 	 }break;
+#endif	 
 
 	 case DrawBreak:
 	 {
@@ -1732,14 +1454,9 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	    RenderText((DrawTextCommand *)current, font, p);
 	 }break;
 
-	 case DrawBlur:
+	 case DrawGUI:
 	 {
-	    RenderBlur(renderer, camera);
-	 }break;
-
-	 case DrawButton:
-	 {
-	    RenderButton((DrawButtonCommand *)current, renderer.buttonVbo, currentProgram->programHandle);
+	    RenderGUI((DrawGUICommand *)current, renderer.buttonVbo, currentProgram->programHandle);
 	 }break;
 
 	 case DrawLockedBranch:
@@ -1767,6 +1484,7 @@ void
 CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &view,
 				   u32 instanceCount, TrackInstance *instances, u32 vcount, GLuint instanceVao)
 {
+   // We should be removing instances of glUseProgram!!!
    glUseProgram(DefaultInstanced.programHandle);
 
    m4 *transforms = (m4 *)allocator->push(sizeof(m4) * instanceCount);
@@ -1777,17 +1495,6 @@ CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &v
 
    glUniform3fv(DefaultInstanced.lightPosUniform, 1, lightPos.e);
    glUniformMatrix4fv(DefaultInstanced.viewUniform, 1, GL_FALSE, view.e);
-
-   /*
-   glBindBuffer(GL_ARRAY_BUFFER, instanceMVPBuffer);
-   m4 *transforms = (m4 *)glMapBufferRange(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), GL_MAP_WRITE_BIT);
-
-   glBindBuffer(GL_ARRAY_BUFFER, instanceModelMatrixBuffer);
-   m4 *MVPs = (m4 *)glMapBufferRange(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), GL_MAP_WRITE_BIT);
-   
-   glBindBuffer(GL_ARRAY_BUFFER, instanceColorBuffer);
-   v3 *color = (v3 *)glMapBufferRange(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(v3), GL_MAP_WRITE_BIT);
-   */
 
    for(u32 i = 0; i < instanceCount; ++i)
    {
@@ -1801,30 +1508,7 @@ CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &v
       MVPs[i] = vp * transforms[i];
    }
 
-   /*
-   glBindBuffer(GL_ARRAY_BUFFER, instanceMVPBuffer);
-   if(!glUnmapBuffer(GL_ARRAY_BUFFER))
-   {
-      GLuint error = glGetError();
-      LOG_WRITE("%d\n", error);
-   }
-
-   glBindBuffer(GL_ARRAY_BUFFER, instanceModelMatrixBuffer);
-   if(!glUnmapBuffer(GL_ARRAY_BUFFER))
-   {
-      GLuint error = glGetError();
-      LOG_WRITE("%d\n", error);
-   }
-
-   glBindBuffer(GL_ARRAY_BUFFER, instanceColorBuffer);
-   if(!glUnmapBuffer(GL_ARRAY_BUFFER))
-   {
-      GLuint error = glGetError();
-      LOG_WRITE("%d\n", error);
-   }
-   */
-   
-   
+   // would glMap be better here?
    glBindBuffer(GL_ARRAY_BUFFER, instanceMVPBuffer);
    glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), MVPs);
 
@@ -1832,8 +1516,7 @@ CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &v
    glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), transforms);
 
    glBindBuffer(GL_ARRAY_BUFFER, instanceColorBuffer);
-   glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(v3),  color);
-   
+   glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(v3),  color);   
    
    glBindVertexArray(instanceVao);   
    glDrawArraysInstanced(GL_TRIANGLES, 0, vcount, instanceCount);
@@ -1844,7 +1527,7 @@ CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &v
    allocator->pop();
 }
 
-i32 RenderTracks(GameState &state, StackAllocator *allocator)
+i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
 {
    BEGIN_TIME();   
    i32 rendered = 0;
@@ -1852,6 +1535,10 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
    TrackFrustum frustum = CreateTrackFrustum(InfiniteProjection * state.camera.view);
 
    state.renderer.commands.PushBindProgram(&DefaultShader, allocator);
+
+   // We can push the commands to render the tracks before
+   // we push any instances. Any instance in the instance array once
+   // ExecuteCommands is called will be rendered.
    state.renderer.commands.PushRenderLinearInstances(allocator);
    state.renderer.commands.PushRenderBranchInstances(allocator);
    state.renderer.commands.PushRenderBreakInstances(allocator);
@@ -1860,6 +1547,9 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
       if(!(state.tracks.adjList[i].flags & Attribute::invisible) &&
 	 !(state.tracks.adjList[i].flags & Attribute::unused))
       {
+	 // Test if visible, Test if spot in array is in use
+	 // Visibility can be determined in a previous frame.
+
 	 if(state.tracks.adjList[i].flags & Attribute::branch)
 	 {
 	    BBox box = BranchBBox(GlobalBranchCurve, state.tracks.elements[i].renderable.worldPos);
@@ -1908,7 +1598,6 @@ i32 RenderTracks(GameState &state, StackAllocator *allocator)
    }
    
    END_TIME();
-   READ_TIME(state.TrackRenderTime);
 
    return rendered;
 }

@@ -1,6 +1,5 @@
 // Common definitions to be used between the runtime and the asset processor
 
-
 //@note: should we force pack these?
 struct FontHeader
 {
@@ -49,8 +48,8 @@ struct VirtualCoord
    i32 x;
    i32 y;
 };
-
-// Higher level Game Object abstraction
+  
+// GameObject, GameEntity, etc...
 struct Object
 {
    v3 worldPos;

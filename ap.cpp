@@ -691,12 +691,35 @@ int Map(char *map_name, u32 map_width, u32 map_height, char **images, int num_im
    static char header_name[32];
    sprintf(header_name, "%s.h", map_name);
    FILE *header = OpenForWrite(header_name);
-   fprintf(header, "struct %s\n{\n", map_name);
-
+   fprintf(header, "namespace %s\n{\n", map_name);
+   fprintf(header, "   static const u32 width = %d;\n", map_width);
+   fprintf(header, "   static const u32 height = %d;\n", map_height);
    for(int i = 0; i < num_images; ++i)
    {
-      char *field_name = ReplaceExtension(images[i], "_box");
-      fprintf(header, "   static MapItem %s = {%d, %d, %d, %d};\n", field_name, rects[i].x, rects[i].y, rects[i].x + rects[i].w, rects[i].y + rects[i].h);
+      int x0 = rects[i].x;
+      int y0 = rects[i].y;
+      int x1 = rects[i].x + rects[i].w;
+      int y1 = rects[i].y + rects[i].h;
+
+      char *field_name = ReplaceExtension(images[rects[i].id], "_box");
+      fprintf(header, "   static const MapItem %s = {%d, %d, %d, %d};\n", field_name, x0, y0, x1, y1);
+
+      float map_widthf = map_width;
+      float map_heightf = map_height;
+
+      float x0f = ((float)x0) / map_widthf;
+      float y0f = (((float)y0) / map_heightf);
+      float x1f = ((float)x1) / map_widthf;
+      float y1f = (((float)y1) / map_heightf);
+
+      fprintf(header, "   static const float %s_uvs[] = {%ff, %ff, %ff, %ff, %ff, %ff, %ff, %ff, %ff, %ff, %ff, %ff};\n", field_name,
+	      x0f, y1f,
+	      x1f, y1f,
+	      x0f, y0f,
+	      x1f, y1f,
+	      x1f, y0f,
+	      x0f, y0f);
+	      
       free(field_name);
    }
    
@@ -705,7 +728,9 @@ int Map(char *map_name, u32 map_width, u32 map_height, char **images, int num_im
 
    free(rects);
 
-   FILE *out = OpenForWrite(TO_PACKED_ASSET_PATH("TemporaryMap"));
+   static char processed_path[32];
+   sprintf(processed_path, "..\\ProcessedAssets\\%s", map_name);
+   FILE *out = OpenForWrite(processed_path);
    fwrite(texture_map, texture_map->size + sizeof(Branch_Image_Header), 1, out);
    fclose(out);
 

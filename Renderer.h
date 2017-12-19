@@ -65,7 +65,7 @@ enum RenderCommand
    DrawBreak,
    DrawString, //DrawText is taken :(
    DrawBlur,
-   DrawButton,
+   DrawGUI,
    DrawLinearInstances,
    DrawBranchInstances,
    DrawBreakInstances,
@@ -97,11 +97,20 @@ struct DrawBreakTextureCommand : public CommandBase
    quat orientation;
 };
 
+struct DrawGUICommand : public CommandBase
+{
+   v2 position;
+   v2 scale;
+   GLuint texture;
+   GLuint uvs;
+};
+
 // trying to replace with instanced renderer
 struct DrawLinearCommand : public CommandBase
 {
    Object obj;
 };
+
 
 struct TrackInstance
 {
@@ -144,6 +153,7 @@ struct DrawButtonCommand : public CommandBase
    v2 position;
    v2 scale;
    GLuint texture;
+   GLuint uvs;
 };
 
 struct DrawLockedBranchCommand : public DrawBranchCommand
@@ -194,6 +204,10 @@ struct CommandState
    GLuint breakInstanceVao;
 
    GLuint blockTex;
+   GLuint guiTextureMap;
+
+   // @delete TEST!!!!
+   GLuint XBuffer;
 
    CommandBase *first;
    CommandBase *last;
@@ -214,7 +228,7 @@ struct CommandState
    inline void PushDrawBreak(Object obj, StackAllocator *allocator);
    inline void PushRenderBlur(StackAllocator *allocator);
    inline void PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator);
-   inline void PushDrawButton(v2 position, v2 scale, GLuint texture, StackAllocator *allocator);
+   inline void PushDrawGUI(v2 position, v2 scale, GLuint texture, GLuint uvs, StackAllocator *allocator);
    void ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer, StackAllocator *allocator);
    inline void Clean(StackAllocator *allocator);
 };
@@ -223,19 +237,12 @@ struct RenderState
 {
    GLuint fbo;
    GLuint mainColorTexture;
-   GLuint blurTexture;
    GLuint depthBuffer;
-
-
-   GLuint blurReceiveFbo;
-   GLuint blurReceiveTexture;
-
    GLuint buttonVbo;
 
    GLuint blockVBO;
 
    GLuint fullScreenProgram;
-   GLuint blurProgram;
    GLuint outlineProgram;
 
    GLuint horizontalFbo;

@@ -1382,6 +1382,12 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    state.renderer.commands.blockTex = LoadImageIntoTexture(breakHeader);
    stack->pop();
 
+   Branch_Image_Header *guiTextureMap = LoadImageFromAsset(state.assetManager.LoadStacked(AssetHeader::GUIMap_ID));
+   state.renderer.commands.guiTextureMap = LoadImageIntoTexture(guiTextureMap);
+   stack->pop();
+
+   state.renderer.commands.XBuffer = UploadVertices((float *)GUIMap::GoSign_box_uvs, 6, 2);
+
    state.backgroundProgram = CreateSimpleProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Background_vert_ID),
 							   state.assetManager.LoadStacked(AssetHeader::Background_frag_ID));
 
@@ -1556,6 +1562,15 @@ void ProcessInput(GameState &state)
    }
 }
 
+static inline
+float GetXtoYRatio(MapItem item)
+{
+   float width = item.x1 - item.x0;
+   float height = item.y1 - item.y0;
+
+   return width / height;
+}
+
 void GameLoop(GameState &state)
 {
    BeginFrame(state);
@@ -1582,11 +1597,10 @@ void GameLoop(GameState &state)
 	 UpdatePlayer(state.sphereGuy, state.tracks, state);
 	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);
 
+	 // @TODO This should be inserted into the render queue instead of being drawn immediately.
 	 glUseProgram(DefaultShader.programHandle); 
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
-	 glUseProgram(0);
-
-	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
 
 	 glUseProgram(0);
 
@@ -1622,7 +1636,7 @@ void GameLoop(GameState &state)
 	 ResetGraph(state.tracks);
 	 FillGraph(state.tracks);
 
-	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
       }break;
 
       case GameState::START:
@@ -1630,9 +1644,11 @@ void GameLoop(GameState &state)
 	 // Start menu of the game
 	 
 	 static float position = 0.0f;
-	 position += delta * 0.01f;	 
+	 position += delta * 0.01f;
 
-	 if(ButtonUpdate(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.input) == Clicked)
+	 v2 button_scale = V2(GetXtoYRatio(GUIMap::GoSign_box) * 0.08f, 0.08f);
+
+	 if(ButtonUpdate(V2(0.0f, 0.0f), button_scale, state.input) == Clicked)
 	 {
 	    state.state = GameState::LOOP;	    
 	    state.sphereGuy.trackIndex = 0;
@@ -1644,9 +1660,9 @@ void GameLoop(GameState &state)
 	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
 	 }
 
-	 RenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
 	 
-	 state.renderer.commands.PushDrawButton(V2(0.0f, 0.0f), V2(0.2f, 0.1f), state.buttonTex, ((StackAllocator *)state.mainArena.base));
+	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.renderer.commands.guiTextureMap, state.renderer.commands.XBuffer, ((StackAllocator *)state.mainArena.base));
       }break;
       
       default:
@@ -1668,9 +1684,7 @@ void GameLoop(GameState &state)
    RenderObject(lightRenderable, state.sphereGuy.mesh, &SuperBrightProgram, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
    glUseProgram(0);
 
-   state.renderer.commands.PushRenderBlur((StackAllocator *)state.mainArena.base);
    state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));
-
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }
    
