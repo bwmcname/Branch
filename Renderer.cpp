@@ -177,48 +177,31 @@ bool BBoxFrustumTest(TrackFrustum &f, BBox &b)
    return false;
 }
 
-static
-CommandState InitCommandState(StackAllocator *allocator)
+InstanceBuffers CreateInstanceBuffers(GLuint vbo, GLuint nbo)
 {
-   CommandState result;
-   result.currentProgram = 0;
-   result.count = 0;
-   result.first = 0;   
-   result.last = 0;
-   // 1024 for now, but we may be able to find tighter bounds!
-   result.linearInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
-   result.linearInstanceCount = 0;
-
-   result.branchInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
-   result.branchInstanceCount = 0;
-
-   result.breakInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
-   result.breakInstanceCount = 0;
+   InstanceBuffers result;
 
    glGenBuffers(1, &result.instanceMVPBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
-   // glBufferStorage(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_MAP_WRITE_BIT);
    glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_DYNAMIC_DRAW);
 
    glGenBuffers(1, &result.instanceModelMatrixBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceModelMatrixBuffer);
-   // glBufferStorage(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_MAP_WRITE_BIT);
    glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_DYNAMIC_DRAW);
 
    glGenBuffers(1, &result.instanceColorBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceColorBuffer);
    glBufferData(GL_ARRAY_BUFFER, sizeof(v3) * 1024, 0, GL_DYNAMIC_DRAW);
-   // glBufferStorage(GL_ARRAY_BUFFER, sizeof(v3) * 1024, 0, GL_MAP_WRITE_BIT);
 
-   glGenVertexArrays(1, &result.linearInstanceVao);
-   glBindVertexArray(result.linearInstanceVao);
+   glGenVertexArrays(1, &result.instanceVao);
+   glBindVertexArray(result.instanceVao);
    
    glEnableVertexAttribArray(VERTEX_LOCATION);
-   glBindBuffer(GL_ARRAY_BUFFER, LinearTrack.handles.vbo);
+   glBindBuffer(GL_ARRAY_BUFFER, vbo);
    glVertexAttribPointer(VERTEX_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
    
    glEnableVertexAttribArray(NORMAL_LOCATION);
-   glBindBuffer(GL_ARRAY_BUFFER, LinearTrack.handles.nbo);
+   glBindBuffer(GL_ARRAY_BUFFER, nbo);
    glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
       
    glEnableVertexAttribArray(COLOR_INPUT_LOCATION);
@@ -259,101 +242,30 @@ CommandState InitCommandState(StackAllocator *allocator)
 
    glBindVertexArray(0);
 
-   // now do the same for branch instances
-   glGenVertexArrays(1, &result.branchInstanceVao);   
-   glBindVertexArray(result.branchInstanceVao);
+   return result;
+}
 
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glBindBuffer(GL_ARRAY_BUFFER, BranchTrack.handles.vbo);
-   glVertexAttribPointer(VERTEX_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
-   
-   glEnableVertexAttribArray(NORMAL_LOCATION);
-   glBindBuffer(GL_ARRAY_BUFFER, BranchTrack.handles.nbo);
-   glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
-      
-   glEnableVertexAttribArray(COLOR_INPUT_LOCATION);
-   glBindBuffer(GL_ARRAY_BUFFER, result.instanceColorBuffer);
-   glVertexAttribPointer(COLOR_INPUT_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);      
+static
+CommandState InitCommandState(StackAllocator *allocator)
+{
+   CommandState result;
+   result.currentProgram = 0;
+   result.count = 0;
+   result.first = 0;   
+   result.last = 0;
+   // 1024 for now, but we may be able to find tighter bounds!
+   result.linearInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
+   result.linearInstanceCount = 0;
 
-   glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
-   glEnableVertexAttribArray(MATRIX1_LOCATION);
-   glVertexAttribPointer(MATRIX1_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
-   glEnableVertexAttribArray(MATRIX1_LOCATION + 1);
-   glVertexAttribPointer(MATRIX1_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
-   glEnableVertexAttribArray(MATRIX1_LOCATION + 2);
-   glVertexAttribPointer(MATRIX1_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
-   glEnableVertexAttribArray(MATRIX1_LOCATION + 3);
-   glVertexAttribPointer(MATRIX1_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
+   result.branchInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
+   result.branchInstanceCount = 0;
 
-   glBindBuffer(GL_ARRAY_BUFFER, result.instanceModelMatrixBuffer);
-   glEnableVertexAttribArray(MATRIX2_LOCATION);
-   glVertexAttribPointer(MATRIX2_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
-   glEnableVertexAttribArray(MATRIX2_LOCATION + 1);
-   glVertexAttribPointer(MATRIX2_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
-   glEnableVertexAttribArray(MATRIX2_LOCATION + 2);
-   glVertexAttribPointer(MATRIX2_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
-   glEnableVertexAttribArray(MATRIX2_LOCATION + 3);
-   glVertexAttribPointer(MATRIX2_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
+   result.breakInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
+   result.breakInstanceCount = 0;
 
-   glVertexAttribDivisor(VERTEX_LOCATION, 0);
-   glVertexAttribDivisor(NORMAL_LOCATION, 0);
-   glVertexAttribDivisor(COLOR_INPUT_LOCATION, 1);
-   glVertexAttribDivisor(MATRIX1_LOCATION, 1);
-   glVertexAttribDivisor(MATRIX1_LOCATION+1, 1);
-   glVertexAttribDivisor(MATRIX1_LOCATION+2, 1);
-   glVertexAttribDivisor(MATRIX1_LOCATION+3, 1);
-   glVertexAttribDivisor(MATRIX2_LOCATION, 1);
-   glVertexAttribDivisor(MATRIX2_LOCATION+1, 1);
-   glVertexAttribDivisor(MATRIX2_LOCATION+2, 1);
-   glVertexAttribDivisor(MATRIX2_LOCATION+3, 1);
-
-   // Now do the same for break instances
-   glGenVertexArrays(1, &result.breakInstanceVao);   
-   glBindVertexArray(result.breakInstanceVao);
-
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glBindBuffer(GL_ARRAY_BUFFER, BreakTrack.handles.vbo);
-   glVertexAttribPointer(VERTEX_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
-   
-   glEnableVertexAttribArray(NORMAL_LOCATION);
-   glBindBuffer(GL_ARRAY_BUFFER, BreakTrack.handles.nbo);
-   glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
-      
-   glEnableVertexAttribArray(COLOR_INPUT_LOCATION);
-   glBindBuffer(GL_ARRAY_BUFFER, result.instanceColorBuffer);
-   glVertexAttribPointer(COLOR_INPUT_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);      
-
-   glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
-   glEnableVertexAttribArray(MATRIX1_LOCATION);
-   glVertexAttribPointer(MATRIX1_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
-   glEnableVertexAttribArray(MATRIX1_LOCATION + 1);
-   glVertexAttribPointer(MATRIX1_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
-   glEnableVertexAttribArray(MATRIX1_LOCATION + 2);
-   glVertexAttribPointer(MATRIX1_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
-   glEnableVertexAttribArray(MATRIX1_LOCATION + 3);
-   glVertexAttribPointer(MATRIX1_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
-
-   glBindBuffer(GL_ARRAY_BUFFER, result.instanceModelMatrixBuffer);
-   glEnableVertexAttribArray(MATRIX2_LOCATION);
-   glVertexAttribPointer(MATRIX2_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
-   glEnableVertexAttribArray(MATRIX2_LOCATION + 1);
-   glVertexAttribPointer(MATRIX2_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
-   glEnableVertexAttribArray(MATRIX2_LOCATION + 2);
-   glVertexAttribPointer(MATRIX2_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
-   glEnableVertexAttribArray(MATRIX2_LOCATION + 3);
-   glVertexAttribPointer(MATRIX2_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
-
-   glVertexAttribDivisor(VERTEX_LOCATION, 0);
-   glVertexAttribDivisor(NORMAL_LOCATION, 0);
-   glVertexAttribDivisor(COLOR_INPUT_LOCATION, 1);
-   glVertexAttribDivisor(MATRIX1_LOCATION, 1);
-   glVertexAttribDivisor(MATRIX1_LOCATION+1, 1);
-   glVertexAttribDivisor(MATRIX1_LOCATION+2, 1);
-   glVertexAttribDivisor(MATRIX1_LOCATION+3, 1);
-   glVertexAttribDivisor(MATRIX2_LOCATION, 1);
-   glVertexAttribDivisor(MATRIX2_LOCATION+1, 1);
-   glVertexAttribDivisor(MATRIX2_LOCATION+2, 1);
-   glVertexAttribDivisor(MATRIX2_LOCATION+3, 1);
+   result.instanceBuffers[0] = CreateInstanceBuffers(LinearTrack.handles.vbo, LinearTrack.handles.nbo);
+   result.instanceBuffers[1] = CreateInstanceBuffers(BranchTrack.handles.vbo, BranchTrack.handles.nbo);
+   result.instanceBuffers[2] = CreateInstanceBuffers(BreakTrack.handles.vbo, BreakTrack.handles.nbo);
 
    return result;
 }
@@ -1309,13 +1221,12 @@ MeshObject InitMeshObject(u8 *buffer, StackAllocator *allocator)
 {
    Mesh mesh;
 
-   mesh.vcount = *((i32 *)buffer);
+   mesh.vcount = *((i32 *)buffer) - 1;
    mesh.vertices = (float *)(buffer + 8);
    mesh.normals = (v3 *)allocator->push(sizeof(v3) * mesh.vcount);
    v3 *flat_normals = (v3 *)allocator->push(sizeof(v3) * mesh.vcount);
    flat_normals = Normals(mesh.vertices, flat_normals, mesh.vcount);   
    SmoothNormals((v3 *)mesh.vertices, flat_normals, mesh.normals, mesh.vcount, allocator);
-   // allocator->pop(); @spurreous?
 
    MeshBuffers handles = UploadStaticMesh(mesh.vertices, mesh.normals, mesh.vcount, 3);
    allocator->pop(); // pop normals
@@ -1422,7 +1333,8 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 case DrawLinearInstances:
 	 {
 	    RenderTrackInstances(allocator, lightPos, camera.view,
-				 linearInstanceCount, linearInstances, LinearTrack.mesh.vcount, linearInstanceVao);
+				 linearInstanceCount, linearInstances, LinearTrack.mesh.vcount,
+				 instanceBuffers[0]);
 
 	    // reset instance count
 	    linearInstanceCount = 0;
@@ -1431,7 +1343,8 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 case DrawBranchInstances:
 	 {
 	    RenderTrackInstances(allocator, lightPos, camera.view,
-				 branchInstanceCount, branchInstances, BranchTrack.mesh.vcount, branchInstanceVao);
+				 branchInstanceCount, branchInstances, BranchTrack.mesh.vcount,
+				 instanceBuffers[1]);
 
 	    // result instance count
 	    branchInstanceCount = 0;
@@ -1440,7 +1353,8 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 case DrawBreakInstances:
 	 {
 	    RenderTrackInstances(allocator, lightPos, camera.view,
-				 breakInstanceCount, breakInstances, BreakTrack.mesh.vcount, breakInstanceVao);
+				 breakInstanceCount, breakInstances, BreakTrack.mesh.vcount,
+				 instanceBuffers[2]);
 
 	    breakInstanceCount = 0;
 	 }break;
@@ -1484,7 +1398,8 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
 void
 CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &view,
-				   u32 instanceCount, TrackInstance *instances, u32 vcount, GLuint instanceVao)
+				   u32 instanceCount, TrackInstance *instances, u32 vcount,
+				   InstanceBuffers buffers)
 {
    // We should be removing instances of glUseProgram!!!
    glUseProgram(DefaultInstanced.programHandle);
@@ -1498,29 +1413,32 @@ CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &v
    glUniform3fv(DefaultInstanced.lightPosUniform, 1, lightPos.e);
    glUniformMatrix4fv(DefaultInstanced.viewUniform, 1, GL_FALSE, view.e);
 
+   //@TEST
+   m4 scale_orientation = Scale(instances[0].scale) * M4(instances[0].rotation);
+
    for(u32 i = 0; i < instanceCount; ++i)
    {
       color[i] = instances[i].color;
 
-      m4 orientation = M4(instances[i].rotation);
-      m4 scale = Scale(instances[i].scale);
+      // m4 orientation = M4(instances[i].rotation);
+      // m4 scale = Scale(instances[i].scale);
       m4 translation = Translate(instances[i].position);   
 
-      transforms[i] = (translation * scale * orientation);
+      transforms[i] = (translation * scale_orientation);
       MVPs[i] = vp * transforms[i];
    }
 
    // would glMap be better here?
-   glBindBuffer(GL_ARRAY_BUFFER, instanceMVPBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, buffers.instanceMVPBuffer);
    glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), MVPs);
 
-   glBindBuffer(GL_ARRAY_BUFFER, instanceModelMatrixBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, buffers.instanceModelMatrixBuffer);
    glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), transforms);
 
-   glBindBuffer(GL_ARRAY_BUFFER, instanceColorBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, buffers.instanceColorBuffer);
    glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(v3),  color);   
    
-   glBindVertexArray(instanceVao);   
+   glBindVertexArray(buffers.instanceVao);   
    glDrawArraysInstanced(GL_TRIANGLES, 0, vcount, instanceCount);
    glBindVertexArray(0);
 

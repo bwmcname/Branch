@@ -62,10 +62,3 @@ struct AssetManager
    void Init(StackAllocator *_allocator);
    inline void SetOnGpu(u32 id);
 };
-
-/*
- * Things that need to be allocated and de-allocated
- * Robot Face Texture*
- * Maybe textures that show up in the gui?
- * But probably not.
- */

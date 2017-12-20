@@ -1341,7 +1341,7 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
 
    glFrontFace(GL_CCW);
    glCullFace(GL_BACK);
-   glEnable(GL_CULL_FACE);   
+
 
    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);   
 
@@ -1400,7 +1400,8 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    Sphere = InitMeshObject(state.assetManager.LoadStacked(AssetHeader::sphere_ID).mem, stack);   
 
    GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
-   
+
+   #if 0
    if(!rebuild)
    {
       GlobalBranchCurve = LEFT_CURVE;
@@ -1419,6 +1420,10 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
 
       state.state = GameState::LOOP;
    }
+   #else
+   GlobalBranchCurve = LEFT_CURVE;
+   state.state = GameState::START;
+   #endif
       
    GlobalBreakCurve = BreakCurve();
    GlobalLeftCurve = LEFT_CURVE;
@@ -1447,12 +1452,15 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    }
    else
    {
+      LOG_WRITE("START REBUILD");
       AllocateTrackGraphBuffers(state.tracks, stack);
       
       ReloadState(rebuild, state);
       state.sphereGuy.mesh = Sphere;
 
       SetTrackMeshesForRebuild(state.tracks.elements, 1024);
+
+      LOG_WRITE("fINISHED REBUILD");
    }
 }
 

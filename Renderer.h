@@ -34,7 +34,7 @@ struct TextProgram : ProgramBase
    GLint transformUniform;
    GLint texUniform;
    GLint vertexAttrib;
-   GLint normalAttrib;   
+   GLint normalAttrib;
 };
 
 struct ShaderProgram : ProgramBase
@@ -182,6 +182,14 @@ Draw Bright break thing
 struct RenderState;
 struct Camera;
 
+struct InstanceBuffers
+{
+   GLuint instanceVao;
+   GLuint instanceMVPBuffer;
+   GLuint instanceColorBuffer;
+   GLuint instanceModelMatrixBuffer;
+};
+
 struct CommandState
 {
    ProgramBase *currentProgram;
@@ -195,13 +203,8 @@ struct CommandState
 
    u32 breakInstanceCount;
    TrackInstance *breakInstances;
-   
-   GLuint instanceMVPBuffer;
-   GLuint instanceColorBuffer;
-   GLuint instanceModelMatrixBuffer;
-   GLuint linearInstanceVao;
-   GLuint branchInstanceVao;
-   GLuint breakInstanceVao;
+
+   InstanceBuffers instanceBuffers[3];
 
    GLuint blockTex;
    GLuint guiTextureMap;
@@ -221,7 +224,7 @@ struct CommandState
    inline void PushRenderLinearInstances(StackAllocator *allocator);
    inline void PushRenderBranchInstances(StackAllocator *allocator);
    inline void PushRenderBreakInstances(StackAllocator *allocator);
-   void RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &view, u32 count, TrackInstance *instances, u32 vcount, GLuint instanceVao);
+   void RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &view, u32 count, TrackInstance *instances, u32 vcount, InstanceBuffers buffers);
    inline void PushDrawSpeedup(Object obj, StackAllocator *allocator);
    inline void PushDrawBranch(Object obj, StackAllocator *allocator);
    inline void PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocator *allocator);

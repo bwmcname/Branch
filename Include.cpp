@@ -61,7 +61,7 @@
 #include "Map.h"
 #include "Renderer.h"
 #include "Assets.h"
-#include "Assets/GUIMap.h"
+#include "assets/GUIMap.h"
 #include "Main.h"
 
 #ifdef ANDROID_BUILD
