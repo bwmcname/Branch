@@ -547,7 +547,7 @@ void *LoadImage(char *filename, size_t *size, int *width, int *height, int *chan
    return stbi_load_from_memory(buffer, (int)*size, width, height, channels, 4);
 }
 
-int WriteIntoTexture(u32 *map, u32 map_width, u32 map_height, char *filename, u32 x, u32 y)
+int WriteIntoTexture(u32 *map, u32 edge, u32 map_width, u32 map_height, char *filename, u32 x, u32 y)
 {
    size_t fileSize;
 
@@ -620,7 +620,7 @@ char *ReplaceExtension(char *original, char *replacement)
 }
 
 // Right now texture maps only support 4 channel textures
-int Map(char *map_name, u32 map_width, u32 map_height, char **images, int num_images)
+int Map(char *map_name, u32 edge, u32 map_width, u32 map_height, char **images, int num_images)
 {
    stbrp_context context;
 
@@ -651,8 +651,8 @@ int Map(char *map_name, u32 map_width, u32 map_height, char **images, int num_im
       stbi_info(images[i], &width, &height, &channels);
 
       rects[i].id = i;
-      rects[i].w = width;
-      rects[i].h = height;
+      rects[i].w = width + (edge << 1);
+      rects[i].h = height + (edge << 1);
    }
 
    if(!stbrp_pack_rects(&context, rects, num_images))
@@ -678,7 +678,7 @@ int Map(char *map_name, u32 map_width, u32 map_height, char **images, int num_im
 
    for(int i = 0; i < num_images; ++i)
    {
-      if(!WriteIntoTexture(texture, map_width, map_height, images[rects[i].id], rects[i].x, rects[i].y))
+      if(!WriteIntoTexture(texture, edge, map_width, map_height, images[rects[i].id], rects[i].x + edge, rects[i].y + edge))
       {
 	 free(texture_map);
 	 free(rects);
@@ -696,10 +696,10 @@ int Map(char *map_name, u32 map_width, u32 map_height, char **images, int num_im
    fprintf(header, "   static const u32 height = %d;\n", map_height);
    for(int i = 0; i < num_images; ++i)
    {
-      int x0 = rects[i].x;
-      int y0 = rects[i].y;
-      int x1 = rects[i].x + rects[i].w;
-      int y1 = rects[i].y + rects[i].h;
+      int x0 = rects[i].x + edge;
+      int y0 = rects[i].y + edge;
+      int x1 = rects[i].x + rects[i].w - edge;
+      int y1 = rects[i].y + rects[i].h - edge;
 
       char *field_name = ReplaceExtension(images[rects[i].id], "_box");
       fprintf(header, "   static const MapItem %s = {%d, %d, %d, %d};\n", field_name, x0, y0, x1, y1);
@@ -787,144 +787,6 @@ int Font(char *fontName, u32 width, u32 height, float pointSize)
    
    return true;
 }
-
-/*
-int Font(char *imgFileName, char *dataFileName)
-{
-   FILE *dataFile = OpenForRead(dataFileName);
-   if(dataFileName)
-   {
-
-      while(fgetc(dataFile) != '\n');
-
-      int count;
-      fscanf(dataFile, "chars count=%i\n", &count);
-
-      size_t fontDataSize = count * sizeof(CharInfo) + sizeof(FontHeader);
-      FontHeader *header = (FontHeader *)malloc(fontDataSize);
-
-      CharInfo *buffer = (CharInfo *)((u8 *)header + sizeof(FontHeader));
-
-      int page;
-      int chnl;
-
-      for(int i = 0; i < count; ++i)
-      {
-	 fscanf(dataFile, "char id=%hhi\tx=%i\ty=%i\twidth=%i\theight=%i\t xoffset=%f\tyoffset=%f\txadvance=%f\tpage=%i\tchnl=%i\n",
-		&buffer[i].id, &buffer[i].x, &buffer[i].y, &buffer[i].width, &buffer[i].height, &buffer[i].xoffset, &buffer[i].yoffset,
-		&buffer[i].xadvance, &page, &chnl);
-      }
-
-      ImageHeader resultImage;
-      unsigned char *image = stbi_load(imgFileName, &resultImage.x, &resultImage.y, &resultImage.channels, 0);
-
-      header->count = count;
-      header->mapWidth = resultImage.x;
-      header->mapHeight = resultImage.y;
-
-      FILE *fontFile = OpenForWrite("font_data.bf");
-      fwrite(header, fontDataSize, 1, fontFile);
-      fclose(fontFile);
-      free(header);      
-
-      if(image == 0)
-      {
-	 fclose(dataFile);
-	 free(header);
-	 return 0;
-      }
-
-      size_t fileSize = (resultImage.x * resultImage.y * resultImage.channels) + sizeof(ImageHeader);
-      void *outImage = malloc(fileSize);
-      *((ImageHeader *)outImage) = resultImage;
-      memcpy((u8 *)outImage + sizeof(ImageHeader), image, resultImage.x * resultImage.y * resultImage.channels);
-
-      FILE *imageFile = OpenForWrite("distance_field.bi");
-      fwrite(outImage, fileSize, 1, imageFile);
-      fclose(imageFile);
-      free(outImage);
-      free(image);
-   }
-   else
-   {
-      return 0;
-   }
-
-   return 1;
-}
-
-int BFont(char *filename, int point, int width, int height)
-{
-   FILE *dataFile = OpenForRead(filename);
-
-   if(!dataFile)
-   {
-      return 0;
-   }
-
-   size_t fileSize = FileSize(dataFile);
-   void *buffer = (void *)malloc(fileSize);
-
-   fread(buffer, fileSize, 1, dataFile);
-
-   stbtt_fontinfo font;
-   if(!stbtt_InitFont(&font, (const u8 *)buffer, 0))
-   {
-      free(buffer);
-      return 0;
-   }
-
-   i32 glyphCount = font.numGlyphs;
-
-   u8 *pixels = (u8 *)malloc(width * height);
-   stbtt_packedchar *charData = (stbtt_packedchar *)malloc(sizeof(stbtt_packedchar) * glyphCount);
-   float fontSize = stbtt_ScaleForPixelHeight(&font, point);
-
-   stbtt_pack_context spc;
-   if(!stbtt_PackBegin(&spc, pixels, width, height, width, 1, 0)) return 0;
-   if(!stbtt_PackFontRange(&spc, (u8 *)buffer, 0, fontSize, 0, glyphCount, charData)) return 0;
-   stbtt_PackEnd(&spc);
-
-   size_t fontDataSize = glyphCount * sizeof(CharInfo) + sizeof(FontHeader);
-   FontHeader *fontDataHeader = (FontHeader *)malloc(fontDataSize);
-   CharInfo *chars = (CharInfo *)(fontDataHeader + 1);
-
-   for(i32 i = 0; i < glyphCount; ++i)
-   {
-      chars[i] = {
-	 charData[i].xoff,
-	 charData[i].yoff,
-	 charData[i].xadvance,
-	 (u32)charData[i].x1 - (u32)charData[i].x0,
-	 (u32)charData[i].y1 - (u32)charData[i].y0,
-	 (u32)charData[i].x0,
-	 (u32)charData[i].y0,
-	 (i8)i
-      };
-   }
-
-   size_t imageSize = sizeof(ImageHeader) + width * height;
-   ImageHeader *resultImage = (ImageHeader *)malloc(imageSize); // 1 channel
-   resultImage->x = width;
-   resultImage->y = height;
-   resultImage->channels = 1;
-   
-   memcpy(resultImage + 1, pixels, width * height);
-   free(pixels);
-
-   FILE *output = OpenForWrite("bitmap_font.bi");
-   fwrite(resultImage, imageSize, 1, output);
-   fclose(output);   
-
-   output = OpenForWrite("bitmap_font_data.bf");
-   fwrite(fontDataHeader, fontDataSize, 1, output);
-   fclose(output);
-   fclose(dataFile);
-   free(buffer);
-
-   return 1;
-}
-*/
 
 void Image(char *fileName)
 {
@@ -1152,7 +1014,7 @@ void main(int argc, char **argv)
 			   int width = atoi(argv[3]);
 			   int height = atoi(argv[4]);
 
-			   Map(argv[2], width, height, &argv[5], num_images);
+			   Map(argv[2], 2, width, height, &argv[5], num_images);
 			}
 		     }
 		  }

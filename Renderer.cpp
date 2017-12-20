@@ -1006,10 +1006,12 @@ void RenderGUI(DrawGUICommand *command, GLuint vbo, GLuint program)
    glDisable(GL_DEPTH_TEST);
    glUseProgram(ButtonProgram.programHandle);
 
-   float left = command->position.x - command->scale.x;
-   float right = command->position.x + command->scale.x;
-   float bottom = command->position.y - command->scale.y;
-   float top = command->position.y + command->scale.y;
+   float aspect = (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT;
+
+   float left = command->position.x - (command->scale.x * 0.5f);
+   float right = command->position.x + (command->scale.x * 0.5f);
+   float bottom = command->position.y - (command->scale.y * 0.5f * aspect);
+   float top = command->position.y + (command->scale.y * 0.5f * aspect);
    
    float verts[] =
    {

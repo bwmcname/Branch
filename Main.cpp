@@ -1284,8 +1284,8 @@ GLuint LoadImageIntoTexture(Branch_Image_Header *header)
    GLuint result;
    glGenTextures(1, &result);
    glBindTexture(GL_TEXTURE_2D, result);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, header->width, header->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (void *)(header + 1));
    glBindTexture(GL_TEXTURE_2D, 0);
    return result;
@@ -1627,26 +1627,43 @@ void GameLoop(GameState &state)
 
       case GameState::RESET:
       {	 
-	 state.state = GameState::START;
+	 // state.state = GameState::START;
 
-	 ResetPlayer(state.sphereGuy);
-	 state.camera.position.y = state.sphereGuy.renderable.worldPos.y - 10.0f;
-	 state.camera.position.x = 0.0f;
+	 v2 button_scale = V2(GetXtoYRatio(GUIMap::GoSign_box) * 0.16f, 0.16f);
+	 if(ButtonUpdate(V2(0.0f, 0.0f), button_scale, state.input) == Clicked)
+	 {
+	    ResetPlayer(state.sphereGuy);
+	    state.camera.position.y = state.sphereGuy.renderable.worldPos.y - 10.0f;
+	    state.camera.position.x = 0.0f;
 
-	 ResetGraph(state.tracks);
-	 FillGraph(state.tracks);
+	    ResetGraph(state.tracks);
+	    FillGraph(state.tracks);
+
+	    state.state = GameState::LOOP;
+
+	    
+	    // Reset track
+	    state.sphereGuy.trackIndex = 0;
+	    state.sphereGuy.t = 0.0f;
+
+	    GlobalBranchCurve = BranchCurve(0, 0,
+					    -1, 1);
+
+	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
+	 }
 
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 
+	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.renderer.commands.guiTextureMap, state.renderer.commands.XBuffer, ((StackAllocator *)state.mainArena.base));
       }break;
 
       case GameState::START:
       {
 	 // Start menu of the game
-	 
 	 static float position = 0.0f;
 	 position += delta * 0.01f;
 
-	 v2 button_scale = V2(GetXtoYRatio(GUIMap::GoSign_box) * 0.08f, 0.08f);
+	 v2 button_scale = V2(GetXtoYRatio(GUIMap::GoSign_box) * 0.16f, 0.16f);
 
 	 if(ButtonUpdate(V2(0.0f, 0.0f), button_scale, state.input) == Clicked)
 	 {
