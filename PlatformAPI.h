@@ -36,6 +36,8 @@
 #define FileOpen(fileName) (Win32FileOpen(fileName))
 #define ASSET_PATH(filename) ("ProcessedAssets/" ## filename)
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
+#define USABLE_SCREEN_BOTTOM(state) (-1.0f)
+#define PLATFORM_NAVIGATION_GUI_UP(state) (0)
 
 #ifdef DEBUG
 #define B_ASSERT(val) ((val) ? 0 : *((char *)0) = 'x')
@@ -99,6 +101,12 @@ struct Win32InputState
    {
       return flags & escapeHeld;
    }
+
+   inline void reset()
+   {
+      flags = 0;
+      clickCoords = {};
+   }
 };
 
 typedef Win32InputState PlatformInputState;
@@ -115,6 +123,9 @@ static size_t AndroidFileSize(char *filename);
 #define FreeSystemMemory(mem)
 #define FileOpen(fileName) AndroidFileOpen(fileName)
 #define ASSET_PATH(filename) (filename)
+#define USABLE_SCREEN_BOTTOM(state) (AndroidUsableBottom(state.android))
+#define PLATFORM_NAVIGATION_GUI_UP(state) (IsNavigationBarUp(state.android))
+
 // currently opengles3 does not support floating point framebuffers
 #define FRAMEBUFFER_FORMAT GL_RGBA
 
@@ -177,6 +188,12 @@ struct AndroidInputState
    inline u32 EscapeHeld()
    {
       return 0;
+   }
+
+   inline void reset()
+   {
+      flags = 0;
+      touchCoords = {};
    }
 };
 

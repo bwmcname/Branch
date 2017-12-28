@@ -62,10 +62,14 @@ struct AndroidQueue
    inline bool Empty();
 };
 
+struct RebuildState; // from Main.h
+
 struct AndroidState
 {
+   ANativeActivity *activity;
    AndroidQueue events;
    ANativeWindow *window;
+   AConfiguration *configuration;
    EGLDisplay display;
    EGLSurface surface;
    EGLContext context;

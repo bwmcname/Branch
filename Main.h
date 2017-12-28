@@ -270,16 +270,16 @@ struct GameState
    v3 lightPos;
 
    TextProgram bitmapFontProgram;
-   TextProgram fontProgram;
-   GLuint backgroundProgram;
+   TextProgram fontProgram;   
 
-   stbFont bitmapFont;
-   GLuint buttonTex;
+   OpenglState glState;
+
+   bool paused;
 
    enum
    {
-      START,      
-      INITGAME,
+      START,
+      PAUSE,
       RESET,
       LOOP,
    };
@@ -291,6 +291,10 @@ struct GameState
    u64 TrackSortTime;
    u64 TrackGenTime;
    u64 GameLoopTime;
+   #endif
+
+   #ifdef ANDROID_BUILD
+   AndroidState *android;
    #endif
 };
 
@@ -333,8 +337,16 @@ struct RebuildState
    Curve endLerp;
 };
 
+void ReloadState(RebuildState *saved, GameState &result);
+static B_INLINE Curve BranchCurve(i32 x1, i32 y1, i32 x2, i32 y2);
+static B_INLINE Curve BreakCurve();
+static B_INLINE Curve LinearCurve(i32 x1, i32 y1, i32 x2, i32 y2);
+static B_INLINE v2 CubicBezier(v2 p1, v2 p2, v2 p3, v2 p4, float t);
+static B_INLINE v2 CubicBezier(Curve c, float t);
+static B_INLINE v2 Tangent(Curve c, float t);
+void AllocateTrackGraphBuffers(NewTrackGraph &g, StackAllocator *allocator);
 void GameLoop(GameState &state);
 void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize);
 void GameEnd(GameState &state);
 RebuildState *SaveState(GameState *state);
-inline v2 ScreenToClip(v2i input);
+B_INLINE v2 ScreenToClip(v2i input);

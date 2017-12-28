@@ -1,10 +1,4 @@
-memory: 00000061DB540000WIDTH: 480, HEIGHT: 640Framebuffer status 36053Framebuffer status 36053Asset Loaded: 14
-Asset Loaded: 13
-Asset Loaded: 26
-Asset Released: 26
-Asset Released: 13
-Asset Released: 14
-Asset Loaded: 2
+memory: 000000A446780000WIDTH: 480, HEIGHT: 640111456 : 0Asset Loaded: 2
 Asset Loaded: 1
 Asset Released: 1
 Asset Released: 2
@@ -22,7 +16,6 @@ Asset Loaded: 18
 Asset Loaded: 17
 Asset Loaded: 24
 Asset Loaded: 23
-Asset Loaded: 19
 Asset Loaded: 20
 Asset Loaded: 29
 Asset Loaded: 12
@@ -30,4 +23,7 @@ Asset Loaded: 11
 Asset Loaded: 28
 size: 16384
 Asset Loaded: 27
-111456 : 0
+Framebuffer status 36053Framebuffer status 36053Asset Loaded: 14
+Asset Loaded: 13
+Asset Released: 13
+Asset Released: 14

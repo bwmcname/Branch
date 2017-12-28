@@ -1,58 +1,4 @@
 
-// flat normal mesh
-struct Mesh
-{
-   v3i faces;
-   float *vertices;
-   i32 vcount;
-
-   v3 *normals;
-};
-
-struct MeshBuffers
-{
-   GLuint vbo;
-   GLuint nbo;
-   GLuint vao;
-};
-
-struct MeshObject
-{
-   Mesh mesh;
-   MeshBuffers handles;
-};
-
-struct ProgramBase
-{
-   GLuint programHandle;
-   GLuint vertexHandle;
-   GLuint fragmentHandle;
-};
-
-struct TextProgram : ProgramBase
-{
-   GLint transformUniform;
-   GLint texUniform;
-   GLint vertexAttrib;
-   GLint normalAttrib;
-};
-
-struct ShaderProgram : ProgramBase
-{
-   GLint modelUniform;
-   GLint viewUniform;
-   GLint lightPosUniform;
-   GLint MVPUniform;
-   GLint VUniform;
-   GLint MUniform;
-   GLint diffuseUniform;
-   
-   GLint vertexAttrib;
-   GLint normalAttrib;
-
-   GLint texUniform;
-};
-
 enum RenderCommand
 {
    BindProgram,
@@ -182,14 +128,6 @@ Draw Bright break thing
 struct RenderState;
 struct Camera;
 
-struct InstanceBuffers
-{
-   GLuint instanceVao;
-   GLuint instanceMVPBuffer;
-   GLuint instanceColorBuffer;
-   GLuint instanceModelMatrixBuffer;
-};
-
 struct CommandState
 {
    ProgramBase *currentProgram;
@@ -203,14 +141,6 @@ struct CommandState
 
    u32 breakInstanceCount;
    TrackInstance *breakInstances;
-
-   InstanceBuffers instanceBuffers[3];
-
-   GLuint blockTex;
-   GLuint guiTextureMap;
-
-   // @delete TEST!!!!
-   GLuint XBuffer;
 
    CommandBase *first;
    CommandBase *last;
@@ -232,28 +162,12 @@ struct CommandState
    inline void PushRenderBlur(StackAllocator *allocator);
    inline void PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator);
    inline void PushDrawGUI(v2 position, v2 scale, GLuint texture, GLuint uvs, StackAllocator *allocator);
-   void ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer, StackAllocator *allocator);
+   void ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer, StackAllocator *allocator, OpenglState &glState);
    inline void Clean(StackAllocator *allocator);
 };
 
 struct RenderState
 {
-   GLuint fbo;
-   GLuint mainColorTexture;
-   GLuint depthBuffer;
-   GLuint buttonVbo;
-
-   GLuint blockVBO;
-
-   GLuint fullScreenProgram;
-   GLuint outlineProgram;
-
-   GLuint horizontalFbo;
-   GLuint horizontalColorBuffer;
-
-   GLuint verticalFbo;
-   GLuint verticalColorBuffer;
-
    CommandState commands;
 };
 

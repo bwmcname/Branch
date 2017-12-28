@@ -183,6 +183,120 @@ void OnLowMemory(ANativeActivity *activity)
 
 typedef void *(*pthread_func)(void *);
 
+void SetScreenConfiguration(AndroidState *state)
+{
+   JNIEnv* env;
+   state->activity->vm->AttachCurrentThread(&env, 0);
+
+   if(!env)
+   {
+      LOG_WRITE("Could not get java environment");
+      return;
+   }
+
+   jclass activityClass = env->FindClass("android/app/NativeActivity");
+   jmethodID getWindow = env->GetMethodID(activityClass, "getWindow", "()Landroid/view/Window;");
+
+   jclass windowClass = env->FindClass("android/view/Window");
+   jmethodID getDecorView = env->GetMethodID(windowClass, "getDecorView", "()Landroid/view/View;");
+
+   jclass viewClass = env->FindClass("android/view/View");
+   jmethodID setSystemUiVisibility = env->GetMethodID(viewClass, "setSystemUiVisibility", "(I)V");
+
+   jobject window = env->CallObjectMethod(state->activity->clazz, getWindow);
+   jobject decorView = env->CallObjectMethod(window, getDecorView);
+
+   jfieldID fullScreenField = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_FULLSCREEN", "I");
+   jfieldID hideNavigationField = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_HIDE_NAVIGATION", "I");
+   jfieldID immersiveField = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_IMMERSIVE", "I");
+
+   int fullScreenFlag = env->GetStaticIntField(viewClass, fullScreenField);
+   int hideNavigationFlag = env->GetStaticIntField(viewClass, hideNavigationField);
+   int immersiveFlag = env->GetStaticIntField(viewClass, immersiveField);
+
+   env->CallVoidMethod(decorView, setSystemUiVisibility, fullScreenFlag | hideNavigationFlag | immersiveFlag);
+   state->activity->vm->DetachCurrentThread();
+}
+
+// This can only be called after setting the screen configuration....
+int IsNavigationBarUp(AndroidState *state)
+{   
+   JNIEnv* env;
+   state->activity->vm->AttachCurrentThread(&env, 0);
+   
+   if(!env)
+   {
+      LOG_WRITE("Could not get java environment");
+      return 0;
+   }
+
+   state->activity->vm->AttachCurrentThread(&env, 0);
+
+   jclass activityClass = env->FindClass("android/app/NativeActivity");
+   jmethodID getWindow = env->GetMethodID(activityClass, "getWindow", "()Landroid/view/Window;");
+
+   jclass windowClass = env->FindClass("android/view/Window");
+   jmethodID getDecorView = env->GetMethodID(windowClass, "getDecorView", "()Landroid/view/View;");
+
+   jclass viewClass = env->FindClass("android/view/View");
+   jmethodID getSystemUiVisibility = env->GetMethodID(viewClass, "getSystemUiVisibility", "()I");
+
+   jobject window = env->CallObjectMethod(state->activity->clazz, getWindow);
+   jobject decorView = env->CallObjectMethod(window, getDecorView);
+
+   jfieldID hideNavigationField = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_HIDE_NAVIGATION", "I");
+
+   int flags = env->CallIntMethod(decorView, getSystemUiVisibility);
+   int hideNavigationFlag = env->GetStaticIntField(viewClass, hideNavigationField);
+   state->activity->vm->DetachCurrentThread();
+
+   return !(flags & hideNavigationFlag);
+}
+
+float NavigationBarHeight(AndroidState *state)
+{
+   JNIEnv *env;
+   state->activity->vm->AttachCurrentThread(&env, 0);
+
+   jclass contextClass = env->FindClass("android/content/Context");
+   jclass resourcesClass = env->FindClass("android/content/res/Resources");
+   
+   jmethodID getResources = env->GetMethodID(contextClass, "getResources", "()Landroid/content/res/Resources;");
+   jobject resourcesObject = env->CallObjectMethod(state->activity->clazz, getResources);
+
+   jmethodID getIdentifier = env->GetMethodID(resourcesClass, "getIdentifier", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I");
+   
+   jstring identifier = env->NewStringUTF("navigation_bar_height");
+   jstring defType = env->NewStringUTF("dimen");
+   jstring defPackage = env->NewStringUTF("android");
+
+   int heightIdentifier = env->CallIntMethod(resourcesObject, getIdentifier, identifier, defType, defPackage);
+
+   jmethodID getDimensionPixelSize = env->GetMethodID(resourcesClass, "getDimensionPixelSize", "(I)I");
+   float height = (float)env->CallIntMethod(resourcesObject, getDimensionPixelSize, heightIdentifier);
+
+   state->activity->vm->DetachCurrentThread();   
+
+   float screenHeight = (float)ANativeWindow_getHeight(state->window);
+   float ndcSize = (height / screenHeight);
+   return ndcSize;
+}
+
+static inline
+float AndroidUsableBottom(AndroidState *state)
+{
+   if(IsNavigationBarUp(state))
+   {
+      float height = NavigationBarHeight(state);
+
+      return -1.0f + height;
+   }
+   else
+   {
+      return -1.0f;
+   }
+}
+
 void InitOpengl(AndroidState *state)
 {
    __android_log_print(ANDROID_LOG_INFO, "Branch", "Beginning Opengl init.");
@@ -216,7 +330,7 @@ void InitOpengl(AndroidState *state)
    state->context = eglCreateContext(state->display, config, 0, glAttribs);
    success = eglMakeCurrent(state->display, state->surface, state->surface, state->context);   
 
-   eglSwapInterval(state->display, 0);
+   eglSwapInterval(state->display, 1);
 
 #ifdef DEBUG
    if(success == EGL_FALSE)
@@ -226,8 +340,31 @@ void InitOpengl(AndroidState *state)
 #endif   
 }
 
+void DestroyDisplay(AndroidState *state)
+{
+   if(state->display != EGL_NO_DISPLAY)
+   {
+      eglMakeCurrent(state->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+      if(state->context != EGL_NO_CONTEXT)
+      {
+	 eglDestroyContext(state->display, state->context);
+      }
+      if(state->surface != EGL_NO_SURFACE)
+      {
+	 eglDestroySurface(state->display, state->surface);
+      }
+      eglTerminate(state->display);
+   }
+
+   state->display = EGL_NO_DISPLAY;
+   state->context = EGL_NO_CONTEXT;
+   state->surface = EGL_NO_SURFACE;
+
+   LOG_WRITE("DISPLAY DESTROYED");
+}
+
 void AndroidMain(AndroidState *state)
-{   
+{
    bool drawing = false;
    GameState gameState;
    bool queueReady = false;
@@ -236,8 +373,9 @@ void AndroidMain(AndroidState *state)
    bool resumeToggle = true;
 
    bool running = false;
-   bool softInit = false; // initialize after closing the app, if the process wasn't killed.
-
+   bool reloadGL = false;
+   bool resumed = false;
+   
    for(;;)
    {
       clock_gettime(CLOCK_MONOTONIC, &begin);
@@ -249,17 +387,16 @@ void AndroidMain(AndroidState *state)
 	 {
 	    case START:
 	    {
-	       gameState.input = {};	       
-	       delta = 1.0f;
-
-	       if(running == true)
+	       if(state->savedState)
 	       {
-		  // If start was called and the app was already running,
-		  // don't try to reload the state.
-		  
-		  state->savedState = 0;
-		  state->savedStateSize = 0;
-		  softInit = true;
+		  // Have to re-initialize our opengl context.
+		  reloadGL = true;
+
+		  if(!running)
+		  {
+		     // have to do a full reload
+		     ReloadState((RebuildState *)state->savedState, gameState);
+		  }
 	       }
 
 	       running = true;
@@ -267,29 +404,40 @@ void AndroidMain(AndroidState *state)
 
 	    case NATIVEWINDOWCREATED:
 	    {
-	       if(!drawing && !softInit)
+	       LOG_WRITE("nATIVE WINDOW CREATED");
+	       if(!drawing)
 	       {
 		  InitOpengl(state);
 		  glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
-		  LOG_WRITE("BEGIN INIT");
-		  GameInit(gameState, state->savedState, state->savedStateSize);
-	       
+		  gameState.input = {};	       
+		  delta = 1.0f;
+
+		  if(reloadGL)
+		  {
+		     // If the app was not already running, but it has savedState
+		     // we should reload it.
+
+		     LoadGLState(gameState, (StackAllocator *)gameState.mainArena.base, gameState.assetManager);
+		  }
+		  else
+		  {
+		     LOG_WRITE("BEGIN INIT");
+		     GameInit(gameState, state->savedState, state->savedStateSize);
+		     gameState.android = state;
+		  }
+
+		  reloadGL = false;
 		  drawing = true;
 	       }
 	    }break;
 
 	    case RESUME:
 	    {
-	       if(resumeToggle)
-	       {
-		  LOG_WRITE("RESUME");
-		  delta = 1.0f;
-	       }
-	       else
-	       {
-		  resumeToggle = true;
-	       }
+	       delta = 1.0f;
+	       resumed = true;
+	       SetScreenConfiguration(state);
+	       
 	    }break;
 
 	    case SAVESTATE:
@@ -300,22 +448,23 @@ void AndroidMain(AndroidState *state)
 	       state->savedStateSize = sizeof(RebuildState);
 
 	       B_ASSERT(state->savedState);
-
-	       // No totally sure on the right way to deallocate this.
-	       LOG_WRITE("WRITTEN_TO");
 	       sem_post(&state->savingStateSem);
 	    }break;
 
 	    case PAUSE:
 	    {
 	       LOG_WRITE("PAUSE");
+	       resumed = false;
+	       gameState.state = GameState::PAUSE;
 	    }break;
 
 	    case STOP:
 	    {
 	       LOG_WRITE("STOP");
+
 	       drawing = false;
-	       // free(gameState.mainArena.base); 
+	       resumed = false;
+	       DestroyDisplay(state);
 	    }break;
 
 	    case DESTROY:
@@ -325,12 +474,14 @@ void AndroidMain(AndroidState *state)
 
 	    case WINDOWFOCUSCHANGE:
 	    {
-	       LOG_WRITE("WINDOWFOCUSCHANGE");	       
+	       LOG_WRITE("WINDOWFOCUSCHANGE");
 	    }break;
 
 	    case NATIVEWINDOWDESTROYED:
 	    {
-	       LOG_WRITE("NATIVEWINDOWDESTROYED");
+	       LOG_WRITE("DISPLAY DESTROYED");
+	       drawing = false;
+	       DestroyDisplay(state);
 	    }break;
 
 	    case NATIVEWINDOWRESIZED:
@@ -430,12 +581,10 @@ void AndroidMain(AndroidState *state)
 	 }
       }
       
-      if(drawing)
-      {
+      if(drawing && resumed)
+      {	 
 	 GameLoop(gameState);
 	 eglSwapBuffers(state->display, state->surface);
-	 // GLuint attachment = GL_DEPTH_STENCIL_ATTACHMENT;
-	 // glInvalidateFramebuffer(0, 1, &attachment);
       }
 
       clock_gettime(CLOCK_MONOTONIC, &end);
@@ -463,6 +612,7 @@ void *CreateApp(ANativeActivity *activity, void *savedState, size_t savedStateSi
    }
 
    AndroidState *state = (AndroidState *)malloc(sizeof(AndroidState));
+   state->activity = activity;
    state->events = CreateAndroidEventQueue();
    state->savedState = (RebuildState *)savedState;
    state->savedStateSize = savedStateSize;

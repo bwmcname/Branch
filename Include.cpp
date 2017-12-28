@@ -13,6 +13,8 @@
 #ifdef ANDROID_BUILD
 #include <GLES3/gl3.h>
 #include <android/native_activity.h>
+#include <android/window.h>
+#include <android/configuration.h>
 #include <android/asset_manager.h>
 #include <android/input.h>
 #include <unistd.h>
@@ -23,6 +25,7 @@
 #include <EGL/eglext.h>
 #include <time.h>
 #include <semaphore.h>
+#include <jni.h>
 #endif
 
 #pragma warning(pop)
@@ -35,10 +38,12 @@
 
 // Only used for getting character quads out of a font bitmap
 // STB_TRUETYPE is used in the Asset Packing tool (ap)
+
+// @REMOVE IMPLEMENTATION
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "libs/stb_truetype.h"
 
-// REMOVE!!!
+// @REMOVE
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -55,6 +60,7 @@
 #include "BranchMath.h"
 #include "BranchCommon.h"
 #include "PlatformAPI.h"
+#include "BranchOpengl.h"
 #include "PlatformThread.h"
 #include "AssetHeader.h"
 #include "Allocator.h"
@@ -62,10 +68,18 @@
 #include "Renderer.h"
 #include "Assets.h"
 #include "assets/GUIMap.h"
-#include "Main.h"
 
 #ifdef ANDROID_BUILD
 #include "Android/Branch_Android.h"
+#endif
+
+
+#include "Main.h"
+
+//@TEMPORARY!!!
+void LoadGLState(GameState &state, StackAllocator *stack, AssetManager &assetManager);
+
+#ifdef ANDROID_BUILD
 #include "Android/Android.cpp"
 #endif
 
@@ -78,5 +92,6 @@
 #include "assets/vertinc.h"
 #include "Assets.cpp"
 #include "Renderer.cpp"
+#include "BranchOpengl.cpp"
 #include "Gui.cpp"
 #include "Main.cpp"

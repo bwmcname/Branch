@@ -263,10 +263,6 @@ CommandState InitCommandState(StackAllocator *allocator)
    result.breakInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
    result.breakInstanceCount = 0;
 
-   result.instanceBuffers[0] = CreateInstanceBuffers(LinearTrack.handles.vbo, LinearTrack.handles.nbo);
-   result.instanceBuffers[1] = CreateInstanceBuffers(BranchTrack.handles.vbo, BranchTrack.handles.nbo);
-   result.instanceBuffers[2] = CreateInstanceBuffers(BreakTrack.handles.vbo, BreakTrack.handles.nbo);
-
    return result;
 }
 
@@ -691,43 +687,6 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    RenderState result;      
 
    LOG_WRITE("WIDTH: %d, HEIGHT: %d", SCREEN_WIDTH, SCREEN_HEIGHT);
-
-   glGenFramebuffers(1, &result.fbo);
-   glBindFramebuffer(GL_FRAMEBUFFER, result.fbo);
-   GLuint attachments[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-   glDrawBuffers(2, attachments);
-
-   glGenTextures(1, &result.mainColorTexture);
-   glBindTexture(GL_TEXTURE_2D, result.mainColorTexture);
-   glTexImage2D(GL_TEXTURE_2D, 0, FRAMEBUFFER_FORMAT, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.mainColorTexture, 0);
-   glBindTexture(GL_TEXTURE_2D, 0);
-
-   glGenRenderbuffers(1, &result.depthBuffer);
-   glBindRenderbuffer(GL_RENDERBUFFER, result.depthBuffer);
-   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
-   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, result.depthBuffer);
-
-   GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-   LOG_WRITE("Framebuffer status %d", status); 
-
-   status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-   LOG_WRITE("Framebuffer status %d", status);
-
-   result.fullScreenProgram = CreateSimpleProgramFromAssets(assetManager.LoadStacked(AssetHeader::ScreenTexture_vert_ID),
-							    assetManager.LoadStacked(AssetHeader::ScreenTexture_frag_ID));
-
-   assetManager.PopStacked(AssetHeader::ScreenTexture_vert_ID);
-   assetManager.PopStacked(AssetHeader::ScreenTexture_frag_ID);
-
-   glGenBuffers(1, &result.buttonVbo);
-   glBindBuffer(GL_ARRAY_BUFFER, result.buttonVbo);
-   glBufferData(GL_ARRAY_BUFFER, sizeof(v2) * 6, 0, GL_STATIC_DRAW);
-
-   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
    result.commands = InitCommandState(stack);
    
    return result;
@@ -808,7 +767,7 @@ void RenderBackground(GameState &state)
 {   
    glDisable(GL_DEPTH_TEST);
 
-   glUseProgram(state.backgroundProgram);
+   glUseProgram(state.glState.backgroundProgram);
 
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);   
@@ -1300,7 +1259,9 @@ void RenderBBoxes(GameState &state)
 #endif
 
 void
-CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer, StackAllocator *allocator)
+CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font,
+			      TextProgram &p, RenderState &renderer, StackAllocator *allocator,
+			      OpenglState &glState)
 {
    CommandBase *current = first;
    for(u32 i = 0; i < count; ++i)
@@ -1327,14 +1288,14 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
 	 case DrawBreak:
 	 {
-	    RenderBreakTexture((DrawBreakCommand *)current, camera, lightPos, currentProgram, blockTex);
+	    RenderBreakTexture((DrawBreakCommand *)current, camera, lightPos, currentProgram, glState.blockTex);
 	 }break;
 
 	 case DrawLinearInstances:
 	 {
 	    RenderTrackInstances(allocator, lightPos, camera.view,
 				 linearInstanceCount, linearInstances, LinearTrack.mesh.vcount,
-				 instanceBuffers[0]);
+				 glState.instanceBuffers[0]);
 
 	    // reset instance count
 	    linearInstanceCount = 0;
@@ -1344,7 +1305,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 {
 	    RenderTrackInstances(allocator, lightPos, camera.view,
 				 branchInstanceCount, branchInstances, BranchTrack.mesh.vcount,
-				 instanceBuffers[1]);
+				 glState.instanceBuffers[1]);
 
 	    // result instance count
 	    branchInstanceCount = 0;
@@ -1354,7 +1315,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 	 {
 	    RenderTrackInstances(allocator, lightPos, camera.view,
 				 breakInstanceCount, breakInstances, BreakTrack.mesh.vcount,
-				 instanceBuffers[2]);
+				 glState.instanceBuffers[2]);
 
 	    breakInstanceCount = 0;
 	 }break;
@@ -1372,7 +1333,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextPr
 
 	 case DrawGUI:
 	 {
-	    RenderGUI((DrawGUICommand *)current, renderer.buttonVbo, currentProgram->programHandle);
+	    RenderGUI((DrawGUICommand *)current, glState.buttonVbo, currentProgram->programHandle);
 	 }break;
 
 	 case DrawLockedBranch:
@@ -1413,7 +1374,7 @@ CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &v
    glUniform3fv(DefaultInstanced.lightPosUniform, 1, lightPos.e);
    glUniformMatrix4fv(DefaultInstanced.viewUniform, 1, GL_FALSE, view.e);
 
-   //@TEST
+   //@OPTIMIZATION TEST
    m4 scale_orientation = Scale(instances[0].scale) * M4(instances[0].rotation);
 
    for(u32 i = 0; i < instanceCount; ++i)

@@ -90,6 +90,8 @@ void ReloadState(RebuildState *saved, GameState &result)
    result.tracks.switchDelta = saved->switchDelta;
    result.tracks.beginLerp = saved->beginLerp;
    result.tracks.endLerp = saved->endLerp;
+
+   result.renderer.commands.count = 0;
 }
 
 void
@@ -980,14 +982,7 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
    u16 actualID = tracks.GetActualID(player.trackIndex);
    Track *currentTrack = &tracks.elements[actualID];
 
-   static bool paused = false;
-   
-   if(state.input.UnEscaped())
-   {
-      paused = !paused;
-   }
-
-   if(!paused)
+   if(!state.paused)
    {
       player.t += player.velocity * delta;
    
@@ -1081,180 +1076,6 @@ v2 Tangent(Curve c, float t)
    return unit(result);
 }
 
-static
-void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier, StackAllocator *alloc)
-{
-   // 10 segments, 8 tris per segment --- 80 tries   
-   tri *tris = (tri *)meshBuffers.mesh.vertices;
-
-   float t = 0.0f;
-   v2 sample = CubicBezier(bezier, t);
-
-   v2 direction = Tangent(bezier, t);
-   v2 perpindicular = V2(-direction.y, direction.x) * 0.5f;         
-
-   v3 top1 = V3(sample.x, sample.y, 0.5f);
-   v3 right1 = V3(sample.x + perpindicular.x, sample.y, 0.0f);
-   v3 bottom1 = V3(sample.x, sample.y, -0.5f);
-   v3 left1 = V3(sample.x - perpindicular.x, sample.y, 0.0f);   
-   
-   for(i32 i = 0; i < 10; ++i)
-   {
-      t += 0.1f;
-      sample = CubicBezier(bezier, t);
-
-      direction = Tangent(bezier, t);
-      
-      perpindicular = V2(-direction.y, direction.x) * 0.5f;      
-
-      v3 top2 = V3(sample.x, sample.y, 0.5f);
-      v3 right2 = V3(sample.x + perpindicular.x, sample.y + perpindicular.y, 0.0f);
-      v3 bottom2 = V3(sample.x, sample.y, -0.5f);
-      v3 left2 = V3(sample.x - perpindicular.x, sample.y - perpindicular.y, 0.0f);
-      
-      i32 j = i * 8;
-
-      // good
-      // top left side
-      tris[j] = Tri(top1, left1, left2);
-      tris[j+1] = Tri(top1, left2, top2);
-      
-      // top right side
-      tris[j+2] = Tri(top1, top2, right1);
-      tris[j+3] = Tri(top2, right2, right1);
-
-      // bottom right side
-      tris[j+4] = Tri(bottom1, right1, bottom2);
-      tris[j+5] = Tri(bottom2, right1, right2);
-
-      // bottom left side
-      tris[j+6] = Tri(bottom1, left2, left1);
-      tris[j+7] = Tri(bottom1, bottom2, left2);
-
-      top1 = top2;
-      right1 = right2;
-      left1 = left2;
-      bottom1 = bottom2;
-   }
-
-   v3 *flat_normals = (v3 *)alloc->push(80 * 3 * sizeof(v3));
-   v3 *smooth_normals = (v3 *)alloc->push(80 * 3 * sizeof(v3));
-   Normals((float *)tris, flat_normals, 80 * 3); // 3 vertices per tri
-   SmoothNormals((v3 *)tris, flat_normals, smooth_normals, 80 * 3, alloc);   
-   
-   glBindBuffer(GL_ARRAY_BUFFER, meshBuffers.handles.vbo);
-   glBufferSubData(GL_ARRAY_BUFFER, 0, (sizeof(tri) * 80), (void *)tris);
-   glBindBuffer(GL_ARRAY_BUFFER, meshBuffers.handles.nbo);
-   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(tri) * 80, (void *)smooth_normals);
-   glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-   alloc->pop();
-   alloc->pop();
-}
-
-static B_INLINE
-void GenerateTrackSegmentVertices(Track &track, MeshObject meshBuffers, StackAllocator *allocator)
-{
-   GenerateTrackSegmentVertices(meshBuffers, *track.bezier, allocator);
-}
-
-static
-GLuint UploadDistanceTexture(Image &image)
-{
-   GLuint result;
-   glGenTextures(1, &result);
-   glBindTexture(GL_TEXTURE_2D, result);
-
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.x, image.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
-   glBindTexture(GL_TEXTURE_2D, 0);
-   return result;
-}
-
-static
-GLuint UploadTexture(Image &image, i32 channels = 4)
-{
-   GLuint result;
-   glGenTextures(1, &result);
-   glBindTexture(GL_TEXTURE_2D, result);
-
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-   GLuint type;
-   switch(channels)
-   {
-      case 1:
-      {
-	 type = GL_RED;
-      }break;
-      case 4:
-      {
-	 type = GL_RGBA;
-      }break;
-      default:
-      {
-	 B_ASSERT(!"unsupported channel format");
-	 type = 0; // shut the compiler up
-      }
-   }
-
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.x, image.y, 0, type, GL_UNSIGNED_BYTE, image.data);
-   glBindTexture(GL_TEXTURE_2D, 0);
-   return result;
-}
-
-static
-void InitTextBuffers()
-{
-   glGenVertexArrays(1, &textVao);
-   glBindVertexArray(textVao);
-   glGenBuffers(1, &textUVVbo);
-   glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
-   glEnableVertexAttribArray(UV_LOCATION);
-   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * 12), 0, GL_STATIC_DRAW);
-
-   glGenBuffers(1, &textVbo);
-   glBindBuffer(GL_ARRAY_BUFFER, textVbo);
-   glEnableVertexAttribArray(VERTEX_LOCATION);
-   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-   glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * 12), 0, GL_STATIC_DRAW);
-   glBindVertexArray(0);
-}
-
-static
-stbFont InitFont_stb(Asset font, StackAllocator *allocator)
-{
-   stbFont result;
-
-   PackedFont *cast = (PackedFont *)font.mem;
-   result.chars = (stbtt_packedchar *)(font.mem + sizeof(PackedFont));
-   result.width = cast->width;
-   result.height = cast->height;
-
-   glGenTextures(1, &result.textureHandle);
-   glBindTexture(GL_TEXTURE_2D, result.textureHandle);
-
-   GLint value;
-   glGetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
-   LOG_WRITE("size: %d\n", value);
-
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);   
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, cast->width, cast->height, 0, GL_ALPHA, GL_UNSIGNED_BYTE,
-		font.mem + cast->imageOffset);
-   glBindTexture(GL_TEXTURE_2D, 0);
-
-   return result;
-}
-
 B_INLINE
 Player InitPlayer()
 {
@@ -1277,18 +1098,6 @@ static B_INLINE
 Branch_Image_Header *LoadImageFromAsset(Asset &asset)
 {
    return (Branch_Image_Header *)asset.mem;
-}
-
-GLuint LoadImageIntoTexture(Branch_Image_Header *header)
-{
-   GLuint result;
-   glGenTextures(1, &result);
-   glBindTexture(GL_TEXTURE_2D, result);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, header->width, header->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (void *)(header + 1));
-   glBindTexture(GL_TEXTURE_2D, 0);
-   return result;
 }
 
 void SetTrackMeshesForRebuild(Track *tracks, u32 count)
@@ -1322,146 +1131,34 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    
    state.assetManager.Init(stack);   
 
-   LinearTrack = AllocateMeshObject(80 * 3, stack);
-   BranchTrack = AllocateMeshObject(80 * 3, stack);
-   BreakTrack = AllocateMeshObject(80 * 3, stack);
-   LeftBranchTrack = AllocateMeshObject(80 * 3, stack);
-   RightBranchTrack = AllocateMeshObject(80 * 3, stack);   
-
    state.renderer = InitRenderState(stack, state.assetManager);
    Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
    InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
 
    B_ASSERT(state.mainArena.base);
-
-   srand((u32)bclock());
-
-   glEnable(GL_BLEND);
-   glEnable(GL_DEPTH_TEST);
-
-   glFrontFace(GL_CCW);
-   glCullFace(GL_BACK);
-
-
-   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);   
-
-   Asset &defaultVert = state.assetManager.LoadStacked(AssetHeader::default_vert_ID);
-   Asset &defaultFrag = state.assetManager.LoadStacked(AssetHeader::default_frag_ID);
-   DefaultShader = CreateProgramFromAssets(defaultVert, defaultFrag);
-
-   state.assetManager.PopStacked(AssetHeader::default_frag_ID);
-   state.assetManager.PopStacked(AssetHeader::default_vert_ID);
-
-   Asset &defaultInstancedVirt = state.assetManager.LoadStacked(AssetHeader::Default_Instance_vert_ID);
-   Asset &defaultInstancedFrag = state.assetManager.LoadStacked(AssetHeader::Default_Instance_frag_ID);
-   DefaultInstanced = CreateProgramFromAssets(defaultInstancedVirt, defaultInstancedFrag);
-
-   state.assetManager.PopStacked(AssetHeader::Default_Instance_frag_ID);
-   state.assetManager.PopStacked(AssetHeader::Default_Instance_vert_ID);
-   
-   state.fontProgram = CreateTextProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::text_vert_ID),
-						   state.assetManager.LoadStacked(AssetHeader::text_frag_ID));      
-
-   state.bitmapFontProgram = CreateTextProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::bitmap_font_vert_ID),
-							 state.assetManager.LoadStacked(AssetHeader::bitmap_font_frag_ID));   
-
-   BreakBlockProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::BreakerBlock_vert_ID),
-					       state.assetManager.LoadStacked(AssetHeader::BreakerBlock_frag_ID));   
-   
-   ButtonProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Button_vert_ID),
-					   state.assetManager.LoadStacked(AssetHeader::Button_frag_ID));
-
-   SuperBrightProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Emissive_vert_ID),
-						state.assetManager.LoadStacked(AssetHeader::Emissive_frag_ID));
-
-   Branch_Image_Header *buttonHeader = LoadImageFromAsset(state.assetManager.LoadStacked(AssetHeader::button_ID));
-   state.buttonTex = LoadImageIntoTexture(buttonHeader);
-   stack->pop();
-
-   Branch_Image_Header *breakHeader = LoadImageFromAsset(state.assetManager.LoadStacked(AssetHeader::Block_ID));
-   state.renderer.commands.blockTex = LoadImageIntoTexture(breakHeader);
-   stack->pop();
-
-   Branch_Image_Header *guiTextureMap = LoadImageFromAsset(state.assetManager.LoadStacked(AssetHeader::GUIMap_ID));
-   state.renderer.commands.guiTextureMap = LoadImageIntoTexture(guiTextureMap);
-   stack->pop();
-
-   state.renderer.commands.XBuffer = UploadVertices((float *)GUIMap::GoSign_box_uvs, 6, 2);
-
-   state.backgroundProgram = CreateSimpleProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Background_vert_ID),
-							   state.assetManager.LoadStacked(AssetHeader::Background_frag_ID));
-
-   stack->pop();
-   stack->pop();   
-
-   state.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::wow_ID), stack);      
+   srand((u32)bclock());   
 
    state.keyState = up;
-   Sphere = InitMeshObject(state.assetManager.LoadStacked(AssetHeader::sphere_ID).mem, stack);   
-
+   
+   // Generate Track Beziers
    GlobalLinearCurve = LinearCurve(0, 0, 0, 1);
-
-   #if 0
-   if(!rebuild)
-   {
-      GlobalBranchCurve = LEFT_CURVE;
-      state.state = GameState::START;
-   }
-   else
-   {
-      if(rebuild->trackGraphFlags & NewTrackGraph::left)
-      {
-	 GlobalBranchCurve = LEFT_CURVE;
-      }
-      else
-      {
-	 GlobalBranchCurve = RIGHT_CURVE;
-      }
-
-      state.state = GameState::LOOP;
-   }
-   #else
-   GlobalBranchCurve = LEFT_CURVE;
-   state.state = GameState::START;
-   #endif
-      
    GlobalBreakCurve = BreakCurve();
    GlobalLeftCurve = LEFT_CURVE;
-   GlobalRightCurve = RIGHT_CURVE;   
-
-   GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, stack);
-   GenerateTrackSegmentVertices(LinearTrack, GlobalLinearCurve, stack);
-   GenerateTrackSegmentVertices(BreakTrack, GlobalBreakCurve, stack);
-   GenerateTrackSegmentVertices(LeftBranchTrack, LEFT_CURVE, stack);
-   GenerateTrackSegmentVertices(RightBranchTrack, RIGHT_CURVE, stack);   
-
-   RectangleUVBuffer = UploadVertices(RectangleUVs, 6, 2);
-   RectangleVertBuffer = UploadVertices(RectangleVerts, 6, 2);
-   ScreenVertBuffer = UploadVertices(ScreenVerts, 6, 2);   
-
-   InitTextBuffers();
+   GlobalRightCurve = RIGHT_CURVE;
+   GlobalBranchCurve = LEFT_CURVE;
+   state.state = GameState::START;
 
    LOG_WRITE("%zu : %zu", sizeof(RebuildState), rebuildSize);
 
-   if(!rebuild)
-   {
-      state.tracks = InitNewTrackGraph(stack);
-      InitCamera(state.camera);
-      state.sphereGuy = InitPlayer();
-      FillGraph(state.tracks);
-   }
-   else
-   {
-      LOG_WRITE("START REBUILD");
-      AllocateTrackGraphBuffers(state.tracks, stack);
-      
-      ReloadState(rebuild, state);
-      state.sphereGuy.mesh = Sphere;
+   AllocateTrackGraphBuffers(state.tracks, stack);
+   state.tracks = InitNewTrackGraph(stack);
+   InitCamera(state.camera);
+   state.sphereGuy = InitPlayer();
+   FillGraph(state.tracks);
 
-      SetTrackMeshesForRebuild(state.tracks.elements, 1024);
+   LoadGLState(state, stack, state.assetManager);
 
-      LOG_WRITE("fINISHED REBUILD");
-   }
+   state.paused = false;
 }
 
 template <typename int_type> static B_INLINE
@@ -1508,7 +1205,7 @@ v2 ScreenToClip(v2i screen)
    return result;
 }
 
-void ProcessInput(GameState &state)
+void TracksProcessInput(GameState &state)
 {
    if(state.input.Touched())
    {
@@ -1582,29 +1279,40 @@ float GetXtoYRatio(MapItem item)
 void GameLoop(GameState &state)
 {
    BeginFrame(state);
-   ProcessInput(state);
 
    switch(state.state)
    { 
       case GameState::LOOP:
-      {	 
-	 if(state.tracks.flags & NewTrackGraph::switching)
+      {
+	 v2 button_pos = V2(0.9f, 0.1f + USABLE_SCREEN_BOTTOM(state));
+	 v2 button_scale = V2(GetXtoYRatio(GUIMap::pause_box) * 0.16f, 0.16f);	 
+
+	 if(ButtonUpdate(button_pos, button_scale, state.input) == Clicked)
 	 {
-	    state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
+	    state.state = GameState::PAUSE;
+	 }
+	 else
+	 {
+	    TracksProcessInput(state);
 
-	    GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, state.tracks.switchDelta);
-	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
-
-	    if(state.tracks.switchDelta == 1.0f)
+	    if(state.tracks.flags & NewTrackGraph::switching)
 	    {
-	       state.tracks.flags &= ~NewTrackGraph::switching;
-	    }
-	 }	 
+	       state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
 
-	 NewUpdateTrackGraph(state.tracks, *((StackAllocator *)state.mainArena.base), state.sphereGuy, state.camera);
-	 UpdatePlayer(state.sphereGuy, state.tracks, state);
-	 UpdateCamera(state.camera, state.sphereGuy, state.tracks);
+	       GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, state.tracks.switchDelta);
+	       GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
 
+	       if(state.tracks.switchDelta == 1.0f)
+	       {
+		  state.tracks.flags &= ~NewTrackGraph::switching;
+	       }
+	    }	 
+
+	    NewUpdateTrackGraph(state.tracks, *((StackAllocator *)state.mainArena.base), state.sphereGuy, state.camera);
+	    UpdatePlayer(state.sphereGuy, state.tracks, state);
+	    UpdateCamera(state.camera, state.sphereGuy, state.tracks);
+	 }
+	 
 	 // @TODO This should be inserted into the render queue instead of being drawn immediately.
 	 glUseProgram(DefaultShader.programHandle); 
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
@@ -1630,7 +1338,25 @@ void GameLoop(GameState &state)
 	 memcpy(print_string, "Distance: ", 10);
 	 print_string_count = IntToString((char *)print_string + 10, (u32)state.sphereGuy.renderable.worldPos.y / 10);
 	 state.renderer.commands.PushRenderText(print_string, print_string_count + 10, V2(-0.8f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
-	 
+
+	 state.renderer.commands.PushDrawGUI(button_pos, button_scale, state.glState.guiTextureMap, state.glState.pauseButtonVbo, ((StackAllocator *)state.mainArena.base));
+
+      }break;
+
+      case GameState::PAUSE:
+      {
+	 glUseProgram(DefaultShader.programHandle); 
+	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
+
+	 v2 button_pos = V2(0.0f, 0.0f);
+	 v2 button_scale = V2(GetXtoYRatio(GUIMap::play_box) * 0.16f, 0.16f);
+	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.glState.guiTextureMap, state.glState.playButtonVbo, ((StackAllocator *)state.mainArena.base));
+
+	 if(ButtonUpdate(button_pos, button_scale, state.input) == Clicked)
+	 {
+	    state.state = GameState::LOOP;
+	 }
       }break;
 
       case GameState::RESET:
@@ -1648,7 +1374,6 @@ void GameLoop(GameState &state)
 	    FillGraph(state.tracks);
 
 	    state.state = GameState::LOOP;
-
 	    
 	    // Reset track
 	    state.sphereGuy.trackIndex = 0;
@@ -1662,7 +1387,7 @@ void GameLoop(GameState &state)
 
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
 	 
-	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.renderer.commands.guiTextureMap, state.renderer.commands.XBuffer, ((StackAllocator *)state.mainArena.base));
+	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.glState.guiTextureMap, state.glState.startButtonVbo, ((StackAllocator *)state.mainArena.base));
       }break;
 
       case GameState::START:
@@ -1687,7 +1412,7 @@ void GameLoop(GameState &state)
 
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
 	 
-	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.renderer.commands.guiTextureMap, state.renderer.commands.XBuffer, ((StackAllocator *)state.mainArena.base));
+	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.glState.guiTextureMap, state.glState.startButtonVbo, ((StackAllocator *)state.mainArena.base));
       }break;
       
       default:
@@ -1707,9 +1432,9 @@ void GameLoop(GameState &state)
 
    glUseProgram(SuperBrightProgram.programHandle); 
    RenderObject(lightRenderable, state.sphereGuy.mesh, &SuperBrightProgram, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
-   glUseProgram(0);
+   glUseProgram(0);   
 
-   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.bitmapFont, state.bitmapFontProgram, state.renderer, ((StackAllocator *)state.mainArena.base));
+   state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.glState.bitmapFont, state.bitmapFontProgram, state.renderer, (StackAllocator *)state.mainArena.base, state.glState);
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
 }
    
@@ -1819,6 +1544,7 @@ NewTrackGraph::VerifyGraph()
       }
    }
 }
-// shut the compiler up about sprintf
 #endif
+
+// shut the compiler up about sprintf
 #pragma warning(push, 0)

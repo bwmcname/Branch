@@ -22,6 +22,7 @@ ButtonUpdateResult ButtonUpdate(v2 position, v2 scale, PlatformInputState state)
    {
       if(TestPoint(position, scale, ScreenToClip(state.TouchPoint())))
       {
+	 state.reset();
 	 return Clicked;
       }
       else
