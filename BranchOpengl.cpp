@@ -82,6 +82,8 @@ void InitTextBuffers()
    glBindVertexArray(0);
 }
 
+#define TRACK_RADIUS (0.2f)
+
 static
 void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier, StackAllocator *alloc)
 {
@@ -92,11 +94,11 @@ void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier, StackAl
    v2 sample = CubicBezier(bezier, t);
 
    v2 direction = Tangent(bezier, t);
-   v2 perpindicular = V2(-direction.y, direction.x) * 0.5f;         
+   v2 perpindicular = V2(-direction.y, direction.x) * TRACK_RADIUS;         
 
-   v3 top1 = V3(sample.x, sample.y, 0.5f);
+   v3 top1 = V3(sample.x, sample.y, TRACK_RADIUS);
    v3 right1 = V3(sample.x + perpindicular.x, sample.y, 0.0f);
-   v3 bottom1 = V3(sample.x, sample.y, -0.5f);
+   v3 bottom1 = V3(sample.x, sample.y, -TRACK_RADIUS);
    v3 left1 = V3(sample.x - perpindicular.x, sample.y, 0.0f);   
    
    for(i32 i = 0; i < 10; ++i)
@@ -106,11 +108,11 @@ void GenerateTrackSegmentVertices(MeshObject &meshBuffers, Curve bezier, StackAl
 
       direction = Tangent(bezier, t);
       
-      perpindicular = V2(-direction.y, direction.x) * 0.5f;      
+      perpindicular = V2(-direction.y, direction.x) * TRACK_RADIUS;      
 
-      v3 top2 = V3(sample.x, sample.y, 0.5f);
+      v3 top2 = V3(sample.x, sample.y, TRACK_RADIUS);
       v3 right2 = V3(sample.x + perpindicular.x, sample.y + perpindicular.y, 0.0f);
-      v3 bottom2 = V3(sample.x, sample.y, -0.5f);
+      v3 bottom2 = V3(sample.x, sample.y, -TRACK_RADIUS);
       v3 left2 = V3(sample.x - perpindicular.x, sample.y - perpindicular.y, 0.0f);
       
       i32 j = i * 8;

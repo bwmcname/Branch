@@ -1,4 +1,4 @@
-memory: 000000A446780000WIDTH: 480, HEIGHT: 640111456 : 0Asset Loaded: 2
+memory: 0000005C48BE0000WIDTH: 480, HEIGHT: 640111456 : 0Asset Loaded: 2
 Asset Loaded: 1
 Asset Released: 1
 Asset Released: 2

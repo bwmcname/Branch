@@ -4,7 +4,7 @@
 #ifdef DEBUG
 #ifdef WIN32_BUILD
 static FILE *logFile;
-#define LOG_WRITE(...) fprintf(logFile, __VA_ARGS__)
+#define LOG_WRITE(...) fprintf(logFile, __VA_ARGS__); fflush(logFile)
 #define INIT_LOG() InitLog();
 
 void InitLog()

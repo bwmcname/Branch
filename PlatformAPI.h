@@ -72,6 +72,18 @@ struct Win32InputState
    u32 flags;
    v2i clickCoords;
 
+   #ifdef DEBUG
+   inline void SetReleased()
+   {
+      flags |= clickUp;
+   }
+
+   inline void SetTouched()
+   {
+      flags |= clickDown;
+   }
+   #endif
+
    inline u32 Touched()
    {
       return flags & clickDown;
@@ -160,6 +172,8 @@ struct AndroidInputState
    u32 flags;
    v2i touchCoords;
 
+
+
    inline u32 Touched()
    {
       return flags & touched;
@@ -195,6 +209,18 @@ struct AndroidInputState
       flags = 0;
       touchCoords = {};
    }
+
+#ifdef DEBUG
+   inline void SetReleased()
+   {
+      flags |= released;
+   }
+
+   inline void SetTouched()
+   {
+      flags |= touched;
+   }
+#endif
 };
 
 typedef AndroidInputState PlatformInputState;

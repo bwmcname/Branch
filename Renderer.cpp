@@ -842,9 +842,7 @@ void RenderSpeedup(DrawSpeedupCommand *command, Camera &camera, v3 lightPos, Pro
 static B_INLINE
 void RenderBreakTexture(DrawBreakCommand *command, Camera &camera, v3 lightPos, ProgramBase *currentProgram, GLuint texture)
 {
-   // @old!
-   // RenderObject(command->obj, BreakTrack, (ShaderProgram *)currentProgram, camera.view, lightPos, NORMAL_COLOR);
-
+   glDisable(GL_DEPTH_TEST);
    m4 translation = Translate(V3(command->obj.worldPos.x, command->obj.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, command->obj.worldPos.z));
    m4 orientation = M4(Rotation(V3(-1.0f, 0.0f, 0.0f), 1.5708f));
    m4 scale = Scale(V3(5.0f, 5.0f, 5.0f));
@@ -869,6 +867,7 @@ void RenderBreakTexture(DrawBreakCommand *command, Camera &camera, v3 lightPos, 
    glBindBuffer(GL_ARRAY_BUFFER, 0);
 
    glUseProgram(currentProgram->programHandle);
+   glEnable(GL_DEPTH_TEST);
 }
 
 static

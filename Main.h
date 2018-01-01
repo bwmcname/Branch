@@ -1,4 +1,4 @@
-#define TRACK_SEGMENT_SIZE 12.0f
+#define TRACK_SEGMENT_SIZE 10.0f
 
 #define SCREEN_TOP ((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
 #define SCREEN_BOTTOM -((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)

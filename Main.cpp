@@ -35,10 +35,10 @@ RebuildState *SaveState(GameState *state)
    saving->ordersSize = state->tracks.orders.size;
    memcpy(saving->orders, state->tracks.orders.elements, sizeof(NewTrackOrder) * 1024);
 
-   saving->newBranchesBegin = state->tracks.newBranches.begin;
-   saving->newBranchesEnd = state->tracks.newBranches.end;
-   saving->newBranchesSize = state->tracks.newBranches.size;
-   memcpy(saving->newBranches, state->tracks.newBranches.elements, sizeof(u16) * 256);
+   // saving->newBranchesBegin = state->tracks.newBranches.begin;
+   // saving->newBranchesEnd = state->tracks.newBranches.end;
+   // saving->newBranchesSize = state->tracks.newBranches.size;
+   // memcpy(saving->newBranches, state->tracks.newBranches.elements, sizeof(u16) * 256);
 
    memcpy(saving->takenElements, state->tracks.taken.e, sizeof(Element) * 1024);
    saving->takenSize = state->tracks.taken.size;
@@ -75,11 +75,11 @@ void ReloadState(RebuildState *saved, GameState &result)
    result.tracks.orders.max = 1024;
    memcpy(result.tracks.orders.elements, saved->orders, sizeof(NewTrackOrder) * 1024);
 
-   result.tracks.newBranches.begin = saved->newBranchesBegin;
-   result.tracks.newBranches.end = saved->newBranchesEnd;
-   result.tracks.newBranches.size = saved->newBranchesSize;
-   result.tracks.newBranches.max = 256;
-   memcpy(result.tracks.newBranches.elements, saved->newBranches, sizeof(u16) * 256);
+   // result.tracks.newBranches.begin = saved->newBranchesBegin;
+   // result.tracks.newBranches.end = saved->newBranchesEnd;
+   // result.tracks.newBranches.size = saved->newBranchesSize;
+   // result.tracks.newBranches.max = 256;
+   // memcpy(result.tracks.newBranches.elements, saved->newBranches, sizeof(u16) * 256);
 
    memcpy(result.tracks.taken.e, saved->takenElements, sizeof(Element) * 1024);
    result.tracks.taken.size = saved->takenSize;
@@ -488,33 +488,41 @@ CircularQueue<T> InitCircularQueue(u32 size, StackAllocator *allocator)
 void StartTracks(NewTrackGraph &g)
 {
    g.IDtable[0] = 0;
-   g.elements[0] = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve);
-   g.elements[0].flags = Track::left;
 
-   g.orders.Push({0, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, 1});
+   // g.orders.Push({0, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, 1});
+   g.taken.put({0, 0}, LocationInfo::track, 0);
+   g.elements[0] = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve);
+   // g.elements[0].flags = Track::left;
+   g.adjList[0].flags = Attribute::linear;
+   g.adjList[0].edgeCount = 0;
+   g.adjList[0].ancestorCount = 0;
+
    g.IDtable[0] = 0;
    g.reverseIDtable[0] = 0;
 
+   g.flags |= NewTrackGraph::left;
+
    // make sure the tracks start out straight
+   /*
    for(u16 i = 1; i < 50; ++i)
    {
-      g.orders.Push({i, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, 1 + i});
+      g.orders.Push({i - 1u, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, i});
       g.IDtable[i] = i;
       g.reverseIDtable[i] = i;
    }   
-
-   g.flags = NewTrackGraph::left;
-
-   g.switchDelta = 0.0f;
-   g.beginLerp = {};
-   g.endLerp = {};
-
-   for(u16 i = 50; i < g.capacity; ++i)
+   */
+   for(u16 i = 1; i < g.capacity; ++i)
    {
       g.availableIDs.Push(i);
       g.IDtable[i] = i;
       g.reverseIDtable[i] = i;
    }
+
+   g.orders.Push({0, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, 1});
+
+   g.switchDelta = 0.0f;
+   g.beginLerp = {};
+   g.endLerp = {};
 }
 
 void AllocateTrackGraphBuffers(NewTrackGraph &g, StackAllocator *allocator)
@@ -522,7 +530,7 @@ void AllocateTrackGraphBuffers(NewTrackGraph &g, StackAllocator *allocator)
    g.adjList = (Attribute *)allocator->push(sizeof(Attribute) * 1024);
    g.availableIDs = InitCircularQueue<u16>(1024, allocator); //@ could be smaller?
    g.orders = InitCircularQueue<NewTrackOrder>(1024, allocator); //@ could be smaller
-   g.newBranches = InitCircularQueue<u16>(256, allocator);
+   // g.newBranches = InitCircularQueue<u16>(256, allocator);
    g.taken = InitVirtualCoordHashTable(1024, allocator);
    g.IDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
    g.reverseIDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
@@ -553,7 +561,7 @@ void ResetGraph(NewTrackGraph &g)
    }
 
    g.availableIDs.ClearToZero();
-   g.newBranches.ClearToZero();
+   // g.newBranches.ClearToZero();
    g.orders.ClearToZero();
    g.taken.ClearToZero();
 
@@ -591,6 +599,35 @@ i32 OtherSideOfBranchHasBreak(NewTrackGraph &graph, u16 ancestor, u16 thisSide)
 // Generate Tracks
 void FillGraph(NewTrackGraph &graph)
 {
+   // In the track orders, find if there are multiple orders for the same coordinate.
+   // This helps us get rid of the problem where a linear track can lead up
+   // to a break.
+   i32 sizeOuter = graph.orders.size;
+   for(i32 i = 0; i < sizeOuter; ++i)
+   {
+      NewTrackOrder order = graph.orders.Pop();
+      i32 sizeInner = graph.orders.size;
+      for(i32 j = 0; j < sizeInner; ++j)
+      {
+	 NewTrackOrder toCompare = graph.orders.Pop();
+
+	 if(toCompare.x == order.x && toCompare.y == order.y)
+	 {
+	    // make sure orders share the same flags
+	    order.flags |= (toCompare.flags & (NewTrackOrder::dontBranch | NewTrackOrder::dontBreak));
+	    toCompare.flags |= (order.flags & (NewTrackOrder::dontBranch | NewTrackOrder::dontBreak));
+
+	    // We don't want to remove orders from the same location,
+	    // so the FillGraph() can still assign ancestors and edges
+	    // appropriately.
+	 }
+
+	 graph.orders.Push(toCompare);
+      }
+
+      graph.orders.Push(order);
+   }
+
    while(graph.availableIDs.size > 0 &&
 	 graph.orders.size > 0)
    {
@@ -613,12 +650,13 @@ void FillGraph(NewTrackGraph &graph)
 	 v2 position = VirtualToReal(item.x, item.y);
 	 long roll = rand();	 
 
-	 if(roll % 2 == 0 &&
+	 if(!(roll & 0x1) &&
 	    !(item.flags & NewTrackOrder::dontBreak) &&
 	    !graph.taken.get({item.x, item.y-1}).hasTrack() &&
 	    !OtherSideOfBranchHasBreak(graph, item.ancestorID, item.flags) &&
 	    graph.adjList[graph.GetActualID(edgeID)].ancestorCount == 0)
 	 {
+	    // Create break tracks
 	    u16 breakActual = graph.GetActualID(edgeID);
 	    graph.elements[breakActual] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
 						      &GlobalBreakCurve);
@@ -635,6 +673,7 @@ void FillGraph(NewTrackGraph &graph)
 		 !graph.taken.get({item.x+1, item.y+2}).hasBranch() &&
 		 !graph.taken.get({item.x-1, item.y+2}).hasBranch())
 	 {
+	    // Create branching track
 	    u16 branchActual = graph.GetActualID(edgeID);
 	    graph.elements[branchActual] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
 								&GlobalBranchCurve);
@@ -646,35 +685,25 @@ void FillGraph(NewTrackGraph &graph)
 	    graph.orders.Push({edgeID, NewTrackOrder::right | NewTrackOrder::dontBranch, item.x + 1, item.y + 1});
 
 	    graph.taken.put({item.x, item.y}, LocationInfo::track | LocationInfo::branch, edgeID);
-	    graph.newBranches.Push(edgeID);
+	    // graph.newBranches.Push(edgeID);
 	 }
- 	 else // push linear track (and speedups)
+ 	 else
 	 {
+	    // Create Linear Tracks
 	    graph.elements[graph.GetActualID(edgeID)] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
 								    &GlobalLinearCurve);
-
-	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});	    
-	    LocationInfo &inFront = graph.taken.get({item.x, item.y+1});
+	    	    
 	    
-	    // Sometimes linear tracks can lead up to a break
-	    if(inFront.hasBreak())
-	    {
-	       u16 index = inFront.ID;
-	       u16 takenActual = graph.GetActualID(index);
-	       inFront.flags = LocationInfo::breaks | LocationInfo::track;
-
-	       graph.adjList[takenActual].flags = Attribute::linear | Attribute::reachable;
-	    }
-
+	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});
 	    LocationInfo &behind = graph.taken.get({item.x, item.y});
 	    if(behind.hasSpeedup())
 	    {
-	       graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
+	       graph.taken.put({item.x, item.y}, LocationInfo::speedup, edgeID);
 	       flags |= Attribute::speedup;	       
 	    }
 	    else
 	    {
-	       graph.taken.put({item.x, item.y}, LocationInfo::speedup | LocationInfo::track, edgeID);
+	       graph.taken.put({item.x, item.y}, LocationInfo::track, edgeID);
 	       flags |= Attribute::linear;
 	    }
 	 }	 
@@ -701,12 +730,14 @@ void FillGraph(NewTrackGraph &graph)
       graph.adjList[actualEdge].addAncestor(ancestorID);
       graph.adjList[actualEdge].flags |= flags;
       graph.adjList[actualEdge].flags &= ~Attribute::unused;
+      graph.adjList[actualEdge].id = edgeID;
       DEBUG_DO(graph.VerifyGraph());
       DEBUG_DO(graph.VerifyIDTables());
    }
 
    // check all new branches, if any of them have linear tracks on both sides, make one side speedups.
-   // only do 1/2, so that tracks can form around the latest pushed branches
+   // only do 1/2, so that tracks can form around the latest created branches
+   /*
    i32 length = graph.newBranches.size >> 1;
    for(i32 i = 0; i < length; ++i)
    {
@@ -751,6 +782,7 @@ void FillGraph(NewTrackGraph &graph)
 	 graph.newBranches.Push(virt);
       }      
    }
+   
 
    // Fill out speedup tracks
    // @SLOW
@@ -771,6 +803,7 @@ void FillGraph(NewTrackGraph &graph)
 	 }
       }
    }
+   */
 }
 
 void NewSetReachable(NewTrackGraph &graph, StackAllocator &allocator, u16 start)
@@ -828,8 +861,8 @@ void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator, v3 cameraPos
 	    {
 	       graph.availableIDs.Push(virt);
 	    }
-	    graph.adjList[i] = {};
 	    graph.elements[i] = {};
+	    graph.adjList[i] = {};
 	    graph.adjList[i].flags = Attribute::unused;
 	 }
 	 else
@@ -898,34 +931,45 @@ void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator, v3 cameraPos
       }
    }
 
+   // sort tracks by distance
    for(u16 i = 1; i < graph.capacity; ++i)
    {
-      Track track = graph.elements[i];
-      Attribute attribute = graph.adjList[i];
+      Track track1 = graph.elements[i];
+      Attribute attribute1 = graph.adjList[i];      
       u16 virt = graph.GetVirtualID(i);
+      float distance1 = track1.renderable.worldPos.y - cameraPos.y;
 
-      u16 j = i - 1;
-      float distance;
-      if(attribute.flags & Attribute::unused)
+      i16 j = i - 1;
+
+      if(!(attribute1.flags & Attribute::unused))
       {
-	 distance = INFINITY;
-      }
-      else
-      {
-	 distance = track.renderable.worldPos.y - cameraPos.y;
+	 Track track2 = graph.elements[j];
+	 Attribute attribute2 = graph.adjList[j];
+	 float distance2 = track2.renderable.worldPos.y - cameraPos.y;
+	 while(!(attribute2.flags & Attribute::unused) && distance2 > distance1)
+	 {
+	    graph.Move(j, j+1);
+	    --j;
+
+	    if(j >= 0)
+	    {
+	       track2 = graph.elements[j];
+	       attribute2 = graph.adjList[j];
+	       distance2 = track2.renderable.worldPos.y - cameraPos.y;
+	    }
+	    else
+	    {
+	       break;
+	    }
+	 }
+	 
       }
 
-      while(j >= 0 && (graph.elements[j].renderable.worldPos.y - cameraPos.y) > distance)
-      {
-	 graph.Move(j, j+1);
-	 --j;
-      }
-
-      graph.elements[j+1] = track;
-      graph.adjList[j+1] = attribute;      
+      graph.elements[j+1] = track1;
+      graph.adjList[j+1] = attribute1;      
       graph.SetID(virt, j+1);
    }
-
+   
    allocator.pop();
    allocator.pop();
 }
@@ -972,7 +1016,7 @@ void ResetPlayer(Player &player)
 {
    player.trackIndex = 0;
    player.t = 0.0f;
-   player.velocity = 0.15f;
+   player.velocity = 0.25f;
    player.forceDirection = 0;
 }
 
@@ -985,12 +1029,6 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
    if(!state.paused)
    {
       player.t += player.velocity * delta;
-   
-      // don't drag if on speedup
-      if(!(tracks.adjList[actualID].flags & Attribute::speedup))
-      {
-	 player.velocity = max(player.velocity - (0.00005f * delta), 0.15f); // drag
-      }
    }
    // if the player has just left the current track
    if(player.t > 1.0f)
@@ -1008,11 +1046,6 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	    actualID = tracks.GetActualID(newIndex);
 	    currentTrack = &tracks.elements[actualID];
 	    player.trackIndex = newIndex;
-
-	    if(tracks.adjList[actualID].flags & Attribute::speedup)
-	    {
-	       player.velocity = min(player.velocity + 0.01f, 0.25f);
-	    }
 	 }
 	 else
 	 {
@@ -1028,12 +1061,7 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	    u16 newIndex = tracks.adjList[tracks.GetActualID(player.trackIndex)].rightEdge();
 	    actualID = tracks.GetActualID(newIndex);
 	    currentTrack = &tracks.elements[actualID];
-	    player.trackIndex = newIndex;	    
-
-	    if(tracks.adjList[actualID].flags & Attribute::speedup)
-	    {
-	       player.velocity = min(player.velocity + 0.01f, 0.25f);
-	    }
+	    player.trackIndex = newIndex;
 	 }
 	 else
 	 {
@@ -1085,7 +1113,7 @@ Player InitPlayer()
 			Quat(1.0f, 0.0f, 0.0f, 0.0f)};
 
    result.mesh = Sphere;
-   result.velocity = 0.15f;
+   result.velocity = 0.25f;
    result.t = 0.0f;   
    result.trackIndex = 0;
 
@@ -1121,8 +1149,8 @@ void SetTrackMeshesForRebuild(Track *tracks, u32 count)
 
 void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
 {
-   INIT_LOG();
-   
+   INIT_LOG();   
+
    state.mainArena.base = AllocateSystemMemory(MEGABYTES(512), &state.mainArena.size);
    LOG_WRITE("memory: %p", state.mainArena.base);
    state.mainArena.current = state.mainArena.base;
@@ -1276,6 +1304,59 @@ float GetXtoYRatio(MapItem item)
    return width / height;
 }
 
+#ifdef DEBUG
+
+u16 FindBreakBeforeBranch(NewTrackGraph &g, u16 id)
+{
+   u16 last = id;
+   for(;;)
+   {
+      u16 actual = g.GetActualID(last);
+      Attribute &attr = g.adjList[actual];
+
+      if(attr.flags & Attribute::branch) return 0;
+      if(attr.flags & Attribute::breaks) return 1;
+
+      B_ASSERT(attr.hasLeft());
+
+      last = attr.leftEdge();
+   }
+}
+
+void AutoPlay(GameState &state)
+{
+   NewTrackGraph &g = state.tracks;
+   Player &p = state.sphereGuy;
+
+   u32 trackIndex = g.IDtable[p.trackIndex];
+   Attribute &attribute = g.adjList[trackIndex];
+
+   if(attribute.flags & Attribute::branch) return;
+
+   u32 nextTrackIndex = g.IDtable[attribute.leftEdge()];
+   Attribute &nextAttribute = g.adjList[nextTrackIndex];
+
+   if(!(nextAttribute.flags & Attribute::branch)) return;
+
+   u32 nextNextVirtualIndex;
+   if(g.flags & NewTrackGraph::left)
+   {
+      nextNextVirtualIndex = nextAttribute.leftEdge();
+   }
+   else
+   {
+      nextNextVirtualIndex = nextAttribute.rightEdge();
+   }
+
+   Attribute &nextNextAttribute = g.adjList[g.IDtable[nextNextVirtualIndex]];
+
+   if(FindBreakBeforeBranch(state.tracks, nextNextAttribute.id))
+   {
+      state.input.SetTouched();
+   }
+}
+#endif
+
 void GameLoop(GameState &state)
 {
    BeginFrame(state);
@@ -1293,6 +1374,9 @@ void GameLoop(GameState &state)
 	 }
 	 else
 	 {
+	    #ifdef DEBUG
+	    AutoPlay(state);
+	    #endif
 	    TracksProcessInput(state);
 
 	    if(state.tracks.flags & NewTrackGraph::switching)
@@ -1534,7 +1618,10 @@ NewTrackGraph::VerifyGraph()
 		  }
 	       }
 
-	       B_ASSERT(good);
+	       if(!good)
+	       {
+		  B_ASSERT(good);
+	       }
 	    }
 	 }
 	 else
