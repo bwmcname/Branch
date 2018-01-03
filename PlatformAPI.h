@@ -3,6 +3,7 @@
  *
  * Each platform must provide these aliases
  * BranchFileHandle
+ * BranchSaveFileHandle
  *
  * Each platform must implement these structures
  * PlatformInputstate
@@ -14,6 +15,10 @@
  * AllocateSystemMemory(size, dest)
  * FreeSystemMemory(mem)
  * FileOpen(filename)
+ * OpenSaveFile()
+ * CloseSaveFile()
+ * WriteSaveFile()
+ * ReadSaveFile()
  * ASSET_PATH(filename)
  * FRAMEBUFFER_FORMAT
  * B_ASSERT(val)

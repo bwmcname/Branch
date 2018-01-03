@@ -177,6 +177,47 @@ bool BBoxFrustumTest(TrackFrustum &f, BBox &b)
    return false;
 }
 
+TextureInstanceBuffers CreateTextureInstanceBuffers(GLuint vbo, GLuint uvbo)
+{
+   TextureInstanceBuffers result;
+
+   glGenBuffers(1, &result.instanceMVPBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_DYNAMIC_DRAW);
+
+   glGenVertexArrays(1, &result.instanceVao);
+   glBindVertexArray(result.instanceVao);
+
+   glEnableVertexAttribArray(VERTEX_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, vbo);
+   glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glEnableVertexAttribArray(UV_LOCATION);
+   glBindBuffer(GL_ARRAY_BUFFER, uvbo);
+   glVertexAttribPointer(UV_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+   glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
+   glEnableVertexAttribArray(MATRIX1_LOCATION);
+   glVertexAttribPointer(MATRIX1_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 1);
+   glVertexAttribPointer(MATRIX1_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 2);
+   glVertexAttribPointer(MATRIX1_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
+   glEnableVertexAttribArray(MATRIX1_LOCATION + 3);
+   glVertexAttribPointer(MATRIX1_LOCATION + 3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(3 * sizeof(v4)));
+
+   glVertexAttribDivisor(VERTEX_LOCATION, 0);
+   glVertexAttribDivisor(UV_LOCATION, 0);
+   glVertexAttribDivisor(MATRIX1_LOCATION, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+1, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+2, 1);
+   glVertexAttribDivisor(MATRIX1_LOCATION+3, 1);
+
+   glBindVertexArray(0);
+
+   return result;
+}
+
 InstanceBuffers CreateInstanceBuffers(GLuint vbo, GLuint nbo)
 {
    InstanceBuffers result;
@@ -262,6 +303,9 @@ CommandState InitCommandState(StackAllocator *allocator)
 
    result.breakInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
    result.breakInstanceCount = 0;
+
+   result.breakTextureInstances = (TextureInstance *)allocator->push(sizeof(TextureInstance) * 1024);
+   result.breakTextureInstanceCount = 0;
 
    return result;
 }
@@ -445,6 +489,15 @@ CommandState::PushDrawBreakTexture(v3 position, v3 scale, quat orientation, Stac
 }
 
 inline void
+CommandState::PushBreakTextureInstance(v3 position, v3 scale, quat orientation)
+{
+   TextureInstance &newInstance = breakTextureInstances[breakTextureInstanceCount++];
+   newInstance.position = position;
+   newInstance.scale = scale;
+   newInstance.orientation = orientation;   
+}
+
+inline void
 CommandState::PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator)
 {
    B_ASSERT(first);
@@ -507,6 +560,16 @@ CommandState::PushRenderBreakInstances(StackAllocator *allocator)
    DrawBreakInstancesCommand *command = (DrawBreakInstancesCommand *)last->next;
    command->command = DrawBreakInstances;
 
+   last = command;
+   ++count;
+}
+
+inline void
+CommandState::PushRenderBreakTextureInstances(StackAllocator *allocator)
+{
+   last->next = (CommandBase *)allocator->push(sizeof(DrawBreakTextureInstancesCommand));
+   DrawBreakTextureInstancesCommand *command = (DrawBreakTextureInstancesCommand *)last->next;
+   command->command = DrawBreakTextureInstances;
    last = command;
    ++count;
 }
@@ -842,7 +905,7 @@ void RenderSpeedup(DrawSpeedupCommand *command, Camera &camera, v3 lightPos, Pro
 static B_INLINE
 void RenderBreakTexture(DrawBreakCommand *command, Camera &camera, v3 lightPos, ProgramBase *currentProgram, GLuint texture)
 {
-   glDisable(GL_DEPTH_TEST);
+   // glDisable(GL_DEPTH_TEST);
    m4 translation = Translate(V3(command->obj.worldPos.x, command->obj.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, command->obj.worldPos.z));
    m4 orientation = M4(Rotation(V3(-1.0f, 0.0f, 0.0f), 1.5708f));
    m4 scale = Scale(V3(5.0f, 5.0f, 5.0f));
@@ -867,7 +930,7 @@ void RenderBreakTexture(DrawBreakCommand *command, Camera &camera, v3 lightPos, 
    glBindBuffer(GL_ARRAY_BUFFER, 0);
 
    glUseProgram(currentProgram->programHandle);
-   glEnable(GL_DEPTH_TEST);
+   // glEnable(GL_DEPTH_TEST);
 }
 
 static
@@ -1319,6 +1382,13 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font,
 	    breakInstanceCount = 0;
 	 }break;
 
+	 case DrawBreakTextureInstances:
+	 {
+	    RenderBreakTextureInstances(allocator, camera.view,
+					breakTextureInstanceCount, breakTextureInstances,
+					glState.blockTex, glState.breakTextureInstanceBuffers);
+	 }break;
+
 	 case BindProgram:
 	 {
 	    BindProgramCommand *programCommand = (BindProgramCommand *)current;
@@ -1354,6 +1424,42 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font,
    linearInstanceCount = 0;
    branchInstanceCount = 0;
    breakInstanceCount = 0;
+   breakTextureInstanceCount = 0;
+}
+
+void
+CommandState::RenderBreakTextureInstances(StackAllocator *allocator, m4 &view,
+					  u32 instanceCount, TextureInstance *instances,
+					  GLuint texture, TextureInstanceBuffers buffers)
+{
+   glUseProgram(BreakBlockProgram.programHandle);
+
+   m4 *MVPs = (m4 *)allocator->push(sizeof(m4) * instanceCount);
+   m4 scale_orientation = Scale(instances[0].scale) * M4(instances[0].orientation);
+   m4 vp = InfiniteProjection * view;
+
+   // assuming that the texture are sorted from distance from the camera,
+   // we want to render them in reverse for transparency!
+   i32 j = 0;
+   for(i32 i = instanceCount - 1; i >= 0; --i)
+   {
+      m4 translation = Translate(instances[i].position);
+      MVPs[j] = vp * (translation * scale_orientation);
+      ++j;
+   }
+
+   glActiveTexture(GL_TEXTURE0);
+   glBindTexture(GL_TEXTURE_2D, texture);
+   glUniform1i(glGetUniformLocation(BreakBlockProgram.programHandle, "tex"), 0);
+
+   glBindBuffer(GL_ARRAY_BUFFER, buffers.instanceMVPBuffer);
+   glBufferSubData(GL_ARRAY_BUFFER, 0, instanceCount * sizeof(m4), MVPs);
+
+   glBindVertexArray(buffers.instanceVao);
+   glDrawArraysInstanced(GL_TRIANGLES, 0, 6, instanceCount);
+   glBindVertexArray(0);
+
+   allocator->pop();
 }
 
 void
@@ -1422,6 +1528,7 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
    state.renderer.commands.PushRenderLinearInstances(allocator);
    state.renderer.commands.PushRenderBranchInstances(allocator);
    state.renderer.commands.PushRenderBreakInstances(allocator);
+   state.renderer.commands.PushRenderBreakTextureInstances(allocator);
    for(i32 i = 0; i < state.tracks.capacity; ++i)
    {	    
       if(!(state.tracks.adjList[i].flags & Attribute::invisible) &&
@@ -1458,8 +1565,14 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
 	    BBox box = BreakBBox(state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
 	    {
+	       Object &renderable = state.tracks.elements[i].renderable;
 	       state.renderer.commands.PushBreakInstance(state.tracks.elements[i].renderable, NORMAL_COLOR);
-	       state.renderer.commands.PushDrawBreak(state.tracks.elements[i].renderable, allocator);
+	       // state.renderer.commands.PushDrawBreak(state.tracks.elements[i].renderable, allocator);
+
+	       v3 translation = (V3(renderable.worldPos.x, renderable.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, renderable.worldPos.z));
+	       quat orientation = (Rotation(V3(-1.0f, 0.0f, 0.0f), 1.5708f));
+	       v3 scale = (V3(5.0f, 5.0f, 5.0f));
+	       state.renderer.commands.PushBreakTextureInstance(translation, scale, orientation);
 	    }
 	 }
 	 else if(state.tracks.adjList[i].flags & Attribute::speedup)

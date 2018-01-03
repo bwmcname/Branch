@@ -105,6 +105,9 @@ typedef void *(*glInvalidateFramebuffer_t) (GLenum, GLsizei, const GLenum *);
 typedef void *(*glMapBufferRange_t) (GLenum, GLintptr, GLsizeiptr, GLbitfield);
 typedef GLboolean (*glUnmapBuffer_t) (GLenum);
 typedef void (*glBufferStorage_t) (GLenum, GLsizeiptr, const GLvoid *, GLbitfield);
+typedef void (*glDeleteFramebuffers_t) (GLsizei, const GLuint *);
+typedef void (*glDeleteRenderbuffers_t) (GLsizei, const GLuint *);
+typedef void (*glDeleteProgram_t) (GLuint);
 
 wglChoosePixelFormatARB_t wglChoosePixelFormatARB;
 glCreateProgram_t glCreateProgram;
@@ -152,6 +155,9 @@ glInvalidateFramebuffer_t glInvalidateFramebuffer;
 glMapBufferRange_t glMapBufferRange;
 glUnmapBuffer_t glUnmapBuffer;
 glBufferStorage_t glBufferStorage;
+glDeleteFramebuffers_t glDeleteFramebuffers;
+glDeleteRenderbuffers_t glDeleteRenderbuffers;
+glDeleteProgram_t glDeleteProgram;
 
 HMODULE glDll = 0;
 

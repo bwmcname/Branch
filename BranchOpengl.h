@@ -16,6 +16,12 @@ struct InstanceBuffers
    GLuint instanceModelMatrixBuffer;
 };
 
+struct TextureInstanceBuffers
+{
+   GLuint instanceVao;
+   GLuint instanceMVPBuffer;
+};
+
 struct OpenglState
 {
    GLuint fbo;
@@ -36,6 +42,7 @@ struct OpenglState
    stbFont bitmapFont;
 
    InstanceBuffers instanceBuffers[3];
+   TextureInstanceBuffers breakTextureInstanceBuffers;
 };
 
 struct MeshBuffers

@@ -78,6 +78,12 @@ b32 WinReadFile(char *filename, u8 *buffer, size_t fileSize, size_t offset)
 }
 
 static
+HANDLE Win32OpenSaveFile()
+{
+   return Win32FileOpen("branch.sav");
+}
+
+static
 u8 *Win32AllocateMemory(size_t desired, size_t *actual)
 {
    SYSTEM_INFO info;
@@ -295,6 +301,9 @@ int OpenglCreate(HWND WindowHandle)
    WinGetGlExtension(glMapBufferRange);
    WinGetGlExtension(glUnmapBuffer);
    WinGetGlExtension(glBufferStorage);
+   WinGetGlExtension(glDeleteFramebuffers);
+   WinGetGlExtension(glDeleteRenderbuffers);
+   WinGetGlExtension(glDeleteProgram);
 
    return true;
 }

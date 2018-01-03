@@ -305,4 +305,22 @@ void LoadGLState(GameState &state, StackAllocator *stack, AssetManager &assetMan
    state.glState.instanceBuffers[0] = CreateInstanceBuffers(LinearTrack.handles.vbo, LinearTrack.handles.nbo);
    state.glState.instanceBuffers[1] = CreateInstanceBuffers(BranchTrack.handles.vbo, BranchTrack.handles.nbo);
    state.glState.instanceBuffers[2] = CreateInstanceBuffers(BreakTrack.handles.vbo, BreakTrack.handles.nbo);
+
+   state.glState.breakTextureInstanceBuffers = CreateTextureInstanceBuffers(RectangleVertBuffer, RectangleUVBuffer);
+}
+
+void DeleteResources(OpenglState &gl)
+{
+   glDeleteFramebuffers(1, &gl.fbo);
+   glDeleteRenderbuffers(1, &gl.depthBuffer);
+   glDeleteProgram(gl.backgroundProgram);
+   glDeleteProgram(gl.fullScreenProgram);
+   glDeleteTextures(1, &gl.mainColorTexture);
+   glDeleteTextures(1, &gl.blockTex);
+   glDeleteTextures(1, &gl.guiTextureMap);
+   glDeleteBuffers(1, &gl.buttonVbo);
+   glDeleteBuffers(1, &gl.startButtonVbo);
+   glDeleteBuffers(1, &gl.playButtonVbo);
+   glDeleteBuffers(1, &gl.pauseButtonVbo);
+   glDeleteBuffers(1, &gl.bitmapFont.textureHandle);
 }

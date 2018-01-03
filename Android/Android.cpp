@@ -65,7 +65,7 @@ AndroidQueue CreateAndroidEventQueue()
 void OnStart(ANativeActivity *activity)
 {
    AndroidState *state = (AndroidState *)activity->instance;
-   __android_log_print(ANDROID_LOG_INFO, "Branch", "START");
+   LOG_WRITE("START");
 
    AndroidCommand command;
    command.command = AndroidCommand::START;
@@ -75,7 +75,7 @@ void OnStart(ANativeActivity *activity)
 void OnResume(ANativeActivity *activity)
 {
    AndroidState *state = (AndroidState *)activity->instance;
-   __android_log_print(ANDROID_LOG_INFO, "Branch", "RESUME");
+   LOG_WRITE("RESUME");
    state->events.Push({AndroidCommand::RESUME});   
 }
 
@@ -299,7 +299,7 @@ float AndroidUsableBottom(AndroidState *state)
 
 void InitOpengl(AndroidState *state)
 {
-   __android_log_print(ANDROID_LOG_INFO, "Branch", "Beginning Opengl init.");
+   LOG_WRITE("Beginning Opengl init.");
    EGLint attribs[] = {
       EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
       EGL_SURFACE_TYPE, EGL_WINDOW_BIT,

@@ -83,5 +83,5 @@ struct stbFont
    u8 *map;
    u32 width;
    u32 height;
-   u32 textureHandle;
+   GLuint textureHandle;
 };

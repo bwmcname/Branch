@@ -15,6 +15,7 @@ enum RenderCommand
    DrawLinearInstances,
    DrawBranchInstances,
    DrawBreakInstances,
+   DrawBreakTextureInstances
 };
 
 struct CommandBase
@@ -64,6 +65,13 @@ struct TrackInstance
    quat rotation;
    v3 scale;
    v3 color;
+};
+
+struct TextureInstance
+{
+   v3 position;
+   quat orientation;
+   v3 scale;
 };
 
 struct DrawSpeedupCommand : public CommandBase
@@ -119,8 +127,12 @@ struct DrawBreakInstancesCommand : public CommandBase
 {
 };
 
+struct DrawBreakTextureInstancesCommand : public CommandBase
+{
+};
+
 /*
-Different command we need.
+Different commands we need.
 BindProgram
 Draw Mesh
 Draw Bright break thing
@@ -142,6 +154,9 @@ struct CommandState
    u32 breakInstanceCount;
    TrackInstance *breakInstances;
 
+   u32 breakTextureInstanceCount;
+   TextureInstance *breakTextureInstances;
+
    CommandBase *first;
    CommandBase *last;
    inline void PushBindProgram(ProgramBase *base, StackAllocator *allocator);
@@ -154,7 +169,13 @@ struct CommandState
    inline void PushRenderLinearInstances(StackAllocator *allocator);
    inline void PushRenderBranchInstances(StackAllocator *allocator);
    inline void PushRenderBreakInstances(StackAllocator *allocator);
-   void RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &view, u32 count, TrackInstance *instances, u32 vcount, InstanceBuffers buffers);
+   inline void PushBreakTextureInstance(v3 position, v3 scale, quat orientation);
+   inline void PushRenderBreakTextureInstances(StackAllocator *allocator);
+   void RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &view, u32 count, TrackInstance *instances, u32 vcount,
+			     InstanceBuffers buffers);
+   void RenderBreakTextureInstances(StackAllocator *allocator, m4 &view,
+				    u32 instanceCount, TextureInstance *instance,
+				    GLuint texture, TextureInstanceBuffers buffers);
    inline void PushDrawSpeedup(Object obj, StackAllocator *allocator);
    inline void PushDrawBranch(Object obj, StackAllocator *allocator);
    inline void PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocator *allocator);

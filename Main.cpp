@@ -318,8 +318,10 @@ Curve BranchCurve(i32 x1, i32 y1,
 
    Curve result;
    result.p1 = V2(0.0f, 0.0f);
-   result.p2 = V2(0.0f, direction.y * 0.666667f);
-   result.p3 = V2(direction.x, direction.y * 0.333333f);
+   // result.p2 = V2(0.0f, direction.y * 0.666667f);
+   // result.p3 = V2(direction.x, direction.y * 0.333333f);
+   result.p2 = V2(0.0f, direction.y * 0.44f);
+   result.p3 = V2(direction.x, direction.y * 0.59f); 
    result.p4 = direction;
 
    return result;
@@ -1018,6 +1020,8 @@ void ResetPlayer(Player &player)
    player.t = 0.0f;
    player.velocity = 0.25f;
    player.forceDirection = 0;
+   player.tracksTraversedSinceLastAcceleration = 0;
+   player.timesAccelerated = 0;
 }
 
 void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
@@ -1033,6 +1037,19 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
    // if the player has just left the current track
    if(player.t > 1.0f)
    {
+
+      if(player.timesAccelerated < 5)
+      {
+	 ++player.tracksTraversedSinceLastAcceleration;
+
+	 if(player.tracksTraversedSinceLastAcceleration >= 500)
+	 {
+	    player.tracksTraversedSinceLastAcceleration = 0;
+	    player.velocity += 0.1f;
+	    ++player.timesAccelerated;
+	 }
+      }
+
       player.t -= 1.0f;
 
       if(((tracks.flags & NewTrackGraph::left) && !(tracks.adjList[actualID].flags & Attribute::lockedRight)) ||
@@ -1116,6 +1133,8 @@ Player InitPlayer()
    result.velocity = 0.25f;
    result.t = 0.0f;   
    result.trackIndex = 0;
+   result.tracksTraversedSinceLastAcceleration = 0;
+   result.timesAccelerated = 0;
 
    result.forceDirection = 0;
 
