@@ -180,6 +180,7 @@ static size_t AndroidFileSize(char *filename);
 #define FRAMEBUFFER_FORMAT GL_RGBA
 
 #ifdef DEBUG
+#define TIMERS
 #define B_ASSERT(x) if (!(x)) __android_log_assert("Assertion Failed", "Branch", "%s: %d", __FILE__, __LINE__);
 #else
 #define B_ASSERT(x)
@@ -189,7 +190,12 @@ static size_t AndroidFileSize(char *filename);
 #define BEGIN_TIME() timespec LOCAL_BEGIN_TIME, LOCAL_END_TIME;	\
    clock_gettime(CLOCK_MONOTONIC, &LOCAL_BEGIN_TIME)		
 #define END_TIME() clock_gettime(CLOCK_MONOTONIC, &LOCAL_END_TIME);	\
-   LONG LOCAL_TIME = LOCAL_END_TIME->tv_nsec - LOCAL_BEGIN_TIME->tv_nsec
+   long LOCAL_TIME;							\
+   if(LOCAL_END_TIME.tv_nsec > LOCAL_BEGIN_TIME.tv_nsec)		\
+      LOCAL_TIME = LOCAL_END_TIME.tv_nsec - LOCAL_BEGIN_TIME.tv_nsec;	\
+   else									\
+      LOCAL_TIME = LOCAL_END_TIME.tv_nsec + (LONG_MAX - LOCAL_BEGIN_TIME.tv_nsec)
+#define READ_TIME(into) into = LOCAL_TIME
 #else
 #define BEGIN_TIME() 
 #define END_TIME() 

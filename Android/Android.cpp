@@ -506,7 +506,8 @@ void AndroidMain(AndroidState *state)
 		  InitOpengl(state);
 		  glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
-		  gameState.input = {};	       
+		  gameState.input = {};
+		  gameState.framerate = 60;
 		  delta = 1.0f;
 
 		  if(reloadGL)
@@ -697,6 +698,10 @@ void AndroidMain(AndroidState *state)
       }
       float totalMillis = total / 1000000.0f;
       delta = totalMillis / 16.6666666667f;
+      gameState.framerate = 60.0f / delta;
+
+      // we dont want framerate delta to be less than 24fps
+      delta = min(delta, 2.5f);
    }   
 }
 

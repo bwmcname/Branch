@@ -867,7 +867,8 @@ void RenderObject(Object &obj, MeshObject buffers, ShaderProgram *program, m4 &c
 static B_INLINE
 void RenderBranch(DrawBranchCommand *command, Camera &camera, v3 lightPos, ProgramBase *program, MeshObject buffers = BranchTrack)
 {
-   RenderObject(command->obj, buffers, (ShaderProgram *)program, camera.view, lightPos, NORMAL_COLOR);
+   glUseProgram(DefaultShader.programHandle); // Should move program bindings to the queue :(
+   RenderObject(command->obj, buffers, &DefaultShader, camera.view, lightPos, NORMAL_COLOR);
 }
 
 static B_INLINE
@@ -1330,7 +1331,6 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font,
 			      OpenglState &glState)
 {
    CommandBase *current = first;
-   camera.UpdateView();
    for(u32 i = 0; i < count; ++i)
    {
       switch(current->command)
@@ -1549,6 +1549,7 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
 	    {
 	       if(state.tracks.adjList[i].flags & Attribute::lockedMask)
 	       {
+		  state.renderer.commands.PushBindProgram(&DefaultShader, allocator);
 		  state.renderer.commands.PushDrawLockedBranch(state.tracks.elements[i].renderable, LockedBranchTrack, allocator);
 	       }
 	       else

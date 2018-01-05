@@ -114,7 +114,8 @@ Camera::UpdateView()
 static
 void InitCamera(Camera &camera)
 {
-   camera.position = V3(0.0f, -3.0f, 12.0f);
+   camera.distanceFromPlayer = -14.0f;
+   camera.position = V3(0.0f, camera.distanceFromPlayer, 12.0f);
    camera.orientation = Rotation(V3(1.0f, 0.0f, 0.0f), 1.1f);
    camera.UpdateView();
 };
@@ -1002,7 +1003,7 @@ void NewUpdateTrackGraph(NewTrackGraph &graph, StackAllocator &allocator, Player
 
    NewSetReachable(graph, allocator, player.trackIndex);
 
-   float cutoff = player.renderable.worldPos.y - (TRACK_SEGMENT_SIZE * 2.0f);
+   float cutoff = player.renderable.worldPos.y - (TRACK_SEGMENT_SIZE * 3.0f);
 
    for(u16 i = 0; i < graph.capacity; ++i)
    {
@@ -1136,7 +1137,7 @@ void UpdateCamera(Camera &camera, Player &player, NewTrackGraph &graph)
       camera.position.x = lerp(camera.position.x, playerPosition.x, (from / (2.0f * maxFrom)) * delta);
    }
 
-   camera.position.y = playerPosition.y - 10.0f;   
+   camera.position.y = playerPosition.y + camera.distanceFromPlayer;
 }
 
 static B_INLINE
@@ -1486,6 +1487,51 @@ void ControlCamera(GameState &state)
 #define DEBUG_CONTROL_CAMERA(state)
 #endif
 
+static B_INLINE
+void PushMaxDistanceDisplay(GameState &state, v2 location)
+{
+   static char best[32];
+   sprintf(best, "Best %i", state.maxDistance);
+   size_t length = strlen(best);
+   state.renderer.commands.PushRenderText(best, (u32)length, location, V2(0.5f, 0.5f), V3(1.0f, 1.0f, 1.0f), ((StackAllocator *)state.mainArena.base));	 
+}
+
+static B_INLINE
+void PushCurrentDistanceDisplay(GameState &state, v2 location)
+{
+   static char print_string[32];
+   i32 print_string_count = 0;
+   print_string_count = IntToString((char *)print_string, (u32)state.sphereGuy.renderable.worldPos.y / 10);
+   state.renderer.commands.PushRenderText(print_string, print_string_count, location, V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));   
+}
+
+#ifdef DEBUG
+static B_INLINE
+void PushFramerate(GameState &state, v2 location)
+{
+   static char framerate[8];
+   i32 framerate_string_count = 0;
+   framerate_string_count = IntToString(framerate, state.framerate);
+   /*
+   static char framerate[8];
+   static float time = 120.0f;
+   time += delta;
+   static i32 framerate_string_count = 0;
+   if(time > 30.0f)
+   {
+      time = 0.0f;
+      framerate_string_count = IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
+   }
+   */
+   
+   // framerate
+   state.renderer.commands.PushRenderText(framerate, framerate_string_count, location, V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
+}
+#define DebugPushFramerate(state, location) PushFramerate(state, location)
+#else
+#define DebugPushFramerate(state, location)
+#endif
+
 void GameLoop(GameState &state)
 {
    BeginFrame(state);
@@ -1494,6 +1540,7 @@ void GameLoop(GameState &state)
    { 
       case GameState::LOOP:
       {
+	 BEGIN_TIME();
 	 v2 button_pos = V2(0.9f, 0.1f + USABLE_SCREEN_BOTTOM(state));
 	 v2 button_scale = V2(GetXtoYRatio(GUIMap::pause_box) * 0.16f, 0.16f);	 
 
@@ -1512,7 +1559,7 @@ void GameLoop(GameState &state)
 	    {
 	       state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
 
-	       GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, state.tracks.switchDelta);
+	       GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, smoothstep(0.0f, 1.0f, state.tracks.switchDelta));
 	       GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
 
 	       if(state.tracks.switchDelta == 1.0f)
@@ -1525,22 +1572,34 @@ void GameLoop(GameState &state)
 	    UpdatePlayer(state.sphereGuy, state.tracks, state);
 	    UpdateCamera(state.camera, state.sphereGuy, state.tracks);
 	 }
-	 
+
+	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 DebugPushFramerate(state, V2(-0.8f, 0.8f));
+	 PushCurrentDistanceDisplay(state, V2(0.0f, 0.75f));
+	 state.renderer.commands.PushDrawGUI(button_pos, button_scale, state.glState.guiTextureMap, state.glState.pauseButtonVbo, ((StackAllocator *)state.mainArena.base));
+	 END_TIME();
+	 u64 passed = 0;
+	 READ_TIME(passed);
+
+	 static float time = 0.0f;
+	 time += delta * 0.1f;
+
+	 state.lightPos = V3(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, 5 + smoothstep(0.0f, 1.0f, sinf(time)));
+	 Object lightRenderable;
+	 lightRenderable.worldPos = state.lightPos;
+	 lightRenderable.scale = V3(0.3f, 0.3f, 0.3f);
+	 lightRenderable.orientation = {0};   
+
 	 // @TODO This should be inserted into the render queue instead of being drawn immediately.
 	 glUseProgram(DefaultShader.programHandle); 
-	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
-	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
+	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));   
 
-	 glUseProgram(0);
+	 glUseProgram(SuperBrightProgram.programHandle); 
+	 RenderObject(lightRenderable, state.sphereGuy.mesh, &SuperBrightProgram, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
+	 glUseProgram(0);   
 
-	 // distance
-	 static char print_string[32];
-	 i32 print_string_count = 0;
-	 print_string_count = IntToString((char *)print_string, (u32)state.sphereGuy.renderable.worldPos.y / 10);
-	 state.renderer.commands.PushRenderText(print_string, print_string_count, V2(0.0f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
-
-	 state.renderer.commands.PushDrawGUI(button_pos, button_scale, state.glState.guiTextureMap, state.glState.pauseButtonVbo, ((StackAllocator *)state.mainArena.base));
-
+	 LOG_WRITE("Main Loop time: %llu", passed);
+	    
       }break;
 
       case GameState::PAUSE:
@@ -1559,6 +1618,8 @@ void GameLoop(GameState &state)
 	 {
 	    state.state = GameState::LOOP;
 	 }
+
+	 PushMaxDistanceDisplay(state, V2(0.0f, -0.2f));
       }break;
 
       case GameState::RESET:
@@ -1590,12 +1651,15 @@ void GameLoop(GameState &state)
 	 }
 
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
-	 
 	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.glState.guiTextureMap, state.glState.startButtonVbo, ((StackAllocator *)state.mainArena.base));
+	 PushMaxDistanceDisplay(state, V2(0.0f, -0.2f));
+	 PushCurrentDistanceDisplay(state, V2(0.0f, 0.75f));
+	 
       }break;
 
       case GameState::START:
       {
+	 BEGIN_TIME();
 	 // Start menu of the game
 	 static float position = 0.0f;
 	 position += delta * 0.01f;
@@ -1617,12 +1681,12 @@ void GameLoop(GameState &state)
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
 	 
 	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.glState.guiTextureMap, state.glState.startButtonVbo, ((StackAllocator *)state.mainArena.base));
-
-	 static char best[32];
-	 sprintf(best, "Best %i", state.maxDistance);
-	 size_t length = strlen(best);
-	 state.renderer.commands.PushRenderText(best, (u32)length, V2(0.0f, -0.2f), V2(0.5f, 0.5f), V3(1.0f, 1.0f, 1.0f), ((StackAllocator *)state.mainArena.base));
-	 
+	 PushMaxDistanceDisplay(state, V2(0.0f, -0.2f));
+	 DebugPushFramerate(state, V2(-0.8f, 0.8f));
+	 END_TIME();
+	 u64 passed = 0;
+	 READ_TIME(passed);
+	 LOG_WRITE("Start menu tiem: %llu", passed);
       }break;
       
       default:
@@ -1631,18 +1695,7 @@ void GameLoop(GameState &state)
       }
    }   
 
-   static float time = 0.0f;
-   time += delta * 0.1f;
-   
-   state.lightPos = V3(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, 5 + smoothstep(0.0f, 1.0f, sinf(time)));
-   Object lightRenderable;
-   lightRenderable.worldPos = state.lightPos;
-   lightRenderable.scale = V3(0.3f, 0.3f, 0.3f);
-   lightRenderable.orientation = {0};
-
-   glUseProgram(SuperBrightProgram.programHandle); 
-   RenderObject(lightRenderable, state.sphereGuy.mesh, &SuperBrightProgram, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
-   glUseProgram(0);   
+   state.camera.UpdateView();
 
    state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.glState.bitmapFont, state.bitmapFontProgram, state.renderer, (StackAllocator *)state.mainArena.base, state.glState);
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));

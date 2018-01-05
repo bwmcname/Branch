@@ -14,6 +14,8 @@ struct Camera
    m4 view;
    v3 forward;
 
+   float distanceFromPlayer;
+
    void UpdateView();
 };
 
@@ -286,6 +288,8 @@ struct GameState
 
    bool paused;
    u32 maxDistance;
+
+   u32 framerate;
 
    enum
    {

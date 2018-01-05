@@ -473,6 +473,7 @@ int CALLBACK WinMain(HINSTANCE Instance,
    LARGE_INTEGER Begin, Elapsed;
 
    delta = 1.0f;
+   state.framerate = 60;
 
    while(running)
    {
@@ -640,6 +641,11 @@ int CALLBACK WinMain(HINSTANCE Instance,
       float target = 16666.7f;
 
       delta = time / target;
+      state.framerate = 60.0f / delta;
+
+      // we dont want the game running at less than 24 frames a second,
+      // there will be problems
+      delta = min(delta, 2.5f);
    }
 
    OnWindowsExit();
