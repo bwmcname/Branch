@@ -983,19 +983,21 @@ void RenderTexture(GLuint texture, ShaderProgram &program)
 static
 void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, TextProgram &p, StackAllocator *allocator)
 {
-   stbtt_aligned_quad *quads = (stbtt_aligned_quad *)allocator->push(sizeof(stbtt_aligned_quad) * count);
-
    float width = 0;
+
+   for(u32 i = 0; i < count; ++i)
+   {
+      stbtt_packedchar &c = font.chars[string[i]];
+      width += (c.xoff2 - c.xoff);
+   }
+   float halfWidth = width * 0.5f;
    
    // convert clip coords to device coords
    x = (x + 1.0f) * ((float)SCREEN_WIDTH / 2.0f);
    y = (y - 1.0f) * -((float)SCREEN_HEIGHT / 2.0f);
 
-   for(u32 i = 0; i < count; ++i)
-   {
-      stbtt_GetPackedQuad(font.chars, font.width, font.height, string[i], &x, &y, &quads[i], 1);
-      width += (quads[i].x1 - quads[i].x0);
-   }
+   // take off half of the width to center the text
+   x -= halfWidth;
    
    glDisable(GL_DEPTH_TEST);
 
@@ -1009,11 +1011,10 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
 
    glUniformMatrix3fv(p.transformUniform, 1, GL_FALSE, TextProjection(SCREEN_WIDTH, SCREEN_HEIGHT).e);   
 
-   float halfWidth = width * 0.5f;
    for(i32 i = 0; i < (i32)count; ++i)
    {
-      // stbtt_GetPackedQuad(font.chars, font.width, font.height, c, &x, &y, &quad, 0);
-      stbtt_aligned_quad &quad = quads[i];
+      stbtt_aligned_quad quad;
+      stbtt_GetPackedQuad(font.chars, font.width, font.height, string[i], &x, &y, &quad, 0);
 
       float uvs[] =
 	 {
@@ -1028,13 +1029,13 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
       
       float verts[] =
 	 {
-	    quad.x0 - halfWidth, quad.y0,
-	    quad.x0 - halfWidth, quad.y1,
-	    quad.x1 - halfWidth, quad.y0,
+	    quad.x0, quad.y0,
+	    quad.x0, quad.y1,
+	    quad.x1, quad.y0,
 
-	    quad.x1 - halfWidth, quad.y0,
-	    quad.x0 - halfWidth, quad.y1,
-	    quad.x1 - halfWidth, quad.y1,
+	    quad.x1, quad.y0,
+	    quad.x0, quad.y1,
+	    quad.x1, quad.y1,
 	 };
 
       glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
@@ -1048,8 +1049,6 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
 
    glBindVertexArray(0);
    glEnable(GL_DEPTH_TEST);
-
-   allocator->pop();
 }
 
 static
@@ -1252,6 +1251,19 @@ MeshObject InitMeshObject(u8 *buffer, StackAllocator *allocator)
 }
 
 #if defined(DEBUG) && defined(WIN32_BUILD)
+
+static
+void ScreenGrid()
+{
+   glLineWidth(1.0f);
+   glBegin(GL_LINES);
+   glVertex3f(-1.0f, 0.0f, 0.0f);
+   glVertex3f(1.0f, 0.0f, 0.0f);
+   glVertex3f(0.0f, -1.0f, 0.0f);
+   glVertex3f(0.0f, 1.0f, 0.0f);
+   glEnd();
+}
+
 static
 void RenderBBoxes(GameState &state)
 {  

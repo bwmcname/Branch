@@ -1564,11 +1564,11 @@ void GameLoop(GameState &state)
       case GameState::RESET:
       {	 
 	 // state.state = GameState::START;
-
 	 DEBUG_CONTROL_CAMERA(state);
 
+	 v2 button_area = V2(2.0f, 2.0f);
 	 v2 button_scale = V2(GetXtoYRatio(GUIMap::GoSign_box) * 0.16f, 0.16f);
-	 if(ButtonUpdate(V2(0.0f, 0.0f), button_scale, state.input) == Clicked)
+	 if(ButtonUpdate(V2(0.0f, 0.0f), button_area, state.input) == Clicked)
 	 {
 	    ResetPlayer(state.sphereGuy);
 	    state.camera.position.y = state.sphereGuy.renderable.worldPos.y - 10.0f;
@@ -1600,9 +1600,9 @@ void GameLoop(GameState &state)
 	 static float position = 0.0f;
 	 position += delta * 0.01f;
 
+	 v2 button_area = V2(2.0f, 2.0f);
 	 v2 button_scale = V2(GetXtoYRatio(GUIMap::GoSign_box) * 0.16f, 0.16f);
-
-	 if(ButtonUpdate(V2(0.0f, 0.0f), button_scale, state.input) == Clicked)
+	 if(ButtonUpdate(V2(0.0f, 0.0f), button_area, state.input) == Clicked)
 	 {
 	    state.state = GameState::LOOP;	    
 	    state.sphereGuy.trackIndex = 0;
