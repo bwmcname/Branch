@@ -988,8 +988,9 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
    for(u32 i = 0; i < count; ++i)
    {
       stbtt_packedchar &c = font.chars[string[i]];
-      width += (c.xoff2 - c.xoff);
+      width += c.xadvance;
    }
+   
    float halfWidth = width * 0.5f;
    
    // convert clip coords to device coords
@@ -1014,7 +1015,7 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
    for(i32 i = 0; i < (i32)count; ++i)
    {
       stbtt_aligned_quad quad;
-      stbtt_GetPackedQuad(font.chars, font.width, font.height, string[i], &x, &y, &quad, 0);
+      stbtt_GetPackedQuad(font.chars, font.width, font.height, string[i], &x, &y, &quad, 1);
 
       float uvs[] =
 	 {
