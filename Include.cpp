@@ -12,6 +12,8 @@
 
 #ifdef ANDROID_BUILD
 #include <GLES3/gl3.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <android/native_activity.h>
 #include <android/window.h>
 #include <android/configuration.h>

@@ -250,7 +250,20 @@ void LoadGLState(GameState &state, StackAllocator *stack, AssetManager &assetMan
    // stack->pop();
    // stack->pop();
 
-   state.glState.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::wow_ID), stack);
+   if(SCREEN_HEIGHT >= 1920)
+   {
+      state.glState.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::roboto64_ID), stack);
+   }
+   else if(SCREEN_HEIGHT >= 1080)
+   {
+      state.glState.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::roboto32_ID), stack);
+   }
+   else
+   {
+      state.glState.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::roboto16_ID), stack);
+   }
+   
+
    Sphere = InitMeshObject(state.assetManager.LoadStacked(AssetHeader::sphere_ID).mem, stack);
    state.sphereGuy.mesh = Sphere;
 

@@ -4,8 +4,18 @@
 #ifdef DEBUG
 #ifdef WIN32_BUILD
 static FILE *logFile;
-#define LOG_WRITE(...) fprintf(logFile, __VA_ARGS__); fflush(logFile)
+#define LOG_WRITE(...) LogWrite(0, __VA_ARGS__)
 #define INIT_LOG() InitLog();
+
+#pragma warning(push, 0)
+void LogWrite(int what, ...)
+{
+   va_list args;
+   va_start(args, what);
+   fprintf(logFile, args);
+   fflush(logFile);
+}
+#pragma warning(pop)
 
 void InitLog()
 {

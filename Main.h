@@ -45,7 +45,7 @@ union Curve
  
    v4 lerpables[2];
 };
-
+   
 #define LEFT_CURVE  BranchCurve(0, 0, -1, 1)
 #define RIGHT_CURVE BranchCurve(0, 0, 1, 1)
 
@@ -164,6 +164,7 @@ struct Attribute
    }
 
    inline void addAncestor(u16 ancestorID);
+   inline void addEdge(u16 edgeID);
    inline void removeAncestor(u16 ancestorID);
    inline void removeEdge(u16 edgeID);
 };
@@ -248,6 +249,13 @@ struct Player
    MeshObject mesh;
    u8 forceDirection;
 
+   struct PlayerAnimation
+   {
+      float t;
+   };
+
+   PlayerAnimation animation;
+
    inline bool OnSwitch(NewTrackGraph &tracks);
 };
 
@@ -277,6 +285,7 @@ struct GameState
    OpenglState glState;
 
    bool paused;
+   u32 maxDistance;
 
    enum
    {

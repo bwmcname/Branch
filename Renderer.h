@@ -91,7 +91,7 @@ struct DrawBreakCommand : public CommandBase
 
 struct DrawTextCommand : public CommandBase
 {
-   u32 textSize;
+   u32 numChars;
    v2 position;
    v2 scale;
    v3 color;
@@ -181,7 +181,7 @@ struct CommandState
    inline void PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocator *allocator);
    inline void PushDrawBreak(Object obj, StackAllocator *allocator);
    inline void PushRenderBlur(StackAllocator *allocator);
-   inline void PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator);
+   inline void PushRenderText(char *text, u32 numChars, v2 position, v2 scale, v3 color, StackAllocator *allocator);
    inline void PushDrawGUI(v2 position, v2 scale, GLuint texture, GLuint uvs, StackAllocator *allocator);
    void ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font, TextProgram &p, RenderState &renderer, StackAllocator *allocator, OpenglState &glState);
    inline void Clean(StackAllocator *allocator);

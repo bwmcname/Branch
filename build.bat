@@ -12,7 +12,9 @@ rem calls to asset packer to build assets
 ..\ap shader texture_vert.vert
 ..\ap shader texture_frag.frag
 
-..\ap font c:/Windows/Fonts/arial.ttf 1024 1024 16
+..\ap font roboto16 c:/Windows/Fonts/Roboto-Regular.ttf 1024 1024 16
+..\ap font roboto32 c:/Windows/Fonts/Roboto-Regular.ttf 2048 2048 32
+..\ap font roboto64 c:/Windows/Fonts/Roboto-Regular.ttf 4096 4096 64
 
 ..\ap shader text_vert.vert
 ..\ap shader text_frag.frag
@@ -46,8 +48,8 @@ rem calls to asset packer to build assets
 ..\ap map GUIMap 1024 1024 GoSign.png play.png pause.png
 
 rem pack asset file
-..\ap build default_frag.fragp default_vert.vertp BreakerBlock_vert.vertp BreakerBlock_frag.fragp texture_frag.fragp texture_vert.vertp bitmap_font_vert.vertp bitmap_font_frag.fragp text_vert.vertp text_frag.fragp Background_vert.vertp Background_frag.fragp ScreenTexture_vert.vertp ScreenTexture_frag.fragp ApplyBlur_vert.vertp ApplyBlur_frag.fragp Button_vert.vertp Button_frag.fragp button Block Default_Instance_vert.vertp Default_Instance_frag.fragp Emissive_vert.vertp Emissive_frag.fragp outline_frag.fragp fast_blur_frag.fragp sphere.brian wow.font GUIMap
+..\ap build default_frag.fragp default_vert.vertp BreakerBlock_vert.vertp BreakerBlock_frag.fragp texture_frag.fragp texture_vert.vertp bitmap_font_vert.vertp bitmap_font_frag.fragp text_vert.vertp text_frag.fragp Background_vert.vertp Background_frag.fragp ScreenTexture_vert.vertp ScreenTexture_frag.fragp ApplyBlur_vert.vertp ApplyBlur_frag.fragp Button_vert.vertp Button_frag.fragp button Block Default_Instance_vert.vertp Default_Instance_frag.fragp Emissive_vert.vertp Emissive_frag.fragp outline_frag.fragp fast_blur_frag.fragp sphere.brian roboto16.font roboto32.font roboto64.font GUIMap
 popd
-cl -Zi -DWIN32_BUILD -DDEBUG -DTIMERS -FS -Wall -WX  -wd4005 -wd4996 -wd4061 -wd4062 -wd4505 -wd4623 -wd4365 -wd4244 -wd4626 -wd5027 -wd4201 -wd4820 -wd4100 -wd4514 -wd4711 Include.cpp -FeBranch_Debug opengl32.lib gdi32.lib user32.lib
+cl -Zi -DWIN32_BUILD -DDEBUG -DTIMERS -FS -Wall -WX  -wd4005 -wd4996 -wd4061 -wd4062 -wd4505 -wd4623 -wd4365 -wd4244 -wd4626 -wd5027 -wd4201 -wd4820 -wd4100 -wd4514 -wd4711 -wd4710 Include.cpp -FeBranch_Debug opengl32.lib gdi32.lib user32.lib
 
-cl -Zi -DWIN32_BUILD -DTIMERS -Ox -FS -Wall -WX -wd4996 -wd4005 -wd4061 -wd4062 -wd4505 -wd4623 -wd4365 -wd4244 -wd4626 -wd5027 -wd4201 -wd4820 -wd4100 -wd4514 -wd4711 Include.cpp -FeBranch_Release opengl32.lib gdi32.lib user32.lib
+cl -Zi -DWIN32_BUILD -DTIMERS -Ox -FS -Wall -WX -wd4996 -wd4005 -wd4061 -wd4062 -wd4505 -wd4623 -wd4365 -wd4244 -wd4626 -wd5027 -wd4201 -wd4820 -wd4100 -wd4514 -wd4711 -wd4710 Include.cpp -FeBranch_Release opengl32.lib gdi32.lib user32.lib

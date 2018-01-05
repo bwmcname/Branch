@@ -19,6 +19,7 @@
 #include "libs/stb_image_write.h"
 
 #include "BranchTypes.h"
+typedef u32 GLuint;
 #include "BranchMath.h"
 #include "BranchCommon.h"
 
@@ -742,7 +743,7 @@ int Map(char *map_name, u32 edge, u32 map_width, u32 map_height, char **images, 
    return 1;
 }
 
-int Font(char *fontName, u32 width, u32 height, float pointSize)
+int Font(char *outName, char *fontName, u32 width, u32 height, float pointSize)
 {
    FILE *font = OpenForRead(fontName);
    size_t size = FileSize(font);
@@ -754,6 +755,7 @@ int Font(char *fontName, u32 width, u32 height, float pointSize)
 
    if(!stbtt_InitFont(&info, fileBuffer, 0))
    {
+      printf("Unable to pack font into texture\n");
       free(fileBuffer);
       return false;
    }
@@ -779,7 +781,11 @@ int Font(char *fontName, u32 width, u32 height, float pointSize)
    printf("height:     %d\n", result->height);
    printf("point_size: %f\n", pointSize);
 
-   FILE *outFont = OpenForWrite(TO_PACKED_ASSET_PATH("wow.font"));
+   // FILE *outFont = OpenForWrite(TO_PACKED_ASSET_PATH("wow.font"));
+
+   static char outFileName[32];
+   sprintf(outFileName, "%s/%s.font", PACKED_ASSET_DIRECTORY, outName);
+   FILE *outFont = OpenForWrite(outFileName);
    fwrite(result, outFileSize, 1, outFont);
 
    free(outBuffer);
@@ -955,10 +961,10 @@ void main(int argc, char **argv)
 	    int font = strcmp(parse, "font");
 
 	    if(font == 0)
-	    {
-	       if(argc == 6)
+	    {	       
+	       if(argc == 7)
 	       {
-		  if(!Font(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5])))
+		  if(!Font(argv[2], argv[3], atoi(argv[4]), atoi(argv[5]), atoi(argv[6])))
 		  {
 		     printf("unable to finish font processing");
 		  }

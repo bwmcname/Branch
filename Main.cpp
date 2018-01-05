@@ -35,11 +35,6 @@ RebuildState *SaveState(GameState *state)
    saving->ordersSize = state->tracks.orders.size;
    memcpy(saving->orders, state->tracks.orders.elements, sizeof(NewTrackOrder) * 1024);
 
-   // saving->newBranchesBegin = state->tracks.newBranches.begin;
-   // saving->newBranchesEnd = state->tracks.newBranches.end;
-   // saving->newBranchesSize = state->tracks.newBranches.size;
-   // memcpy(saving->newBranches, state->tracks.newBranches.elements, sizeof(u16) * 256);
-
    memcpy(saving->takenElements, state->tracks.taken.e, sizeof(Element) * 1024);
    saving->takenSize = state->tracks.taken.size;
 
@@ -113,7 +108,7 @@ Camera::UpdateView()
 
    view = rotation * translation;
 
-   forward = M3(orientation) * V3(0.0f, 0.0f, -1.0f);
+   forward = V3(view.e2[2][0], view.e2[2][1], -view.e2[2][2]);
 }
 
 static
@@ -350,6 +345,12 @@ Attribute::removeEdge(u16 edgeID)
 }
 
 B_INLINE void
+Attribute::addEdge(u16 edgeID)
+{
+   edges[edgeCount++] = edgeID;
+}
+
+B_INLINE void
 Attribute::addAncestor(u16 ancestorID)
 {
    B_ASSERT(ancestorCount < 3);
@@ -489,38 +490,52 @@ CircularQueue<T> InitCircularQueue(u32 size, StackAllocator *allocator)
 
 void StartTracks(NewTrackGraph &g)
 {
-   g.IDtable[0] = 0;
-
-   // g.orders.Push({0, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, 1});
-   g.taken.put({0, 0}, LocationInfo::track, 0);
-   g.elements[0] = CreateTrack(V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve);
-   // g.elements[0].flags = Track::left;
-   g.adjList[0].flags = Attribute::linear;
-   g.adjList[0].edgeCount = 0;
-   g.adjList[0].ancestorCount = 0;
-
-   g.IDtable[0] = 0;
-   g.reverseIDtable[0] = 0;
-
-   g.flags |= NewTrackGraph::left;
-
-   // make sure the tracks start out straight
-   /*
-   for(u16 i = 1; i < 50; ++i)
+   // fill in initial tracks
+   i32 count = 10;
+   for(u16 i = 0; i < (u16)count; ++i)
    {
-      g.orders.Push({i - 1u, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, i});
       g.IDtable[i] = i;
       g.reverseIDtable[i] = i;
-   }   
-   */
-   for(u16 i = 1; i < g.capacity; ++i)
+   }
+
+   g.taken.put({0, 0}, LocationInfo::track, 0);
+   g.elements[0] = CreateTrack(V3(0.0f, 0.0f, 0.0f),
+			       V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve);
+   g.adjList[0].flags = Attribute::linear | Attribute::hasLeftEdge;
+   g.adjList[0].edgeCount = 0;
+   g.adjList[0].ancestorCount = 0;
+   g.adjList[0].addEdge(1);
+
+   for(i32 i = 1; i < count - 1; ++i)
+   {
+      g.taken.put({0, i}, LocationInfo::track, (u16)i);
+      g.elements[i] = CreateTrack(V3(0.0f, i * TRACK_SEGMENT_SIZE, 0.0f),
+				  V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve);
+      g.adjList[i].flags = Attribute::linear | Attribute::hasLeftEdge;
+      g.adjList[i].edgeCount = 0;
+      g.adjList[i].ancestorCount = 0;
+      g.adjList[i].addEdge(i+1);
+      g.adjList[i].addAncestor(i-1);
+   }
+
+   g.taken.put({0, count-1}, LocationInfo::track, (count-1));
+   g.elements[count-1] = CreateTrack(V3(0.0f, (count-1) * TRACK_SEGMENT_SIZE, 0.0f),
+			       V3(1.0f, 1.0f, 1.0f), &GlobalLinearCurve);
+   g.adjList[count-1].flags = Attribute::linear;
+   g.adjList[count-1].edgeCount = 0;
+   g.adjList[count-1].ancestorCount = 0;
+   g.adjList[count-1].addAncestor(count-2);
+   
+   g.flags |= NewTrackGraph::left;
+   
+   for(u16 i = (u16)count; i < g.capacity; ++i)
    {
       g.availableIDs.Push(i);
       g.IDtable[i] = i;
       g.reverseIDtable[i] = i;
    }
 
-   g.orders.Push({0, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, 1});
+   g.orders.Push({9, NewTrackOrder::left | NewTrackOrder::dontBranch | NewTrackOrder::dontBreak, 0, count});
 
    g.switchDelta = 0.0f;
    g.beginLerp = {};
@@ -549,6 +564,8 @@ NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
    {
       g.adjList[i] = {0, Attribute::unused, 0, 0, {}, {}};
    }
+
+   g.flags = 0;
 
    StartTracks(g);
 
@@ -695,7 +712,6 @@ void FillGraph(NewTrackGraph &graph)
 	    graph.elements[graph.GetActualID(edgeID)] = CreateTrack(V3(position.x, position.y, 0.0f), V3(1.0f, 1.0f, 1.0f),
 								    &GlobalLinearCurve);
 	    	    
-	    
 	    graph.orders.Push({edgeID, NewTrackOrder::left | NewTrackOrder::dontBreak, item.x, item.y+1});
 	    LocationInfo &behind = graph.taken.get({item.x, item.y});
 	    if(behind.hasSpeedup())
@@ -1024,11 +1040,28 @@ void ResetPlayer(Player &player)
    player.timesAccelerated = 0;
 }
 
+void OnLoss(GameState &state)
+{
+   u32 distance = state.sphereGuy.renderable.worldPos.y / 10.0f;
+   if(distance > state.maxDistance)
+   {
+      state.maxDistance = distance;
+      if(!SaveGame(state, (StackAllocator *)state.mainArena.base))
+      {
+	 B_ASSERT(0);
+      }
+   }
+}
+
 void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 {
    // current track physical ID
    u16 actualID = tracks.GetActualID(player.trackIndex);
    Track *currentTrack = &tracks.elements[actualID];
+
+   player.animation.t += delta;
+   float scale = ((sinf(player.animation.t * 0.3f) + 1.0f) * 0.2f) + 0.7f;
+   player.renderable.scale = V3(scale, scale, scale);
 
    if(!state.paused)
    {
@@ -1037,15 +1070,14 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
    // if the player has just left the current track
    if(player.t > 1.0f)
    {
-
-      if(player.timesAccelerated < 5)
+      if(player.timesAccelerated < 4)
       {
 	 ++player.tracksTraversedSinceLastAcceleration;
 
-	 if(player.tracksTraversedSinceLastAcceleration >= 500)
+	 if(player.tracksTraversedSinceLastAcceleration >= 250)
 	 {
 	    player.tracksTraversedSinceLastAcceleration = 0;
-	    player.velocity += 0.1f;
+	    player.velocity += 0.025f;
 	    ++player.timesAccelerated;
 	 }
       }
@@ -1066,8 +1098,8 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	 }
 	 else
 	 {
-	    //@TEMPORARY
 	    state.state = GameState::RESET;
+	    OnLoss(state);
 	 }
       }
       else
@@ -1082,8 +1114,8 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	 }
 	 else
 	 {
-	    //@TEMPORARY
 	    state.state = GameState::RESET;
+	    OnLoss(state);
 	 }
       }
 
@@ -1104,8 +1136,7 @@ void UpdateCamera(Camera &camera, Player &player, NewTrackGraph &graph)
       camera.position.x = lerp(camera.position.x, playerPosition.x, (from / (2.0f * maxFrom)) * delta);
    }
 
-   camera.position.y = playerPosition.y - 10.0f;
-   camera.UpdateView();
+   camera.position.y = playerPosition.y - 10.0f;   
 }
 
 static B_INLINE
@@ -1138,6 +1169,8 @@ Player InitPlayer()
 
    result.forceDirection = 0;
 
+   result.animation.t = 0.0f;
+
    return result;
 }
 
@@ -1166,9 +1199,34 @@ void SetTrackMeshesForRebuild(Track *tracks, u32 count)
    }
 }
 
+static B_INLINE
+bool VerifySaveFile(u8 *fileBuffer, u32 size)
+{
+   if(size >= 6)
+   {
+      bool result =
+	 fileBuffer[0] == 'B' ||
+	 fileBuffer[1] == 'R' ||
+	 fileBuffer[2] == 'A' ||
+	 fileBuffer[3] == 'N' ||
+	 fileBuffer[4] == 'C' ||
+	 fileBuffer[5] == 'H';
+
+      return result;
+   }
+
+   return false;
+}
+
+static B_INLINE
+u32 GetMaxDistanceFromFile(u8 *fileBuffer)
+{
+   return *((u32 *)(fileBuffer + 6));
+}
+
 void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
 {
-   INIT_LOG();   
+   INIT_LOG();
 
    state.mainArena.base = AllocateSystemMemory(MEGABYTES(512), &state.mainArena.size);
    LOG_WRITE("memory: %p", state.mainArena.base);
@@ -1193,7 +1251,7 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    GlobalLeftCurve = LEFT_CURVE;
    GlobalRightCurve = RIGHT_CURVE;
    GlobalBranchCurve = LEFT_CURVE;
-   state.state = GameState::START;
+   state.state = GameState::START;   
 
    LOG_WRITE("%zu : %zu", sizeof(RebuildState), rebuildSize);
 
@@ -1206,6 +1264,27 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    LoadGLState(state, stack, state.assetManager);
 
    state.paused = false;
+   
+   u32 fileSize;
+   u8 *fileBuffer = GetSaveFileBuffer(state, stack, &fileSize);
+   if(fileBuffer)
+   {
+      if(VerifySaveFile(fileBuffer, fileSize))
+      {
+	 state.maxDistance = GetMaxDistanceFromFile(fileBuffer);
+      }
+      else
+      {
+	 state.maxDistance = 0;
+      }
+
+      // release filebuffer;
+      stack->pop();
+   }
+   else
+   {
+      state.maxDistance = 0;
+   }
 }
 
 template <typename int_type> static B_INLINE
@@ -1376,6 +1455,37 @@ void AutoPlay(GameState &state)
 }
 #endif
 
+#if defined(DEBUG) && defined(WIN32_BUILD)
+void ControlCamera(GameState &state)
+{
+   v3 forward = V3(0.0f, 1.0f, 0.0f);
+   v3 right = V3(1.0f, 0.0f, 0.0f);
+   if(state.input.w())
+   {
+      state.camera.position = state.camera.position + (delta * forward);
+   }
+
+   if(state.input.a())
+   {
+      state.camera.position = state.camera.position - (delta * right);
+   }
+
+   if(state.input.s())
+   {
+      state.camera.position = state.camera.position - (delta * forward);
+   }
+
+   if(state.input.d())
+   {
+      state.camera.position = state.camera.position + (delta * right);
+   }
+}
+#define DEBUG_CONTROL_CAMERA(state) ControlCamera(state)
+
+#else
+#define DEBUG_CONTROL_CAMERA(state)
+#endif
+
 void GameLoop(GameState &state)
 {
    BeginFrame(state);
@@ -1394,7 +1504,7 @@ void GameLoop(GameState &state)
 	 else
 	 {
 	    #ifdef DEBUG
-	    AutoPlay(state);
+	    // AutoPlay(state);
 	    #endif
 	    TracksProcessInput(state);
 
@@ -1423,24 +1533,11 @@ void GameLoop(GameState &state)
 
 	 glUseProgram(0);
 
-	 static char framerate[8];
-	 static float time = 120.0f;
-	 time += delta;
-	 static i32 framerate_string_count = 0;
-	 if(time > 30.0f)
-	 {
-	    time = 0.0f;
-	    framerate_string_count = IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
-	 }
-	 // framerate
-	 state.renderer.commands.PushRenderText(framerate, framerate_string_count, V2(-0.8f, 0.8f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
-
 	 // distance
 	 static char print_string[32];
 	 i32 print_string_count = 0;
-	 memcpy(print_string, "Distance: ", 10);
-	 print_string_count = IntToString((char *)print_string + 10, (u32)state.sphereGuy.renderable.worldPos.y / 10);
-	 state.renderer.commands.PushRenderText(print_string, print_string_count + 10, V2(-0.8f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
+	 print_string_count = IntToString((char *)print_string, (u32)state.sphereGuy.renderable.worldPos.y / 10);
+	 state.renderer.commands.PushRenderText(print_string, print_string_count, V2(0.0f, 0.75f), V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
 
 	 state.renderer.commands.PushDrawGUI(button_pos, button_scale, state.glState.guiTextureMap, state.glState.pauseButtonVbo, ((StackAllocator *)state.mainArena.base));
 
@@ -1448,6 +1545,8 @@ void GameLoop(GameState &state)
 
       case GameState::PAUSE:
       {
+	 DEBUG_CONTROL_CAMERA(state);
+
 	 glUseProgram(DefaultShader.programHandle); 
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
@@ -1465,6 +1564,8 @@ void GameLoop(GameState &state)
       case GameState::RESET:
       {	 
 	 // state.state = GameState::START;
+
+	 DEBUG_CONTROL_CAMERA(state);
 
 	 v2 button_scale = V2(GetXtoYRatio(GUIMap::GoSign_box) * 0.16f, 0.16f);
 	 if(ButtonUpdate(V2(0.0f, 0.0f), button_scale, state.input) == Clicked)
@@ -1516,6 +1617,12 @@ void GameLoop(GameState &state)
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
 	 
 	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.glState.guiTextureMap, state.glState.startButtonVbo, ((StackAllocator *)state.mainArena.base));
+
+	 static char best[32];
+	 sprintf(best, "Best %i", state.maxDistance);
+	 size_t length = strlen(best);
+	 state.renderer.commands.PushRenderText(best, (u32)length, V2(0.0f, -0.2f), V2(0.5f, 0.5f), V3(1.0f, 1.0f, 1.0f), ((StackAllocator *)state.mainArena.base));
+	 
       }break;
       
       default:
@@ -1639,7 +1746,7 @@ NewTrackGraph::VerifyGraph()
 
 	       if(!good)
 	       {
-		  B_ASSERT(good);
+		  // B_ASSERT(good);
 	       }
 	    }
 	 }
@@ -1651,6 +1758,3 @@ NewTrackGraph::VerifyGraph()
    }
 }
 #endif
-
-// shut the compiler up about sprintf
-#pragma warning(push, 0)

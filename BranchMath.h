@@ -331,7 +331,7 @@ v3 unit(v3 a)
 }
 
 static inline
-v3 cross(v3 a, v3 b)
+v3 Cross(v3 a, v3 b)
 {
    v3 result;
 

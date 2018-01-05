@@ -181,6 +181,99 @@ void OnLowMemory(ANativeActivity *activity)
    state->events.Push({AndroidCommand::LOWMEMORY});
 }
 
+static
+char *AndroidFileNameToPath(char *filePath, char *name, StackAllocator *allocator)
+{
+   i32 pathLength = strlen(filePath);
+   i32 nameLength = strlen(name);
+   char *fullPath = (char *)allocator->push(pathLength + nameLength + 1);
+   
+   for(i32 i = 0; i < pathLength; ++i) fullPath[i] = filePath[i];
+   for(i32 i = 0; i < nameLength; ++i) fullPath[pathLength + i] = name[i];
+   fullPath[pathLength + nameLength] = '\0';
+
+   return fullPath;
+}
+
+static
+bool AndroidSaveGame(GameState &state, StackAllocator *allocator)
+{
+   const char *name = "/branch.sav";
+   char *fullPath = AndroidFileNameToPath((char *)state.android->activity->externalDataPath, (char *)name, allocator);
+   int fd = creat(fullPath, O_WRONLY);
+
+   // free filename
+   allocator->pop();
+
+   if(fd != -1)
+   {
+      // right now we only want to store the save file and
+      // highschore: strlen(branch) + sizeof(u32)
+      u32 size = 6 + sizeof(float);
+      u8 *buffer = allocator->push(size);
+
+      buffer[0] = 'B';
+      buffer[1] = 'R';
+      buffer[2] = 'A';
+      buffer[3] = 'N';
+      buffer[4] = 'C';
+      buffer[5] = 'H';
+
+      *((u32 *)(buffer + 6)) = state.maxDistance;
+
+      if(write(fd, buffer, size) == size)
+      {
+	 close(fd);
+	 allocator->pop();
+	 return true;
+      }
+
+      close(fd);
+      allocator->pop();
+   }
+
+   return false;
+}
+
+static
+u8 *AndroidGetSaveFileBuffer(GameState &state, StackAllocator *allocator, u32 *outSize)
+{
+   const char *name = "/branch.sav";
+   char *fullPath = AndroidFileNameToPath((char *)state.android->activity->externalDataPath, (char *)name, allocator);
+
+   if(access(fullPath, R_OK) == 0)
+   {
+      int fd = open(fullPath, O_RDONLY);
+
+      // pop filename
+      allocator->pop();
+
+      if(fd != -1)
+      {
+	 struct stat fileInfo;
+	 if(fstat(fd, &fileInfo) == 0)
+	 {
+	    *outSize = fileInfo.st_size;
+	    u8 *buffer = allocator->push(*outSize);
+	    if(read(fd, buffer, *outSize) == *outSize)
+	    {
+	       close(fd);
+	       return buffer;
+	    }
+	    allocator->pop();
+	 }
+	 close(fd);
+      }
+   }
+   else
+   {
+      // pop filename
+      allocator->pop();
+   }
+   
+   return 0;
+}
+
 typedef void *(*pthread_func)(void *);
 
 void SetScreenConfiguration(AndroidState *state)
@@ -300,6 +393,7 @@ float AndroidUsableBottom(AndroidState *state)
 void InitOpengl(AndroidState *state)
 {
    LOG_WRITE("Beginning Opengl init.");
+
    EGLint attribs[] = {
       EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
       EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
@@ -308,6 +402,7 @@ void InitOpengl(AndroidState *state)
       EGL_GREEN_SIZE, 8,
       EGL_ALPHA_SIZE, 8,
       EGL_DEPTH_SIZE, 24,
+      //EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_SRGB_KHR,
       EGL_NONE
    };
 
@@ -315,10 +410,9 @@ void InitOpengl(AndroidState *state)
       EGL_CONTEXT_CLIENT_VERSION, 3,
       EGL_NONE
    };
-   
+
    state->display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-   
-   eglInitialize(state->display, 0, 0);
+   eglInitialize(state->display, 0, 0);   
    
    EGLConfig config;
    EGLint nConfigs;
@@ -328,7 +422,9 @@ void InitOpengl(AndroidState *state)
    eglGetConfigAttrib(state->display, config, EGL_NATIVE_VISUAL_ID, &format);
    state->surface = eglCreateWindowSurface(state->display, config, state->window, 0);
    state->context = eglCreateContext(state->display, config, 0, glAttribs);
-   success = eglMakeCurrent(state->display, state->surface, state->surface, state->context);   
+   success = eglMakeCurrent(state->display, state->surface, state->surface, state->context);
+
+   LOG_WRITE("%s", eglQueryString(state->display, EGL_EXTENSIONS));
 
    eglSwapInterval(state->display, 1);
 
@@ -423,8 +519,8 @@ void AndroidMain(AndroidState *state)
 		  else
 		  {
 		     LOG_WRITE("BEGIN INIT");
-		     GameInit(gameState, state->savedState, state->savedStateSize);
 		     gameState.android = state;
+		     GameInit(gameState, state->savedState, state->savedStateSize);
 		  }
 
 		  reloadGL = false;

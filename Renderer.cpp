@@ -5,27 +5,6 @@
 static m4 Projection;
 static m4 InfiniteProjection;
 
-static ShaderProgram BreakBlockProgram;
-static ShaderProgram ButtonProgram;
-static ShaderProgram SuperBrightProgram;
-
-static const u32 RectangleAttribCount = 6;
-static GLuint RectangleUVBuffer;
-static GLuint textVao;
-static GLuint textUVVbo;
-static GLuint textVbo;
-
-static MeshObject Sphere;
-static MeshObject LinearTrack;
-static MeshObject BranchTrack;
-static MeshObject BreakTrack;
-static MeshObject LeftBranchTrack;
-static MeshObject RightBranchTrack;
-static MeshObject *LockedBranchTrack;
-
-static ShaderProgram DefaultShader;
-static ShaderProgram DefaultInstanced;
-
 static float RectangleUVs[] =
 {
    0.0f, 0.0f,
@@ -264,6 +243,7 @@ InstanceBuffers CreateInstanceBuffers(GLuint vbo, GLuint nbo)
    glVertexAttribPointer(MATRIX2_LOCATION, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), 0);
    glEnableVertexAttribArray(MATRIX2_LOCATION + 1);
    glVertexAttribPointer(MATRIX2_LOCATION + 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)sizeof(v4));
+
    glEnableVertexAttribArray(MATRIX2_LOCATION + 2);
    glVertexAttribPointer(MATRIX2_LOCATION + 2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(v4), (void *)(2 * sizeof(v4)));
    glEnableVertexAttribArray(MATRIX2_LOCATION + 3);
@@ -350,8 +330,8 @@ CommandState::PushDrawLinear(Object obj, StackAllocator *allocator)
    ++count;
 }
 
-inline
-void CommandState::PushLinearInstance(Object obj, v3 color)
+inline void
+CommandState::PushLinearInstance(Object obj, v3 color)
 {
    B_ASSERT(linearInstanceCount < 1024);
    linearInstances[linearInstanceCount++] = {obj.worldPos,
@@ -360,8 +340,8 @@ void CommandState::PushLinearInstance(Object obj, v3 color)
 					     color};
 }
 
-inline
-void CommandState::PushBranchInstance(Object obj, v3 color)
+inline void
+CommandState::PushBranchInstance(Object obj, v3 color)
 {
    B_ASSERT(branchInstanceCount < 1024);
    branchInstances[branchInstanceCount++] = {obj.worldPos,
@@ -370,8 +350,8 @@ void CommandState::PushBranchInstance(Object obj, v3 color)
 					     color};
 }
 
-inline
-void CommandState::PushBreakInstance(Object obj, v3 color)
+inline void
+CommandState::PushBreakInstance(Object obj, v3 color)
 {
    B_ASSERT(breakInstanceCount < 1024);
    breakInstances[breakInstanceCount++] = {obj.worldPos,
@@ -498,22 +478,22 @@ CommandState::PushBreakTextureInstance(v3 position, v3 scale, quat orientation)
 }
 
 inline void
-CommandState::PushRenderText(char *text, u32 textSize, v2 position, v2 scale, v3 color, StackAllocator *allocator)
+CommandState::PushRenderText(char *text, u32 numChars, v2 position, v2 scale, v3 color, StackAllocator *allocator)
 {
    B_ASSERT(first);
    B_ASSERT(currentProgram);
 
-   last->next = (CommandBase *)allocator->push(sizeof(DrawTextCommand) + textSize);
+   last->next = (CommandBase *)allocator->push(sizeof(DrawTextCommand) + numChars);
    DrawTextCommand *command = (DrawTextCommand *)last->next;
    command->command = DrawString;
-   command->textSize = textSize;
+   command->numChars = numChars;
    command->position = position;
    command->scale = scale;
    command->color = color;
 
    // copy string into the end of the command
    char *string = command->GetString();
-   for(u32 i = 0; i < textSize; ++i)
+   for(u32 i = 0; i < numChars; ++i)
    {
       string[i] = text[i];
    }
@@ -766,7 +746,7 @@ v3 *Normals(float *vertices, v3 *result, i32 count)
       v3 a = tris[i].b - tris[i].a;
       v3 b = tris[i].c - tris[i].a;
 
-      v3 normal = unit(cross(a, b));
+      v3 normal = unit(Cross(a, b));
       result[(i * 3)] = normal;
       result[(i * 3) + 1] = normal;
       result[(i * 3) + 2] = normal;
@@ -1001,11 +981,21 @@ void RenderTexture(GLuint texture, ShaderProgram &program)
 }
 
 static
-void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, TextProgram &p)
+void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, TextProgram &p, StackAllocator *allocator)
 {
+   stbtt_aligned_quad *quads = (stbtt_aligned_quad *)allocator->push(sizeof(stbtt_aligned_quad) * count);
+
+   float width = 0;
+   
    // convert clip coords to device coords
    x = (x + 1.0f) * ((float)SCREEN_WIDTH / 2.0f);
    y = (y - 1.0f) * -((float)SCREEN_HEIGHT / 2.0f);
+
+   for(u32 i = 0; i < count; ++i)
+   {
+      stbtt_GetPackedQuad(font.chars, font.width, font.height, string[i], &x, &y, &quads[i], 1);
+      width += (quads[i].x1 - quads[i].x0);
+   }
    
    glDisable(GL_DEPTH_TEST);
 
@@ -1017,14 +1007,13 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
    glBindTexture(GL_TEXTURE_2D, font.textureHandle);
    glUniform1i(p.texUniform, 0);
 
-   glUniformMatrix3fv(p.transformUniform, 1, GL_FALSE, TextProjection(SCREEN_WIDTH, SCREEN_HEIGHT).e);
+   glUniformMatrix3fv(p.transformUniform, 1, GL_FALSE, TextProjection(SCREEN_WIDTH, SCREEN_HEIGHT).e);   
 
-   stbtt_aligned_quad quad;
-   
+   float halfWidth = width * 0.5f;
    for(i32 i = 0; i < (i32)count; ++i)
    {
-      char c = string[i];
-      stbtt_GetPackedQuad(font.chars, font.width, font.height, c, &x, &y, &quad, 0);
+      // stbtt_GetPackedQuad(font.chars, font.width, font.height, c, &x, &y, &quad, 0);
+      stbtt_aligned_quad &quad = quads[i];
 
       float uvs[] =
 	 {
@@ -1039,13 +1028,13 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
       
       float verts[] =
 	 {
-	    quad.x0, quad.y0,
-	    quad.x0, quad.y1,
-	    quad.x1, quad.y0,
+	    quad.x0 - halfWidth, quad.y0,
+	    quad.x0 - halfWidth, quad.y1,
+	    quad.x1 - halfWidth, quad.y0,
 
-	    quad.x1, quad.y0,
-	    quad.x0, quad.y1,
-	    quad.x1, quad.y1,
+	    quad.x1 - halfWidth, quad.y0,
+	    quad.x0 - halfWidth, quad.y1,
+	    quad.x1 - halfWidth, quad.y1,
 	 };
 
       glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
@@ -1059,12 +1048,14 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
 
    glBindVertexArray(0);
    glEnable(GL_DEPTH_TEST);
+
+   allocator->pop();
 }
 
 static
-void RenderText(DrawTextCommand *command, stbFont &font, TextProgram &p)
+void RenderText(DrawTextCommand *command, stbFont &font, TextProgram &p, StackAllocator *allocator)
 {
-   RenderText_stb(command->GetString(), command->textSize, command->position.x, command->position.y, font, p);
+   RenderText_stb(command->GetString(), command->numChars, command->position.x, command->position.y, font, p, allocator);
 }
 
 static
@@ -1326,6 +1317,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font,
 			      OpenglState &glState)
 {
    CommandBase *current = first;
+   camera.UpdateView();
    for(u32 i = 0; i < count; ++i)
    {
       switch(current->command)
@@ -1397,7 +1389,7 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font,
 
 	 case DrawString:
 	 {
-	    RenderText((DrawTextCommand *)current, font, p);
+	    RenderText((DrawTextCommand *)current, font, p, allocator);
 	 }break;
 
 	 case DrawGUI:
@@ -1435,17 +1427,17 @@ CommandState::RenderBreakTextureInstances(StackAllocator *allocator, m4 &view,
    glUseProgram(BreakBlockProgram.programHandle);
 
    m4 *MVPs = (m4 *)allocator->push(sizeof(m4) * instanceCount);
+
+   // Every break texture has the same scale & orientation
    m4 scale_orientation = Scale(instances[0].scale) * M4(instances[0].orientation);
    m4 vp = InfiniteProjection * view;
 
    // assuming that the texture are sorted from distance from the camera,
    // we want to render them in reverse for transparency!
-   i32 j = 0;
-   for(i32 i = instanceCount - 1; i >= 0; --i)
+   for(u32 i = 0; i < instanceCount; ++i)
    {
-      m4 translation = Translate(instances[i].position);
-      MVPs[j] = vp * (translation * scale_orientation);
-      ++j;
+      m4 translation = Translate(instances[(instanceCount - 1) - i].position);
+      MVPs[i] = vp * (translation * scale_orientation);
    }
 
    glActiveTexture(GL_TEXTURE0);
@@ -1479,7 +1471,7 @@ CommandState::RenderTrackInstances(StackAllocator *allocator, v3 lightPos, m4 &v
    glUniform3fv(DefaultInstanced.lightPosUniform, 1, lightPos.e);
    glUniformMatrix4fv(DefaultInstanced.viewUniform, 1, GL_FALSE, view.e);
 
-   //@OPTIMIZATION TEST
+   // Every track has the same scale & orientation
    m4 scale_orientation = Scale(instances[0].scale) * M4(instances[0].rotation);
 
    for(u32 i = 0; i < instanceCount; ++i)

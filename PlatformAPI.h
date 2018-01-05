@@ -25,6 +25,8 @@
  * BEGIN_TIME()
  * END_TIME()
  * READ_TIME(dest)
+ * GetSaveFileBuffer(state, allocator, outSize)
+ * SaveGame(state, allocator)
  *
  * Each platform is also responsible for calling GameInit, and GameLoop 
  * at the appropriate times
@@ -43,6 +45,8 @@
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
 #define USABLE_SCREEN_BOTTOM(state) (-1.0f)
 #define PLATFORM_NAVIGATION_GUI_UP(state) (0)
+#define GetSaveFileBuffer(state, allocator, outSize) Win32GetSaveFileBuffer(state, allocator, outSize)
+#define SaveGame(state, allocator) Win32SaveGame(state, allocator)
 
 #ifdef DEBUG
 #define B_ASSERT(val) ((val) ? 0 : *((char *)0) = 'x')
@@ -71,7 +75,13 @@ struct Win32InputState
       clickUp = 0x4,
       escapeDown = 0x8,
       escapeHeld = 0x10,
-      escapeUp = 0x20
+      escapeUp = 0x20,
+      #ifdef DEBUG
+      clickw = 0x40,
+      clicka = 0x80,
+      clicks = 0x100,
+      clickd = 0x200,
+      #endif
    };
 
    u32 flags;
@@ -87,6 +97,27 @@ struct Win32InputState
    {
       flags |= clickDown;
    }
+
+   inline u32 w()
+   {
+      return flags & clickw;
+   }
+
+   inline u32 a()
+   {
+      return flags & clicka;
+   }
+
+   inline u32 s()
+   {
+      return flags & clicks;
+   }
+
+   inline u32 d()
+   {
+      return flags & clickd;
+   }
+
    #endif
 
    inline u32 Touched()
@@ -142,6 +173,8 @@ static size_t AndroidFileSize(char *filename);
 #define ASSET_PATH(filename) (filename)
 #define USABLE_SCREEN_BOTTOM(state) (AndroidUsableBottom(state.android))
 #define PLATFORM_NAVIGATION_GUI_UP(state) (IsNavigationBarUp(state.android))
+#define GetSaveFileBuffer(state, allocator, outSize) AndroidGetSaveFileBuffer(state, allocator, outSize)
+#define SaveGame(state, allocator) AndroidSaveGame(state, allocator)
 
 // currently opengles3 does not support floating point framebuffers
 #define FRAMEBUFFER_FORMAT GL_RGBA

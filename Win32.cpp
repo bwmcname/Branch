@@ -78,9 +78,72 @@ b32 WinReadFile(char *filename, u8 *buffer, size_t fileSize, size_t offset)
 }
 
 static
-HANDLE Win32OpenSaveFile()
+bool Win32SaveGame(GameState &state, StackAllocator *allocator)
 {
-   return Win32FileOpen("branch.sav");
+
+   HANDLE saveFile = CreateFile("branch.sav",
+				GENERIC_WRITE,
+			        0,
+				0,
+				CREATE_ALWAYS,
+				FILE_ATTRIBUTE_NORMAL,
+				0);
+
+   if(saveFile != INVALID_HANDLE_VALUE)
+   {
+      // right now we only want to store the save file and
+      // highschore: strlen(branch) + sizeof(u32)
+      u32 size = 6 + sizeof(float);
+      u8 *buffer = allocator->push(size);
+
+      buffer[0] = 'B';
+      buffer[1] = 'R';
+      buffer[2] = 'A';
+      buffer[3] = 'N';
+      buffer[4] = 'C';
+      buffer[5] = 'H';
+
+      *((u32 *)(buffer + 6)) = state.maxDistance;
+
+      if(WriteFile(saveFile, buffer, size, 0, 0))
+      {
+	 allocator->pop();
+	 CloseHandle(saveFile);
+	 return true;
+      }
+
+      CloseHandle(saveFile);
+      allocator->pop();
+   }
+
+   return false;
+}
+
+static
+u8 *Win32GetSaveFileBuffer(GameState &state, StackAllocator *allocator, u32 *outSize)
+{
+   HANDLE file = Win32FileOpen("branch.sav");
+
+   if(file != INVALID_HANDLE_VALUE)
+   {
+      LARGE_INTEGER fileSize;
+      GetFileSizeEx(file, &fileSize);
+
+      *outSize = fileSize.QuadPart;
+
+      u8 *buffer = allocator->push(*outSize);
+
+      if(WinReadFileHandle(file, buffer, *outSize, 0))
+      {
+	 CloseHandle(file);
+	 return buffer;
+      }
+
+      CloseHandle(file);
+      allocator->pop();
+   }
+
+   return 0;
 }
 
 static
@@ -474,7 +537,33 @@ int CALLBACK WinMain(HINSTANCE Instance,
 		     {
 			state.input.flags |= Win32InputState::escapeHeld;
 		     }
-		  }
+		  }break;
+
+		  #ifdef DEBUG
+		  case VK_UP:
+		  case 0x57: // W
+		  {
+		     state.input.flags |= Win32InputState::clickw;
+		  }break;
+
+		  case VK_LEFT:
+		  case 0x41: // A
+		  {
+		     state.input.flags |= Win32InputState::clicka;
+		  }break;
+
+		  case VK_DOWN:
+		  case 0x53: // S
+		  {
+		     state.input.flags |= Win32InputState::clicks;
+		  }break;
+
+		  case VK_RIGHT:
+		  case 0x44: // D
+		  {
+		     state.input.flags |= Win32InputState::clickd;
+		  }break;
+		  #endif
 	       }
 	    }break;
 
@@ -493,6 +582,32 @@ int CALLBACK WinMain(HINSTANCE Instance,
 		     state.input.flags &= ~(Win32InputState::escapeDown | Win32InputState::escapeHeld);
 		     state.input.flags |= Win32InputState::escapeUp;
 		  }break;
+
+#ifdef DEBUG
+		  case VK_UP:
+		  case 0x57: // W
+		  {
+		     state.input.flags &= ~Win32InputState::clickw;
+		  }break;
+
+		  case VK_LEFT:
+		  case 0x41: // A
+		  {
+		     state.input.flags &= ~Win32InputState::clicka;
+		  }break;
+
+		  case VK_DOWN:
+		  case 0x53: // S
+		  {
+		     state.input.flags &= ~Win32InputState::clicks;
+		  }break;
+
+		  case VK_RIGHT:
+		  case 0x44: // D
+		  {
+		     state.input.flags &= ~Win32InputState::clickd;
+		  }break;
+#endif
 	       }
 	    }break;
 
@@ -531,3 +646,4 @@ int CALLBACK WinMain(HINSTANCE Instance,
    GameEnd(state);
    return 0;
 }
+ 

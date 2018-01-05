@@ -28,11 +28,13 @@ struct AssetHeader
    static const u32 outline_frag_ID = 25;
    static const u32 fast_blur_frag_ID = 26;
    static const u32 sphere_ID = 27;
-   static const u32 wow_ID = 28;
-   static const u32 GUIMap_ID = 29;
+   static const u32 roboto16_ID = 28;
+   static const u32 roboto32_ID = 29;
+   static const u32 roboto64_ID = 30;
+   static const u32 GUIMap_ID = 31;
    static const u32 offsetTable[];
    static const u32 sizeTable[];
-   static const u32 entries = 29;
+   static const u32 entries = 31;
 };
-const u32 AssetHeader::offsetTable[] = {0,835,1411,1878,2269,2590,3023,3516,3696,4189,4500,5030,5442,5847,6094,6509,6812,7223,7376,40160,1088752,1089497,1090338,1090790,1091199,1091587,1092454,1103978,2159734,};
-const u32 AssetHeader::sizeTable[] = {835,576,467,391,321,433,493,180,493,311,530,412,405,247,415,303,411,153,32784,1048592,745,841,452,409,388,867,11524,1055756,4194320,};
+const u32 AssetHeader::offsetTable[] = {0,835,1411,1878,2269,2590,3023,3516,3696,4189,4500,5030,5442,5847,6094,6509,6812,7223,7376,40160,1088752,1089497,1090338,1090790,1091199,1091587,1092454,1103978,2159734,6361218,23145614,};
+const u32 AssetHeader::sizeTable[] = {835,576,467,391,321,433,493,180,493,311,530,412,405,247,415,303,411,153,32784,1048592,745,841,452,409,388,867,11524,1055756,4201484,16784396,4194320,};

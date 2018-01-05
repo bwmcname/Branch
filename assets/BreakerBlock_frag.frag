@@ -11,5 +11,5 @@ void main()
 {
    vec4 value = texture(tex, out_uv);
    color = value;
-   color2 = vec4(value.r * 1.0, 0.25 * value.r, 0.0, 1.0);
+   color2 = vec4(value.r * 3.0, 0.75 * value.r, 0.0, 1.0);
 }

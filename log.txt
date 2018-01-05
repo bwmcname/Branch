@@ -1,29 +1,1 @@
-memory: 0000003085C40000WIDTH: 480, HEIGHT: 640111456 : 0Asset Loaded: 2
-Asset Loaded: 1
-Asset Released: 1
-Asset Released: 2
-Asset Loaded: 21
-Asset Loaded: 22
-Asset Released: 22
-Asset Released: 21
-Asset Loaded: 10
-Asset Loaded: 9
-Asset Loaded: 8
-Asset Loaded: 7
-Asset Loaded: 4
-Asset Loaded: 3
-Asset Loaded: 18
-Asset Loaded: 17
-Asset Loaded: 24
-Asset Loaded: 23
-Asset Loaded: 20
-Asset Loaded: 29
-Asset Loaded: 12
-Asset Loaded: 11
-Asset Loaded: 28
-size: 16384
-Asset Loaded: 27
-Framebuffer status 36053Framebuffer status 36053Asset Loaded: 14
-Asset Loaded: 13
-Asset Released: 13
-Asset Released: 14
+ˆû÷¸û÷°û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷ û÷¨û÷ û÷hû÷€û÷ û÷ û÷
