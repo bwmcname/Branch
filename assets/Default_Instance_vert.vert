@@ -1,3 +1,4 @@
+
 #include <glsl.h>
 #include <vertinc.h>
 
@@ -18,3 +19,4 @@ void main()
    gl_Position = amvp * vertex;
    diffuseColor = aColor;
 }
+

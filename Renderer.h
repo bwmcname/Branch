@@ -82,6 +82,7 @@ struct DrawSpeedupCommand : public CommandBase
 struct DrawBranchCommand : public CommandBase
 {
    Object obj;
+   v3 color;
 };
 
 struct DrawBreakCommand : public CommandBase
@@ -177,8 +178,8 @@ struct CommandState
 				    u32 instanceCount, TextureInstance *instance,
 				    GLuint texture, TextureInstanceBuffers buffers);
    inline void PushDrawSpeedup(Object obj, StackAllocator *allocator);
-   inline void PushDrawBranch(Object obj, StackAllocator *allocator);
-   inline void PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocator *allocator);
+   inline void PushDrawBranch(Object obj, v3 color, StackAllocator *allocator);
+   inline void PushDrawLockedBranch(Object obj, v3 color, MeshObject *buffers, StackAllocator *allocator);
    inline void PushDrawBreak(Object obj, StackAllocator *allocator);
    inline void PushRenderBlur(StackAllocator *allocator);
    inline void PushRenderText(char *text, u32 numChars, v2 position, v2 scale, v3 color, StackAllocator *allocator);
@@ -187,8 +188,22 @@ struct CommandState
    inline void Clean(StackAllocator *allocator);
 };
 
+struct WorldPallette
+{
+   v3 closec;
+   v3 farc;
+   v3 trackc;
+   v3 playerc;
+   v3 blockc;
+   v3 textc;
+};
+
+static WorldPallette colorTable[3];
+
 struct RenderState
 {
+   float worldColorT;
+   WorldPallette worldColors;
    CommandState commands;
 };
 

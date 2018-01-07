@@ -1,3 +1,4 @@
+
 #version 300 es
 
 precision highp float;
@@ -28,3 +29,4 @@ void main()
    gl_Position = amvp * vertex;
    diffuseColor = aColor;
 }
+

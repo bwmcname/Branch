@@ -392,7 +392,7 @@ CommandState::PushDrawSpeedup(Object obj, StackAllocator *allocator)
 }
 
 inline void
-CommandState::PushDrawBranch(Object obj, StackAllocator *allocator)
+CommandState::PushDrawBranch(Object obj, v3 color, StackAllocator *allocator)
 {
    B_ASSERT(first);
    B_ASSERT(currentProgram);
@@ -401,12 +401,13 @@ CommandState::PushDrawBranch(Object obj, StackAllocator *allocator)
    DrawBranchCommand *command = (DrawBranchCommand *)last->next;
    command->command = DrawBranch;
    command->obj = obj;
+   command->color = color;
    last = command;
    ++count;
 }
 
 inline void
-CommandState::PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocator *allocator)
+CommandState::PushDrawLockedBranch(Object obj, v3 color, MeshObject *buffers, StackAllocator *allocator)
 {
    B_ASSERT(first);
    B_ASSERT(currentProgram);
@@ -414,6 +415,7 @@ CommandState::PushDrawLockedBranch(Object obj, MeshObject *buffers, StackAllocat
    last->next = (CommandBase *)allocator->push(sizeof(DrawLockedBranchCommand));
    DrawLockedBranchCommand *command = (DrawLockedBranchCommand *)last->next;
    command->command = DrawLockedBranch;
+   command->color = color;
    command->obj = obj;
    command->mesh = buffers;
    last = command;
@@ -731,6 +733,7 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
 
    LOG_WRITE("WIDTH: %d, HEIGHT: %d", SCREEN_WIDTH, SCREEN_HEIGHT);
    result.commands = InitCommandState(stack);
+   result.worldColorT = 1000000.0f; // doesn't matter what number, just needs to be height
    
    return result;
 }
@@ -806,6 +809,16 @@ m3 TextProjection(float screenWidth, float screenHeight)
 }
 
 static
+WorldPallette Lerp(WorldPallette a, WorldPallette b, float t)
+{
+   WorldPallette result;
+   result = {lerp(a.closec, b.closec, t), lerp(a.farc, b.farc, t),
+	     lerp(a.trackc, b.trackc, t), lerp(a.playerc, b.playerc, t),
+	     lerp(a.blockc, b.blockc, t), lerp(a.textc, b.textc, t)};
+   return result;
+}
+
+static
 void RenderBackground(GameState &state)
 {   
    glDisable(GL_DEPTH_TEST);
@@ -816,16 +829,39 @@ void RenderBackground(GameState &state)
    glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);   
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
+   
+   glUniform3fv(glGetUniformLocation(state.glState.backgroundProgram, "color1"),
+		1, state.renderer.worldColors.closec.e);
+   glUniform3fv(glGetUniformLocation(state.glState.backgroundProgram, "color2"),
+		1, state.renderer.worldColors.farc.e);
+
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glBindBuffer(GL_ARRAY_BUFFER, 0);
    glUseProgram(0);   
 }
 
+static B_INLINE
+void BeginChangeWorldColor(GameState &state)
+{
+   state.renderer.worldColorT = 0.0f;
+}
+
 static
 void BeginFrame(GameState &state)
 {
-   // glBindFramebuffer(GL_FRAMEBUFFER, state.renderer.fbo);
-
+   // calculate current world color pallette.
+   if(state.renderer.worldColorT < 120.0f)
+   {
+      state.renderer.worldColorT += (delta * 0.5f);
+      state.renderer.worldColors = Lerp(colorTable[state.sphereGuy.timesAccelerated - 1],
+					colorTable[state.sphereGuy.timesAccelerated],
+					state.renderer.worldColorT / 120.0f);
+   }
+   else
+   {
+      state.renderer.worldColors = colorTable[state.sphereGuy.timesAccelerated];
+   }
+   
    // @we really only need to clear the color of the secondary buffer, can we do this?
    glClear(GL_DEPTH_BUFFER_BIT);
    RenderBackground(state);
@@ -868,7 +904,7 @@ static B_INLINE
 void RenderBranch(DrawBranchCommand *command, Camera &camera, v3 lightPos, ProgramBase *program, MeshObject buffers = BranchTrack)
 {
    glUseProgram(DefaultShader.programHandle); // Should move program bindings to the queue :(
-   RenderObject(command->obj, buffers, &DefaultShader, camera.view, lightPos, NORMAL_COLOR);
+   RenderObject(command->obj, buffers, &DefaultShader, camera.view, lightPos, command->color);
 }
 
 static B_INLINE
@@ -1550,11 +1586,11 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
 	       if(state.tracks.adjList[i].flags & Attribute::lockedMask)
 	       {
 		  state.renderer.commands.PushBindProgram(&DefaultShader, allocator);
-		  state.renderer.commands.PushDrawLockedBranch(state.tracks.elements[i].renderable, LockedBranchTrack, allocator);
+		  state.renderer.commands.PushDrawLockedBranch(state.tracks.elements[i].renderable, state.renderer.worldColors.trackc, LockedBranchTrack, allocator);
 	       }
 	       else
 	       {
-		  state.renderer.commands.PushBranchInstance(state.tracks.elements[i].renderable, NORMAL_COLOR);
+		  state.renderer.commands.PushBranchInstance(state.tracks.elements[i].renderable, state.renderer.worldColors.trackc);
 	       }
 	    }
 	 }
@@ -1563,7 +1599,7 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
 	    BBox box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
 	    {	       
-	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, NORMAL_COLOR);
+	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, state.renderer.worldColors.trackc);
 	    }	    
 	 }	    
 	 else if(state.tracks.adjList[i].flags & Attribute::breaks)
@@ -1572,7 +1608,7 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
 	    if(BBoxFrustumTest(frustum, box))
 	    {
 	       Object &renderable = state.tracks.elements[i].renderable;
-	       state.renderer.commands.PushBreakInstance(state.tracks.elements[i].renderable, NORMAL_COLOR);
+	       state.renderer.commands.PushBreakInstance(state.tracks.elements[i].renderable, state.renderer.worldColors.trackc);
 	       // state.renderer.commands.PushDrawBreak(state.tracks.elements[i].renderable, allocator);
 
 	       v3 translation = (V3(renderable.worldPos.x, renderable.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, renderable.worldPos.z));

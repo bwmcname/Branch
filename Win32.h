@@ -109,6 +109,7 @@ typedef void (*glDeleteFramebuffers_t) (GLsizei, const GLuint *);
 typedef void (*glDeleteRenderbuffers_t) (GLsizei, const GLuint *);
 typedef void (*glDeleteProgram_t) (GLuint);
 
+
 wglChoosePixelFormatARB_t wglChoosePixelFormatARB;
 glCreateProgram_t glCreateProgram;
 glCreateShader_t glCreateShader;

@@ -290,7 +290,7 @@ struct GameState
    u32 maxDistance;
 
    u32 framerate;
-
+   
    enum
    {
       START,

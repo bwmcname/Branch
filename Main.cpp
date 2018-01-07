@@ -7,7 +7,7 @@
  * Camera update
  * Player update
  *
- * This source file implements two central functions
+ * This source file implements two important functions
  * GameInit
  * GameLoop
  * 
@@ -753,76 +753,6 @@ void FillGraph(NewTrackGraph &graph)
       DEBUG_DO(graph.VerifyGraph());
       DEBUG_DO(graph.VerifyIDTables());
    }
-
-   // check all new branches, if any of them have linear tracks on both sides, make one side speedups.
-   // only do 1/2, so that tracks can form around the latest created branches
-   /*
-   i32 length = graph.newBranches.size >> 1;
-   for(i32 i = 0; i < length; ++i)
-   {
-      u16 virt = graph.newBranches.Pop();
-      u16 actual = graph.GetActualID(virt);
-
-      if(graph.adjList[actual].hasLeft() && graph.adjList[actual].hasRight())
-      {
-	 u16 leftActual = graph.GetActualID(graph.adjList[actual].leftEdge());
-	 u16 rightActual = graph.GetActualID(graph.adjList[actual].rightEdge());
-
-	 if(graph.adjList[leftActual].flags & Attribute::linear &&
-	    graph.adjList[rightActual].flags & Attribute::linear)
-	 {
-	    i32 side = rand() & 1;
-	    u16 speedupActual;
-
-	    if(side == 0)
-	    {
-	       speedupActual = leftActual;
-	    }
-	    else
-	    {
-	       speedupActual = rightActual;
-	    }	    
-	    
-	    do
-	    {
-	       if(graph.adjList[speedupActual].ancestorCount > 1) break;
-
-	       // change the track from a linear track to a speeduptrack
-	       graph.adjList[speedupActual].flags &= ~Attribute::linear;
-	       graph.adjList[speedupActual].flags |= Attribute::speedup;
-	       side = 0; // make side to left since all linear tracks only have a left child
-	       speedupActual = graph.GetActualID(graph.adjList[speedupActual].edges[0]);
-	    } while(graph.adjList[speedupActual].flags & Attribute::linear);
-	 }	 
-      }
-      else
-      {
-	 // children of branch haven't been generated yet, take care of later
-	 graph.newBranches.Push(virt);
-      }      
-   }
-   
-
-   // Fill out speedup tracks
-   // @SLOW
-   for(u32 i = 0; i < graph.capacity; ++i)
-   {
-      if(graph.adjList[i].flags & Attribute::linear)
-      {
-	 for(u16 j = 0; j < graph.adjList[i].ancestorCount; ++i)
-	 {
-	    u16 ancestorID = graph.adjList[i].ancestors[j];
-	    u16 ancestorActual = graph.GetActualID(ancestorID);
-	    if(graph.adjList[ancestorActual].flags & Attribute::speedup)
-	    {
-	       graph.adjList[i].flags &= ~Attribute::linear;
-	       graph.adjList[i].flags |= Attribute::speedup;
-	       break;
-	    }
-	 }
-      }
-   }
-   */
 }
 
 void NewSetReachable(NewTrackGraph &graph, StackAllocator &allocator, u16 start)
@@ -1071,15 +1001,16 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
    // if the player has just left the current track
    if(player.t > 1.0f)
    {
-      if(player.timesAccelerated < 4)
+      if(player.timesAccelerated < 2)
       {
 	 ++player.tracksTraversedSinceLastAcceleration;
 
-	 if(player.tracksTraversedSinceLastAcceleration >= 250)
+	 if(player.tracksTraversedSinceLastAcceleration >= 300)
 	 {
 	    player.tracksTraversedSinceLastAcceleration = 0;
-	    player.velocity += 0.025f;
+	    player.velocity += 0.004f;
 	    ++player.timesAccelerated;
+	    BeginChangeWorldColor(state);
 	 }
       }
 
@@ -1129,15 +1060,9 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 void UpdateCamera(Camera &camera, Player &player, NewTrackGraph &graph)
 {
    v3 playerPosition = player.renderable.worldPos;
-
-   float maxFrom = 13.0f;
-   float from = min(abs(playerPosition.x - camera.position.x), maxFrom);
-
-   if(from > 0.0f) {
-      camera.position.x = lerp(camera.position.x, playerPosition.x, (from / (2.0f * maxFrom)) * delta);
-   }
-
+   camera.position.x = lerp(camera.position.x, playerPosition.x, delta * 0.1f);
    camera.position.y = playerPosition.y + camera.distanceFromPlayer;
+   camera.UpdateView();
 }
 
 static B_INLINE
@@ -1286,6 +1211,14 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    {
       state.maxDistance = 0;
    }
+
+   colorTable[0] = {V3(1.0f, 0.0f, 0.0f), V3(0.0f, 0.0f, 0.0f),
+		    V3(0.0f, 0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f),
+		    V3(1.0f, 0.0f, 0.0f), V3(0.0f, 1.0f, 0.0f)};
+   colorTable[1] = {V3(0.0f, 0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f),
+		    V3(1.0f, 1.0f, 1.0f), V3(1.0f, 0.0f, 0.0f),
+		    V3(0.0f, 0.0f, 1.0f), V3(0.0f, 1.0f, 0.0f)};
+   colorTable[2] = colorTable[0];
 }
 
 template <typename int_type> static B_INLINE
@@ -1581,25 +1514,12 @@ void GameLoop(GameState &state)
 	 u64 passed = 0;
 	 READ_TIME(passed);
 
-	 static float time = 0.0f;
-	 time += delta * 0.1f;
-
-	 state.lightPos = V3(state.sphereGuy.renderable.worldPos.x, state.sphereGuy.renderable.worldPos.y, 5 + smoothstep(0.0f, 1.0f, sinf(time)));
-	 Object lightRenderable;
-	 lightRenderable.worldPos = state.lightPos;
-	 lightRenderable.scale = V3(0.3f, 0.3f, 0.3f);
-	 lightRenderable.orientation = {0};   
+	 state.lightPos = state.sphereGuy.renderable.worldPos + V3(0.0f, 0.0f, 5.0f);
 
 	 // @TODO This should be inserted into the render queue instead of being drawn immediately.
 	 glUseProgram(DefaultShader.programHandle); 
-	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));   
+	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
 
-	 glUseProgram(SuperBrightProgram.programHandle); 
-	 RenderObject(lightRenderable, state.sphereGuy.mesh, &SuperBrightProgram, state.camera.view, state.lightPos, V3(0.5f, 0.5f, 0.5f));
-	 glUseProgram(0);   
-
-	 LOG_WRITE("Main Loop time: %llu", passed);
-	    
       }break;
 
       case GameState::PAUSE:
@@ -1686,16 +1606,13 @@ void GameLoop(GameState &state)
 	 END_TIME();
 	 u64 passed = 0;
 	 READ_TIME(passed);
-	 LOG_WRITE("Start menu tiem: %llu", passed);
       }break;
       
       default:
       {
 	 B_ASSERT(!"invalid state");
       }
-   }   
-
-   state.camera.UpdateView();
+   }
 
    state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.glState.bitmapFont, state.bitmapFontProgram, state.renderer, (StackAllocator *)state.mainArena.base, state.glState);
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
