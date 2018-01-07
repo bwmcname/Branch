@@ -965,9 +965,9 @@ void ResetPlayer(Player &player)
 {
    player.trackIndex = 0;
    player.t = 0.0f;
-   player.velocity = 0.25f;
+   player.velocity = 0.3f;
    player.forceDirection = 0;
-   player.tracksTraversedSinceLastAcceleration = 0;
+   player.tracksTraversedSequence = 0;
    player.timesAccelerated = 0;
 }
 
@@ -993,7 +993,7 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
    player.animation.t += delta;
    float scale = ((sinf(player.animation.t * 0.3f) + 1.0f) * 0.2f) + 0.7f;
    player.renderable.scale = V3(scale, scale, scale);
-
+   
    if(!state.paused)
    {
       player.t += player.velocity * delta;
@@ -1001,18 +1001,20 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
    // if the player has just left the current track
    if(player.t > 1.0f)
    {
-      if(player.timesAccelerated < 2)
-      {
-	 ++player.tracksTraversedSinceLastAcceleration;
+      ++player.tracksTraversedSequence;
 
-	 if(player.tracksTraversedSinceLastAcceleration >= 300)
+      if(player.tracksTraversedSequence >= 300)
+      {
+	 if(player.timesAccelerated < 2)
 	 {
-	    player.tracksTraversedSinceLastAcceleration = 0;
 	    player.velocity += 0.004f;
 	    ++player.timesAccelerated;
-	    BeginChangeWorldColor(state);
 	 }
+
+	 player.tracksTraversedSequence = 0;
+	 BeginChangeWorldColor(state);
       }
+   
 
       player.t -= 1.0f;
 
@@ -1087,10 +1089,10 @@ Player InitPlayer()
 			Quat(1.0f, 0.0f, 0.0f, 0.0f)};
 
    result.mesh = Sphere;
-   result.velocity = 0.25f;
+   result.velocity = 0.3f;
    result.t = 0.0f;   
    result.trackIndex = 0;
-   result.tracksTraversedSinceLastAcceleration = 0;
+   result.tracksTraversedSequence = 0;
    result.timesAccelerated = 0;
 
    result.forceDirection = 0;
@@ -1150,6 +1152,34 @@ u32 GetMaxDistanceFromFile(u8 *fileBuffer)
    return *((u32 *)(fileBuffer + 6));
 }
 
+#ifdef DEBUG
+
+#pragma warning(push, 0)
+#define STB_IMAGE_IMPLEMENTATION
+#include "libs/stb_image.h"
+#pragma warning(pop)
+
+WorldPallette QuickLoadPalette(char *name)
+{
+   int x, y, channels;
+   u8 *data = stbi_load(name, &x, &y, &channels, 3);
+
+   WorldPallette result;
+   float *floatArr = (float *)&result;
+
+   // 18 floats in 6 color
+   for(i32 i = 0; i < 18; ++i)
+   {
+      floatArr[i] = (float)data[i] / 255.0f;
+   }
+
+   stbi_image_free((void *)data);
+
+   return result;
+}
+#endif
+
+
 void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
 {
    INIT_LOG();
@@ -1160,7 +1190,27 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    InitStackAllocator((StackAllocator *)state.mainArena.base);
    StackAllocator *stack = (StackAllocator *)state.mainArena.base;
    
-   state.assetManager.Init(stack);   
+   state.assetManager.Init(stack);
+
+   #if !defined(DEBUG) || defined(ANDROID_BUILD)
+   colorTable[0] = {V3(1.0f, 0.0f, 0.0f), V3(0.0f, 0.0f, 0.0f),
+		    V3(0.0f, 0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f),
+		    V3(1.0f, 0.0f, 0.0f), V3(0.0f, 1.0f, 0.0f)};
+   colorTable[1] = {V3(0.0f, 0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f),
+		    V3(0.0f, 0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f),
+		    V3(0.839f, 0.149f, 1.0f), V3(0.0f, 0.0f, 0.0f)};
+   colorTable[2] = {V3(0.239f, 0.522f, 0.012f), V3(0.0f, 0.0f, 0.0f),
+		    V3(0.0f, 0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f),
+		    V3(0.867f, 0.706f, 0.0f), V3(1.0f, 1.0f, 1.0f)};
+   colorTable[3] = {V3(0.447f, 0.129f, 0.435f), V3(0.169f, 0.667f, 0.227f),
+		    V3(0.0f, 0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f),
+		    V3(1.0f, 1.0f, 0.0f), V3(0.0f, 1.0f, 0.0f)};
+   colorTable[4] = {V3(0.384f, 0.0f, 0.482f), V3(0.851f, 0.627f, 0.906f),
+		    V3(0.0f, 0.0f, 0.0f), V3(1.0f, 0.0f, 0.518f),
+		    V3(1.0f, 0.0f, 0.518f), V3(0.0f, 0.0f, 0.0f)};
+#else
+   colorTable[0] = colorTable[1] = colorTable[2] = QuickLoadPalette("temppalette1.png");
+#endif
 
    state.renderer = InitRenderState(stack, state.assetManager);
    Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
@@ -1211,14 +1261,6 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    {
       state.maxDistance = 0;
    }
-
-   colorTable[0] = {V3(1.0f, 0.0f, 0.0f), V3(0.0f, 0.0f, 0.0f),
-		    V3(0.0f, 0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f),
-		    V3(1.0f, 0.0f, 0.0f), V3(0.0f, 1.0f, 0.0f)};
-   colorTable[1] = {V3(0.0f, 0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f),
-		    V3(1.0f, 1.0f, 1.0f), V3(1.0f, 0.0f, 0.0f),
-		    V3(0.0f, 0.0f, 1.0f), V3(0.0f, 1.0f, 0.0f)};
-   colorTable[2] = colorTable[0];
 }
 
 template <typename int_type> static B_INLINE
@@ -1426,7 +1468,7 @@ void PushMaxDistanceDisplay(GameState &state, v2 location)
    static char best[32];
    sprintf(best, "Best %i", state.maxDistance);
    size_t length = strlen(best);
-   state.renderer.commands.PushRenderText(best, (u32)length, location, V2(0.5f, 0.5f), V3(1.0f, 1.0f, 1.0f), ((StackAllocator *)state.mainArena.base));	 
+   state.renderer.commands.PushRenderText(best, (u32)length, location, V2(0.5f, 0.5f), state.renderer.currentColors.textc, ((StackAllocator *)state.mainArena.base));
 }
 
 static B_INLINE
@@ -1435,7 +1477,7 @@ void PushCurrentDistanceDisplay(GameState &state, v2 location)
    static char print_string[32];
    i32 print_string_count = 0;
    print_string_count = IntToString((char *)print_string, (u32)state.sphereGuy.renderable.worldPos.y / 10);
-   state.renderer.commands.PushRenderText(print_string, print_string_count, location, V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));   
+   state.renderer.commands.PushRenderText(print_string, print_string_count, location, V2(0.0f, 0.0f), state.renderer.currentColors.textc, ((StackAllocator *)state.mainArena.base));   
 }
 
 #ifdef DEBUG
@@ -1458,7 +1500,7 @@ void PushFramerate(GameState &state, v2 location)
    */
    
    // framerate
-   state.renderer.commands.PushRenderText(framerate, framerate_string_count, location, V2(0.0f, 0.0f), V3(1.0f, 0.0f, 0.0f), ((StackAllocator *)state.mainArena.base));
+   state.renderer.commands.PushRenderText(framerate, framerate_string_count, location, V2(0.0f, 0.0f), state.renderer.currentColors.textc, ((StackAllocator *)state.mainArena.base));
 }
 #define DebugPushFramerate(state, location) PushFramerate(state, location)
 #else
@@ -1487,7 +1529,7 @@ void GameLoop(GameState &state)
 	    // AutoPlay(state);
 	    #endif
 	    TracksProcessInput(state);
-
+	    
 	    if(state.tracks.flags & NewTrackGraph::switching)
 	    {
 	       state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
@@ -1517,8 +1559,9 @@ void GameLoop(GameState &state)
 	 state.lightPos = state.sphereGuy.renderable.worldPos + V3(0.0f, 0.0f, 5.0f);
 
 	 // @TODO This should be inserted into the render queue instead of being drawn immediately.
-	 glUseProgram(DefaultShader.programHandle); 
-	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+	 glUseProgram(DefaultShader.programHandle);
+	 // glUniform3fv(glGetUniformLocation(DefaultShader.programHandle, "color"), 1, state.renderer.worldColors.playerc.e);
+	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, state.renderer.currentColors.playerc);
 
       }break;
 
@@ -1526,8 +1569,9 @@ void GameLoop(GameState &state)
       {
 	 DEBUG_CONTROL_CAMERA(state);
 
-	 glUseProgram(DefaultShader.programHandle); 
-	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, V3(1.0f, 0.0f, 0.0f));
+	 glUseProgram(DefaultShader.programHandle);
+	 // glUniform3fv(glGetUniformLocation(DefaultShader.programHandle, "color"), 1, state.renderer.worldColors.playerc.e);
+	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, state.renderer.currentColors.playerc);
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
 
 	 v2 button_pos = V2(0.0f, 0.0f);
@@ -1552,6 +1596,7 @@ void GameLoop(GameState &state)
 	 if(ButtonUpdate(V2(0.0f, 0.0f), button_area, state.input) == Clicked)
 	 {
 	    ResetPlayer(state.sphereGuy);
+	    ResetRenderer(state.renderer);
 	    state.camera.position.y = state.sphereGuy.renderable.worldPos.y - 10.0f;
 	    state.camera.position.x = 0.0f;
 
@@ -1596,6 +1641,7 @@ void GameLoop(GameState &state)
 					    -1, 1);
 
 	    GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
+	    
 	 }
 
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);

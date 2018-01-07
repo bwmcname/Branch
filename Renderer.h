@@ -176,7 +176,8 @@ struct CommandState
 			     InstanceBuffers buffers);
    void RenderBreakTextureInstances(StackAllocator *allocator, m4 &view,
 				    u32 instanceCount, TextureInstance *instance,
-				    GLuint texture, TextureInstanceBuffers buffers);
+				    GLuint texture, TextureInstanceBuffers buffers,
+				    v3 color);
    inline void PushDrawSpeedup(Object obj, StackAllocator *allocator);
    inline void PushDrawBranch(Object obj, v3 color, StackAllocator *allocator);
    inline void PushDrawLockedBranch(Object obj, v3 color, MeshObject *buffers, StackAllocator *allocator);
@@ -198,12 +199,14 @@ struct WorldPallette
    v3 textc;
 };
 
-static WorldPallette colorTable[3];
+static WorldPallette colorTable[5];
 
 struct RenderState
 {
    float worldColorT;
-   WorldPallette worldColors;
+   WorldPallette lastColors;
+   WorldPallette currentColors;
+   WorldPallette targetColors;
    CommandState commands;
 };
 

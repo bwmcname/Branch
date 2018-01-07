@@ -244,7 +244,7 @@ struct Player
 
    Object renderable;
    u16 trackIndex;
-   u16 tracksTraversedSinceLastAcceleration;
+   u16 tracksTraversedSequence;
    u16 timesAccelerated;
    float t;
    float velocity;

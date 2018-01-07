@@ -726,6 +726,13 @@ TextProgram LoadFilesAndCreateTextProgram(char *vertex, char *fragment, StackAll
    return result;
 }
 
+static void
+ResetRenderer(RenderState &state)
+{
+   state.worldColorT = 1000000.0f; // doesn't matter what number, just needs to be height
+   state.currentColors = colorTable[rand() % (sizeof(colorTable) / sizeof(WorldPallette))];
+}
+
 static
 RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
 {
@@ -734,6 +741,8 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
    LOG_WRITE("WIDTH: %d, HEIGHT: %d", SCREEN_WIDTH, SCREEN_HEIGHT);
    result.commands = InitCommandState(stack);
    result.worldColorT = 1000000.0f; // doesn't matter what number, just needs to be height
+   result.targetColors = colorTable[rand() % (sizeof(colorTable) / sizeof(WorldPallette))];
+   result.currentColors = result.targetColors;
    
    return result;
 }
@@ -831,9 +840,9 @@ void RenderBackground(GameState &state)
 
    
    glUniform3fv(glGetUniformLocation(state.glState.backgroundProgram, "color1"),
-		1, state.renderer.worldColors.closec.e);
+		1, state.renderer.currentColors.closec.e);
    glUniform3fv(glGetUniformLocation(state.glState.backgroundProgram, "color2"),
-		1, state.renderer.worldColors.farc.e);
+		1, state.renderer.currentColors.farc.e);
 
    glDrawArrays(GL_TRIANGLES, 0, RectangleAttribCount);
    glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -844,6 +853,8 @@ static B_INLINE
 void BeginChangeWorldColor(GameState &state)
 {
    state.renderer.worldColorT = 0.0f;
+   state.renderer.lastColors = state.renderer.currentColors;
+   state.renderer.targetColors = colorTable[rand() % (sizeof(colorTable) / sizeof(WorldPallette))];
 }
 
 static
@@ -853,13 +864,13 @@ void BeginFrame(GameState &state)
    if(state.renderer.worldColorT < 120.0f)
    {
       state.renderer.worldColorT += (delta * 0.5f);
-      state.renderer.worldColors = Lerp(colorTable[state.sphereGuy.timesAccelerated - 1],
-					colorTable[state.sphereGuy.timesAccelerated],
+      state.renderer.currentColors = Lerp(state.renderer.lastColors,
+				        state.renderer.targetColors,
 					state.renderer.worldColorT / 120.0f);
    }
    else
    {
-      state.renderer.worldColors = colorTable[state.sphereGuy.timesAccelerated];
+      state.renderer.currentColors = state.renderer.targetColors;
    }
    
    // @we really only need to clear the color of the secondary buffer, can we do this?
@@ -1018,7 +1029,7 @@ void RenderTexture(GLuint texture, ShaderProgram &program)
 }
 
 static
-void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, TextProgram &p, StackAllocator *allocator)
+void RenderText_stb(char *string, u32 count, v3 color, float x, float y, stbFont &font, TextProgram &p, StackAllocator *allocator)
 {
    float width = 0;
 
@@ -1042,6 +1053,8 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
    glBindVertexArray(textVao);
    glBindBuffer(GL_ARRAY_BUFFER, textUVVbo);
    glUseProgram(p.programHandle);
+
+   glUniform3fv(glGetUniformLocation(p.programHandle, "color"), 1, color.e);
 
    glActiveTexture(GL_TEXTURE0);
    glBindTexture(GL_TEXTURE_2D, font.textureHandle);
@@ -1092,7 +1105,7 @@ void RenderText_stb(char *string, u32 count, float x, float y, stbFont &font, Te
 static
 void RenderText(DrawTextCommand *command, stbFont &font, TextProgram &p, StackAllocator *allocator)
 {
-   RenderText_stb(command->GetString(), command->numChars, command->position.x, command->position.y, font, p, allocator);
+   RenderText_stb(command->GetString(), command->numChars, command->color, command->position.x, command->position.y, font, p, allocator);
 }
 
 static
@@ -1427,7 +1440,8 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font,
 	 {
 	    RenderBreakTextureInstances(allocator, camera.view,
 					breakTextureInstanceCount, breakTextureInstances,
-					glState.blockTex, glState.breakTextureInstanceBuffers);
+					glState.blockTex, glState.breakTextureInstanceBuffers,
+					renderer.currentColors.blockc);
 	 }break;
 
 	 case BindProgram:
@@ -1471,9 +1485,11 @@ CommandState::ExecuteCommands(Camera &camera, v3 lightPos, stbFont &font,
 void
 CommandState::RenderBreakTextureInstances(StackAllocator *allocator, m4 &view,
 					  u32 instanceCount, TextureInstance *instances,
-					  GLuint texture, TextureInstanceBuffers buffers)
+					  GLuint texture, TextureInstanceBuffers buffers,
+					  v3 color)
 {
    glUseProgram(BreakBlockProgram.programHandle);
+   glUniform3fv(glGetUniformLocation(BreakBlockProgram.programHandle, "color"), 1, color.e);
 
    m4 *MVPs = (m4 *)allocator->push(sizeof(m4) * instanceCount);
 
@@ -1586,11 +1602,11 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
 	       if(state.tracks.adjList[i].flags & Attribute::lockedMask)
 	       {
 		  state.renderer.commands.PushBindProgram(&DefaultShader, allocator);
-		  state.renderer.commands.PushDrawLockedBranch(state.tracks.elements[i].renderable, state.renderer.worldColors.trackc, LockedBranchTrack, allocator);
+		  state.renderer.commands.PushDrawLockedBranch(state.tracks.elements[i].renderable, state.renderer.currentColors.trackc, LockedBranchTrack, allocator);
 	       }
 	       else
 	       {
-		  state.renderer.commands.PushBranchInstance(state.tracks.elements[i].renderable, state.renderer.worldColors.trackc);
+		  state.renderer.commands.PushBranchInstance(state.tracks.elements[i].renderable, state.renderer.currentColors.trackc);
 	       }
 	    }
 	 }
@@ -1599,7 +1615,7 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
 	    BBox box = LinearBBox(state.tracks.elements[i].renderable.worldPos);
 	    if(BBoxFrustumTest(frustum, box))
 	    {	       
-	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, state.renderer.worldColors.trackc);
+	       state.renderer.commands.PushLinearInstance(state.tracks.elements[i].renderable, state.renderer.currentColors.trackc);
 	    }	    
 	 }	    
 	 else if(state.tracks.adjList[i].flags & Attribute::breaks)
@@ -1608,7 +1624,7 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
 	    if(BBoxFrustumTest(frustum, box))
 	    {
 	       Object &renderable = state.tracks.elements[i].renderable;
-	       state.renderer.commands.PushBreakInstance(state.tracks.elements[i].renderable, state.renderer.worldColors.trackc);
+	       state.renderer.commands.PushBreakInstance(state.tracks.elements[i].renderable, state.renderer.currentColors.trackc);
 	       // state.renderer.commands.PushDrawBreak(state.tracks.elements[i].renderable, allocator);
 
 	       v3 translation = (V3(renderable.worldPos.x, renderable.worldPos.y + 0.5f * TRACK_SEGMENT_SIZE, renderable.worldPos.z));
