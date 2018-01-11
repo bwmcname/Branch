@@ -465,6 +465,8 @@ int CALLBACK WinMain(HINSTANCE Instance,
    GameState state;
    state.input = {};
    GameInit(state, 0, 0);
+   LoadGLState(state, (StackAllocator *)state.mainArena.base, state.assetManager);
+   // CreateProjection();
    
    MSG Message = {};
 

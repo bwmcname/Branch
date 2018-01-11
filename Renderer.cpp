@@ -738,7 +738,6 @@ RenderState InitRenderState(StackAllocator *stack, AssetManager &assetManager)
 {
    RenderState result;      
 
-   LOG_WRITE("WIDTH: %d, HEIGHT: %d", SCREEN_WIDTH, SCREEN_HEIGHT);
    result.commands = InitCommandState(stack);
    result.worldColorT = 1000000.0f; // doesn't matter what number, just needs to be height
    result.targetColors = colorTable[rand() % (sizeof(colorTable) / sizeof(WorldPallette))];
@@ -837,7 +836,6 @@ void RenderBackground(GameState &state)
    glEnableVertexAttribArray(VERTEX_LOCATION);
    glBindBuffer(GL_ARRAY_BUFFER, ScreenVertBuffer);   
    glVertexAttribPointer(VERTEX_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
    
    glUniform3fv(glGetUniformLocation(state.glState.backgroundProgram, "color1"),
 		1, state.renderer.currentColors.closec.e);
@@ -1271,7 +1269,7 @@ MeshObject AllocateMeshObject(i32 vertexCount, StackAllocator *allocator)
    result.mesh.vertices = (float *)allocator->push(sizeof(v3) * vertexCount);
    result.mesh.normals = (v3 *)allocator->push(sizeof(v3) * vertexCount);
 
-   result.handles = AllocateMeshBuffers(result.mesh.vcount, 3);
+   // result.handles = AllocateMeshBuffers(result.mesh.vcount, 3);
    // allocator->pop();
    // allocator->pop();
    return result;
@@ -1292,7 +1290,7 @@ MeshObject InitMeshObject(u8 *buffer, StackAllocator *allocator)
 
    MeshBuffers handles = UploadStaticMesh(mesh.vertices, mesh.normals, mesh.vcount, 3);
    allocator->pop(); // pop normals
-   allocator->pop(); // pop file
+   allocator->pop();
 
    MeshObject result;
    result.mesh = mesh;

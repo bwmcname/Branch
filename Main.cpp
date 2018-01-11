@@ -1179,6 +1179,13 @@ WorldPallette QuickLoadPalette(char *name)
 }
 #endif
 
+// Pulled out of GameInit because Android doesn't give you the dimensions of the screen until
+// NATIVEWINDOWCREATED
+void CreateProjection()
+{
+   Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
+   InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
+}
 
 void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
 {
@@ -1212,10 +1219,9 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    colorTable[0] = colorTable[1] = colorTable[2] = QuickLoadPalette("temppalette1.png");
 #endif
 
+   CreateProjection();
    state.renderer = InitRenderState(stack, state.assetManager);
-   Projection = Projection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 100.0f, 60.0f);
-   InfiniteProjection = InfiniteProjection3D(SCREEN_WIDTH, SCREEN_HEIGHT, 0.01f, 80.0f);
-
+   
    B_ASSERT(state.mainArena.base);
    srand((u32)bclock());   
 
@@ -1237,7 +1243,11 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
    state.sphereGuy = InitPlayer();
    FillGraph(state.tracks);
 
-   LoadGLState(state, stack, state.assetManager);
+   LinearTrack = AllocateMeshObject(80 * 3, stack);
+   BranchTrack = AllocateMeshObject(80 * 3, stack);
+   BreakTrack = AllocateMeshObject(80 * 3, stack);
+   LeftBranchTrack = AllocateMeshObject(80 * 3, stack);
+   RightBranchTrack = AllocateMeshObject(80 * 3, stack);  
 
    state.paused = false;
    

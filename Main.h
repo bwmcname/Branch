@@ -363,5 +363,6 @@ void AllocateTrackGraphBuffers(NewTrackGraph &g, StackAllocator *allocator);
 void GameLoop(GameState &state);
 void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize);
 void GameEnd(GameState &state);
+void CreateProjection();
 RebuildState *SaveState(GameState *state);
 B_INLINE v2 ScreenToClip(v2i input);

@@ -75,7 +75,10 @@ struct AndroidState
    EGLContext context;
    AInputQueue *iQueue;
    sem_t savingStateSem;
+   sem_t sleepingSem; // rendering/game thread waits on this once app loses focus.
 
    size_t savedStateSize;
    RebuildState *savedState;
+   bool started;
+   int hasFocus;
 };

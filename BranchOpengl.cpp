@@ -189,12 +189,6 @@ stbFont InitFont_stb(Asset font, StackAllocator *allocator)
 
 void LoadGLState(GameState &state, StackAllocator *stack, AssetManager &assetManager)
 {
-   LinearTrack = AllocateMeshObject(80 * 3, stack);
-   BranchTrack = AllocateMeshObject(80 * 3, stack);
-   BreakTrack = AllocateMeshObject(80 * 3, stack);
-   LeftBranchTrack = AllocateMeshObject(80 * 3, stack);
-   RightBranchTrack = AllocateMeshObject(80 * 3, stack);
-
    glEnable(GL_BLEND);
    glEnable(GL_DEPTH_TEST);
 
@@ -203,69 +197,82 @@ void LoadGLState(GameState &state, StackAllocator *stack, AssetManager &assetMan
 
    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+   LinearTrack.handles = AllocateMeshBuffers(LinearTrack.mesh.vcount, 3);
+   BranchTrack.handles = AllocateMeshBuffers(BranchTrack.mesh.vcount, 3);
+   BreakTrack.handles = AllocateMeshBuffers(BreakTrack.mesh.vcount, 3);
+   LeftBranchTrack.handles = AllocateMeshBuffers(LeftBranchTrack.mesh.vcount, 3);
+   RightBranchTrack.handles = AllocateMeshBuffers(RightBranchTrack.mesh.vcount, 3);
+
    Asset &defaultVert = state.assetManager.LoadStacked(AssetHeader::default_vert_ID);
    Asset &defaultFrag = state.assetManager.LoadStacked(AssetHeader::default_frag_ID);
    DefaultShader = CreateProgramFromAssets(defaultVert, defaultFrag);
-
    state.assetManager.PopStacked(AssetHeader::default_frag_ID);
    state.assetManager.PopStacked(AssetHeader::default_vert_ID);
 
    Asset &defaultInstancedVirt = state.assetManager.LoadStacked(AssetHeader::Default_Instance_vert_ID);
    Asset &defaultInstancedFrag = state.assetManager.LoadStacked(AssetHeader::Default_Instance_frag_ID);
    DefaultInstanced = CreateProgramFromAssets(defaultInstancedVirt, defaultInstancedFrag);
-
    state.assetManager.PopStacked(AssetHeader::Default_Instance_frag_ID);
    state.assetManager.PopStacked(AssetHeader::Default_Instance_vert_ID);
 
    state.fontProgram = CreateTextProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::text_vert_ID),
-						   state.assetManager.LoadStacked(AssetHeader::text_frag_ID));      
+						   state.assetManager.LoadStacked(AssetHeader::text_frag_ID));
+   state.assetManager.PopStacked(AssetHeader::text_vert_ID);
+   state.assetManager.PopStacked(AssetHeader::text_frag_ID);
 
    state.bitmapFontProgram = CreateTextProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::bitmap_font_vert_ID),
 							 state.assetManager.LoadStacked(AssetHeader::bitmap_font_frag_ID));   
+   state.assetManager.PopStacked(AssetHeader::bitmap_font_vert_ID);
+   state.assetManager.PopStacked(AssetHeader::bitmap_font_frag_ID);
 
    BreakBlockProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::BreakerBlock_vert_ID),
 					       state.assetManager.LoadStacked(AssetHeader::BreakerBlock_frag_ID));   
-   
+   state.assetManager.PopStacked(AssetHeader::BreakerBlock_frag_ID);
+   state.assetManager.PopStacked(AssetHeader::BreakerBlock_vert_ID);
+
    ButtonProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Button_vert_ID),
 					   state.assetManager.LoadStacked(AssetHeader::Button_frag_ID));
-
-   SuperBrightProgram = CreateProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Emissive_vert_ID),
-						state.assetManager.LoadStacked(AssetHeader::Emissive_frag_ID));
+   state.assetManager.PopStacked(AssetHeader::Button_frag_ID);
+   state.assetManager.PopStacked(AssetHeader::Button_vert_ID);
 
    Branch_Image_Header *breakHeader = (Branch_Image_Header *)state.assetManager.LoadStacked(AssetHeader::Block_ID).mem;
    state.glState.blockTex = LoadImageIntoTexture(breakHeader);
-   // stack->pop();
+   state.assetManager.PopStacked(AssetHeader::Block_ID);
 
    Branch_Image_Header *guiTextureMap = (Branch_Image_Header *)state.assetManager.LoadStacked(AssetHeader::GUIMap_ID).mem;
    state.glState.guiTextureMap = LoadImageIntoTexture(guiTextureMap);
-   // stack->pop();
+   state.assetManager.PopStacked(AssetHeader::GUIMap_ID);
 
    state.glState.startButtonVbo = UploadVertices((float *)GUIMap::GoSign_box_uvs, 6, 2);
    state.glState.playButtonVbo = UploadVertices((float *)GUIMap::play_box_uvs, 6, 2);
    state.glState.pauseButtonVbo = UploadVertices((float *)GUIMap::pause_box_uvs, 6, 2);
 
    state.glState.backgroundProgram = CreateSimpleProgramFromAssets(state.assetManager.LoadStacked(AssetHeader::Background_vert_ID),
-							   state.assetManager.LoadStacked(AssetHeader::Background_frag_ID));
+								   state.assetManager.LoadStacked(AssetHeader::Background_frag_ID));
 
-   // stack->pop();
-   // stack->pop();
+   state.assetManager.PopStacked(AssetHeader::Background_frag_ID);
+   state.assetManager.PopStacked(AssetHeader::Background_vert_ID);
 
    if(SCREEN_HEIGHT >= 1920)
    {
       state.glState.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::roboto64_ID), stack);
+      // state.assetManager.PopStacked(AssetHeader::roboto64_ID);
    }
    else if(SCREEN_HEIGHT >= 1080)
    {
       state.glState.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::roboto32_ID), stack);
+      // state.assetManager.PopStacked(AssetHeader::roboto32_ID);
    }
    else
    {
       state.glState.bitmapFont = InitFont_stb(state.assetManager.LoadStacked(AssetHeader::roboto16_ID), stack);
+      // state.assetManager.PopStacked(AssetHeader::roboto16_ID);
    }
    
 
    Sphere = InitMeshObject(state.assetManager.LoadStacked(AssetHeader::sphere_ID).mem, stack);
    state.sphereGuy.mesh = Sphere;
+   state.assetManager.PopStacked(AssetHeader::sphere_ID);
 
    RectangleUVBuffer = UploadVertices(RectangleUVs, 6, 2);
    RectangleVertBuffer = UploadVertices(RectangleVerts, 6, 2);

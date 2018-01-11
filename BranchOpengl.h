@@ -91,7 +91,6 @@ struct ShaderProgram : ProgramBase
 
 static ShaderProgram BreakBlockProgram;
 static ShaderProgram ButtonProgram;
-static ShaderProgram SuperBrightProgram;
 
 static const u32 RectangleAttribCount = 6;
 static GLuint RectangleUVBuffer;
