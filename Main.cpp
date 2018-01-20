@@ -16,30 +16,31 @@
 
 // Save the state of the application
 // needed for android.
+
 RebuildState *SaveState(GameState *state)
 {
    RebuildState *saving = (RebuildState *)malloc(sizeof(RebuildState));
 
    saving->camera = state->camera;
    saving->player = state->sphereGuy;
-   memcpy(saving->trackAttributes, state->tracks.adjList, sizeof(Attribute) * 1024);
-   memcpy(saving->tracks, state->tracks.elements, sizeof(Track) * 1024);
+   memcpy(saving->trackAttributes, state->tracks.adjList, sizeof(Attribute) * TRACK_COUNT);
+   memcpy(saving->tracks, state->tracks.elements, sizeof(Track) * TRACK_COUNT);
 
    saving->availableIDsBegin = state->tracks.availableIDs.begin;
    saving->availableIDsEnd = state->tracks.availableIDs.end;
    saving->availableIDsSize = state->tracks.availableIDs.size;
-   memcpy(saving->availableIDs, state->tracks.availableIDs.elements, sizeof(u16) * 1024);
+   memcpy(saving->availableIDs, state->tracks.availableIDs.elements, sizeof(u16) * TRACK_COUNT);
 
    saving->ordersBegin = state->tracks.orders.begin;
    saving->ordersEnd = state->tracks.orders.end;
    saving->ordersSize = state->tracks.orders.size;
-   memcpy(saving->orders, state->tracks.orders.elements, sizeof(NewTrackOrder) * 1024);
+   memcpy(saving->orders, state->tracks.orders.elements, sizeof(NewTrackOrder) * TRACK_COUNT);
 
-   memcpy(saving->takenElements, state->tracks.taken.e, sizeof(Element) * 1024);
+   memcpy(saving->takenElements, state->tracks.taken.e, sizeof(Element) * TRACK_COUNT);
    saving->takenSize = state->tracks.taken.size;
 
-   memcpy(saving->IDtable, state->tracks.IDtable, sizeof(u16) * 1024);
-   memcpy(saving->reverseIDtable, state->tracks.reverseIDtable, sizeof(u16) * 1024);
+   memcpy(saving->IDtable, state->tracks.IDtable, sizeof(u16) * TRACK_COUNT);
+   memcpy(saving->reverseIDtable, state->tracks.reverseIDtable, sizeof(u16) * TRACK_COUNT);
 
    saving->switchDelta = state->tracks.switchDelta;
    saving->beginLerp = state->tracks.beginLerp;
@@ -55,20 +56,20 @@ void ReloadState(RebuildState *saved, GameState &result)
 {
    result.camera = saved->camera;
    result.sphereGuy = saved->player;
-   memcpy(result.tracks.adjList, saved->trackAttributes, sizeof(Attribute) * 1024);
-   memcpy(result.tracks.elements, saved->tracks, sizeof(Track) * 1024);
+   memcpy(result.tracks.adjList, saved->trackAttributes, sizeof(Attribute) * TRACK_COUNT);
+   memcpy(result.tracks.elements, saved->tracks, sizeof(Track) * TRACK_COUNT);
 
    result.tracks.availableIDs.begin = saved->availableIDsBegin;
    result.tracks.availableIDs.end = saved->availableIDsEnd;
    result.tracks.availableIDs.size = saved->availableIDsSize;
-   result.tracks.availableIDs.max = 1024;
-   memcpy(result.tracks.availableIDs.elements, saved->availableIDs, sizeof(u16) * 1024);
+   result.tracks.availableIDs.max = TRACK_COUNT;
+   memcpy(result.tracks.availableIDs.elements, saved->availableIDs, sizeof(u16) * TRACK_COUNT);
 
    result.tracks.orders.begin = saved->ordersBegin;
    result.tracks.orders.end = saved->ordersEnd;
    result.tracks.orders.size = saved->ordersSize;
-   result.tracks.orders.max = 1024;
-   memcpy(result.tracks.orders.elements, saved->orders, sizeof(NewTrackOrder) * 1024);
+   result.tracks.orders.max = TRACK_COUNT;
+   memcpy(result.tracks.orders.elements, saved->orders, sizeof(NewTrackOrder) * TRACK_COUNT);
 
    // result.tracks.newBranches.begin = saved->newBranchesBegin;
    // result.tracks.newBranches.end = saved->newBranchesEnd;
@@ -76,11 +77,11 @@ void ReloadState(RebuildState *saved, GameState &result)
    // result.tracks.newBranches.max = 256;
    // memcpy(result.tracks.newBranches.elements, saved->newBranches, sizeof(u16) * 256);
 
-   memcpy(result.tracks.taken.e, saved->takenElements, sizeof(Element) * 1024);
+   memcpy(result.tracks.taken.e, saved->takenElements, sizeof(Element) * TRACK_COUNT);
    result.tracks.taken.size = saved->takenSize;
 
-   memcpy(result.tracks.IDtable, saved->IDtable, sizeof(u16) * 1024);
-   memcpy(result.tracks.reverseIDtable, saved->reverseIDtable, sizeof(u16) * 1024);
+   memcpy(result.tracks.IDtable, saved->IDtable, sizeof(u16) * TRACK_COUNT);
+   memcpy(result.tracks.reverseIDtable, saved->reverseIDtable, sizeof(u16) * TRACK_COUNT);
 
    result.tracks.switchDelta = saved->switchDelta;
    result.tracks.beginLerp = saved->beginLerp;
@@ -529,7 +530,7 @@ void StartTracks(NewTrackGraph &g)
    
    g.flags |= NewTrackGraph::left;
    
-   for(u16 i = (u16)count; i < g.capacity; ++i)
+   for(u16 i = (u16)count; i < TRACK_COUNT; ++i)
    {
       g.availableIDs.Push(i);
       g.IDtable[i] = i;
@@ -545,14 +546,14 @@ void StartTracks(NewTrackGraph &g)
 
 void AllocateTrackGraphBuffers(NewTrackGraph &g, StackAllocator *allocator)
 {
-   g.adjList = (Attribute *)allocator->push(sizeof(Attribute) * 1024);
-   g.availableIDs = InitCircularQueue<u16>(1024, allocator); //@ could be smaller?
-   g.orders = InitCircularQueue<NewTrackOrder>(1024, allocator); //@ could be smaller
+   g.adjList = (Attribute *)allocator->push(sizeof(Attribute) * TRACK_COUNT);
+   g.availableIDs = InitCircularQueue<u16>(TRACK_COUNT, allocator); //@ could be smaller?
+   g.orders = InitCircularQueue<NewTrackOrder>(TRACK_COUNT, allocator); //@ could be smaller
    // g.newBranches = InitCircularQueue<u16>(256, allocator);
-   g.taken = InitVirtualCoordHashTable(1024, allocator);
-   g.IDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
-   g.reverseIDtable = (u16 *)allocator->push(sizeof(u16) * 1024);
-   g.elements = (Track *)allocator->push(sizeof(Track) * 1024);
+   g.taken = InitVirtualCoordHashTable(TRACK_COUNT, allocator);
+   g.IDtable = (u16 *)allocator->push(sizeof(u16) * TRACK_COUNT);
+   g.reverseIDtable = (u16 *)allocator->push(sizeof(u16) * TRACK_COUNT);
+   g.elements = (Track *)allocator->push(sizeof(Track) * TRACK_COUNT);
 }
 
 NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
@@ -561,7 +562,7 @@ NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
 
    AllocateTrackGraphBuffers(g, allocator);
 
-   for(u32 i = 0; i < g.capacity; ++i)
+   for(u32 i = 0; i < TRACK_COUNT; ++i)
    {
       g.adjList[i] = {0, Attribute::unused, 0, 0, {}, {}};
    }
@@ -575,7 +576,7 @@ NewTrackGraph InitNewTrackGraph(StackAllocator *allocator)
 
 void ResetGraph(NewTrackGraph &g)
 {
-   for(u32 i = 0; i < g.capacity; ++i)
+   for(u32 i = 0; i < TRACK_COUNT; ++i)
    {
       g.adjList[i] = {0, Attribute::unused, 0, 0, {}, {}};
    }
@@ -757,7 +758,7 @@ void FillGraph(NewTrackGraph &graph)
 
 void NewSetReachable(NewTrackGraph &graph, StackAllocator &allocator, u16 start)
 {
-   u16 *stack = (u16 *)allocator.push(1024);
+   u16 *stack = (u16 *)allocator.push(TRACK_COUNT);
    u32 top = 1;
 
    stack[0] = graph.GetActualID(start);
@@ -790,12 +791,12 @@ void NewSetReachable(NewTrackGraph &graph, StackAllocator &allocator, u16 start)
 
 void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator, v3 cameraPos)
 {
-   u16 *removed = (u16 *)allocator.push(1024 * sizeof(u16)); //@ can these be smaller?
-   u16 *unreachable = (u16 *)allocator.push(1024 * sizeof(u16));
+   u16 *removed = (u16 *)allocator.push(TRACK_COUNT * sizeof(u16)); //@ can these be smaller?
+   u16 *unreachable = (u16 *)allocator.push(TRACK_COUNT * sizeof(u16));
    u16 removedTop = 0;
    u16 unreachableTop = 0;
    
-   for(u16 i = 0; i < (u16)graph.capacity; ++i)
+   for(u16 i = 0; i < (u16)TRACK_COUNT; ++i)
    {      
       u8 notReachable = NotReachable(graph.adjList[i].flags);
       u8 notVisible = NotVisible(graph.adjList[i].flags);
@@ -863,7 +864,7 @@ void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator, v3 cameraPos
       }
 
       // now remove all removed items in hashtable
-      for(u16 i = 0; i < graph.capacity; ++i)
+      for(u16 i = 0; i < TRACK_COUNT; ++i)
       {
 	 if(graph.taken.e[i].flags & Element::occupied)
 	 {
@@ -881,7 +882,7 @@ void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator, v3 cameraPos
    }
 
    // sort tracks by distance
-   for(u16 i = 1; i < graph.capacity; ++i)
+   for(u16 i = 1; i < TRACK_COUNT; ++i)
    {
       Track track1 = graph.elements[i];
       Attribute attribute1 = graph.adjList[i];      
@@ -925,7 +926,7 @@ void NewSortTracks(NewTrackGraph &graph, StackAllocator &allocator, v3 cameraPos
 
 void NewUpdateTrackGraph(NewTrackGraph &graph, StackAllocator &allocator, Player &player, Camera &camera)
 {
-   for(u16 i = 0; i < graph.capacity; ++i)
+   for(u16 i = 0; i < TRACK_COUNT; ++i)
    {
       graph.adjList[i].flags &= ~Attribute::reachable;
       graph.adjList[i].flags &= ~Attribute::invisible;
@@ -935,7 +936,7 @@ void NewUpdateTrackGraph(NewTrackGraph &graph, StackAllocator &allocator, Player
 
    float cutoff = player.renderable.worldPos.y - (TRACK_SEGMENT_SIZE * 3.0f);
 
-   for(u16 i = 0; i < graph.capacity; ++i)
+   for(u16 i = 0; i < TRACK_COUNT; ++i)
    {
       if(!(graph.adjList[i].flags & Attribute::unused))
       {
@@ -1216,7 +1217,7 @@ void GameInit(GameState &state, RebuildState *rebuild, size_t rebuildSize)
 		    V3(0.0f, 0.0f, 0.0f), V3(1.0f, 0.0f, 0.518f),
 		    V3(1.0f, 0.0f, 0.518f), V3(0.0f, 0.0f, 0.0f)};
 #else
-   colorTable[0] = colorTable[1] = colorTable[2] = QuickLoadPalette("temppalette1.png");
+   colorTable[0] = colorTable[1] = colorTable[2] = colorTable[3] = colorTable[4] = QuickLoadPalette("temppalette1.png");
 #endif
 
    CreateProjection();
@@ -1495,37 +1496,47 @@ static B_INLINE
 void PushFramerate(GameState &state, v2 location)
 {
    static char framerate[8];
-   i32 framerate_string_count = 0;
-   framerate_string_count = IntToString(framerate, state.framerate);
-   /*
-   static char framerate[8];
-   static float time = 120.0f;
-   time += delta;
+   static int frame_id = 0;
    static i32 framerate_string_count = 0;
-   if(time > 30.0f)
+
+   if(frame_id == 0)
    {
-      time = 0.0f;
-      framerate_string_count = IntToString(framerate, (i32)((1.0f / delta) * 60.0f));
+      framerate_string_count = IntToString(framerate, state.framerate);
+      frame_id = 60;
    }
-   */
-   
-   // framerate
+
    state.renderer.commands.PushRenderText(framerate, framerate_string_count, location, V2(0.0f, 0.0f), state.renderer.currentColors.textc, ((StackAllocator *)state.mainArena.base));
+
+   --frame_id;
 }
+
+static B_INLINE
+void PushCycles(GameState &state, v2 location, u64 count)
+{
+   static char cycles[16];
+   i32 cycle_string_count = 0;
+   cycle_string_count = IntToString(cycles, count);
+   state.renderer.commands.PushRenderText(cycles, cycle_string_count, location, V2(0.0f, 0.0f), state.renderer.currentColors.textc, ((StackAllocator *)state.mainArena.base));  
+}
+
 #define DebugPushFramerate(state, location) PushFramerate(state, location)
+#define DebugPushCycles(state, location, count) PushCycles(state, location, count)
 #else
 #define DebugPushFramerate(state, location)
+#define DebugPushCycles(state, location, count)
 #endif
 
 void GameLoop(GameState &state)
 {
+   static u64 cycles = 0;
+   static u64 frames = 0;
+   BEGIN_TIME();
    BeginFrame(state);
 
    switch(state.state)
    { 
       case GameState::LOOP:
       {
-	 BEGIN_TIME();
 	 v2 button_pos = V2(0.9f, 0.1f + USABLE_SCREEN_BOTTOM(state));
 	 v2 button_scale = V2(GetXtoYRatio(GUIMap::pause_box) * 0.16f, 0.16f);	 
 
@@ -1536,7 +1547,7 @@ void GameLoop(GameState &state)
 	 else
 	 {
 	    #ifdef DEBUG
-	    // AutoPlay(state);
+	    AutoPlay(state);
 	    #endif
 	    TracksProcessInput(state);
 	    
@@ -1559,19 +1570,25 @@ void GameLoop(GameState &state)
 	 }
 
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
-	 DebugPushFramerate(state, V2(-0.8f, 0.8f));
+	 DebugPushFramerate(state, V2(-0.8f, 0.6f));
 	 PushCurrentDistanceDisplay(state, V2(0.0f, 0.75f));
 	 state.renderer.commands.PushDrawGUI(button_pos, button_scale, state.glState.guiTextureMap, state.glState.pauseButtonVbo, ((StackAllocator *)state.mainArena.base));
-	 END_TIME();
-	 u64 passed = 0;
-	 READ_TIME(passed);
-
 	 state.lightPos = state.sphereGuy.renderable.worldPos + V3(0.0f, 0.0f, 5.0f);
 
 	 // @TODO This should be inserted into the render queue instead of being drawn immediately.
 	 glUseProgram(DefaultShader.programHandle);
 	 // glUniform3fv(glGetUniformLocation(DefaultShader.programHandle, "color"), 1, state.renderer.worldColors.playerc.e);
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, state.renderer.currentColors.playerc);
+
+	 static int frame_id = 0;
+	 static u64 value = 0;
+	 if(frames > 0 && frame_id == 0)
+	 {
+	    value = cycles / frames;
+	    frame_id = 60;
+	 }
+	 DebugPushCycles(state, V2(-0.6f, 0.8f), value);
+	 --frame_id;
 
       }break;
 
@@ -1634,7 +1651,6 @@ void GameLoop(GameState &state)
 
       case GameState::START:
       {
-	 BEGIN_TIME();
 	 // Start menu of the game
 	 static float position = 0.0f;
 	 position += delta * 0.01f;
@@ -1658,10 +1674,7 @@ void GameLoop(GameState &state)
 	 
 	 state.renderer.commands.PushDrawGUI(V2(0.0f, 0.0f), button_scale, state.glState.guiTextureMap, state.glState.startButtonVbo, ((StackAllocator *)state.mainArena.base));
 	 PushMaxDistanceDisplay(state, V2(0.0f, -0.2f));
-	 DebugPushFramerate(state, V2(-0.8f, 0.8f));
-	 END_TIME();
-	 u64 passed = 0;
-	 READ_TIME(passed);
+	 // DebugPushFramerate(state, V2(-0.8f, 0.8f));
       }break;
       
       default:
@@ -1672,6 +1685,15 @@ void GameLoop(GameState &state)
 
    state.renderer.commands.ExecuteCommands(state.camera, state.lightPos, state.glState.bitmapFont, state.bitmapFontProgram, state.renderer, (StackAllocator *)state.mainArena.base, state.glState);
    state.renderer.commands.Clean(((StackAllocator *)state.mainArena.base));
+
+   END_TIME();
+   if(state.state == GameState::LOOP)
+   {
+      u64 passed;
+      READ_TIME(passed);
+      cycles += passed;
+      ++frames;
+   }
 }
    
 void GameEnd(GameState &state)
@@ -1698,7 +1720,7 @@ void GameEnd(GameState &state)
 void
 NewTrackGraph::VerifyIDTables()
 {
-   for(u16 i = 0; i < 1024; ++i)
+   for(u16 i = 0; i < TRACK_COUNT; ++i)
    {
       B_ASSERT(IDtable[reverseIDtable[i]] == i);
    }
@@ -1707,7 +1729,7 @@ NewTrackGraph::VerifyIDTables()
 void
 NewTrackGraph::VerifyGraph()
 {
-   for(u32 i = 0; i < capacity; ++i)
+   for(u32 i = 0; i < TRACK_COUNT; ++i)
    {
       if(!(adjList[i].flags & Attribute::unused))
       {

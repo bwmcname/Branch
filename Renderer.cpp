@@ -162,7 +162,7 @@ TextureInstanceBuffers CreateTextureInstanceBuffers(GLuint vbo, GLuint uvbo)
 
    glGenBuffers(1, &result.instanceMVPBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
-   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_DYNAMIC_DRAW);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * TRACK_COUNT, 0, GL_DYNAMIC_DRAW);
 
    glGenVertexArrays(1, &result.instanceVao);
    glBindVertexArray(result.instanceVao);
@@ -203,15 +203,15 @@ InstanceBuffers CreateInstanceBuffers(GLuint vbo, GLuint nbo)
 
    glGenBuffers(1, &result.instanceMVPBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceMVPBuffer);
-   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_DYNAMIC_DRAW);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * TRACK_COUNT, 0, GL_DYNAMIC_DRAW);
 
    glGenBuffers(1, &result.instanceModelMatrixBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceModelMatrixBuffer);
-   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * 1024, 0, GL_DYNAMIC_DRAW);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(m4) * TRACK_COUNT, 0, GL_DYNAMIC_DRAW);
 
    glGenBuffers(1, &result.instanceColorBuffer);
    glBindBuffer(GL_ARRAY_BUFFER, result.instanceColorBuffer);
-   glBufferData(GL_ARRAY_BUFFER, sizeof(v3) * 1024, 0, GL_DYNAMIC_DRAW);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(v3) * TRACK_COUNT, 0, GL_DYNAMIC_DRAW);
 
    glGenVertexArrays(1, &result.instanceVao);
    glBindVertexArray(result.instanceVao);
@@ -274,17 +274,17 @@ CommandState InitCommandState(StackAllocator *allocator)
    result.count = 0;
    result.first = 0;   
    result.last = 0;
-   // 1024 for now, but we may be able to find tighter bounds!
-   result.linearInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
+   // TRACK_COUNT for now, but we may be able to find tighter bounds!
+   result.linearInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * TRACK_COUNT);
    result.linearInstanceCount = 0;
 
-   result.branchInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
+   result.branchInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * TRACK_COUNT);
    result.branchInstanceCount = 0;
 
-   result.breakInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * 1024);
+   result.breakInstances = (TrackInstance *)allocator->push(sizeof(TrackInstance) * TRACK_COUNT);
    result.breakInstanceCount = 0;
 
-   result.breakTextureInstances = (TextureInstance *)allocator->push(sizeof(TextureInstance) * 1024);
+   result.breakTextureInstances = (TextureInstance *)allocator->push(sizeof(TextureInstance) * TRACK_COUNT);
    result.breakTextureInstanceCount = 0;
 
    return result;
@@ -333,7 +333,7 @@ CommandState::PushDrawLinear(Object obj, StackAllocator *allocator)
 inline void
 CommandState::PushLinearInstance(Object obj, v3 color)
 {
-   B_ASSERT(linearInstanceCount < 1024);
+   B_ASSERT(linearInstanceCount < TRACK_COUNT);
    linearInstances[linearInstanceCount++] = {obj.worldPos,
 					     obj.orientation,
 					     obj.scale,
@@ -343,7 +343,7 @@ CommandState::PushLinearInstance(Object obj, v3 color)
 inline void
 CommandState::PushBranchInstance(Object obj, v3 color)
 {
-   B_ASSERT(branchInstanceCount < 1024);
+   B_ASSERT(branchInstanceCount < TRACK_COUNT);
    branchInstances[branchInstanceCount++] = {obj.worldPos,
 					     obj.orientation,
 					     obj.scale,
@@ -353,7 +353,7 @@ CommandState::PushBranchInstance(Object obj, v3 color)
 inline void
 CommandState::PushBreakInstance(Object obj, v3 color)
 {
-   B_ASSERT(breakInstanceCount < 1024);
+   B_ASSERT(breakInstanceCount < TRACK_COUNT);
    breakInstances[breakInstanceCount++] = {obj.worldPos,
 					   obj.orientation,
 					   obj.scale,
@@ -1319,7 +1319,7 @@ void RenderBBoxes(GameState &state)
    glLoadMatrixf((InfiniteProjection * state.camera.view).e);
    glLineWidth(1.0f);
 
-   for(u32 i = 0; i < state.tracks.capacity; ++i)
+   for(u32 i = 0; i < TRACK_COUNT; ++i)
    {
       BBox box;
 
@@ -1584,7 +1584,7 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
    state.renderer.commands.PushRenderBranchInstances(allocator);
    state.renderer.commands.PushRenderBreakInstances(allocator);
    state.renderer.commands.PushRenderBreakTextureInstances(allocator);
-   for(i32 i = 0; i < state.tracks.capacity; ++i)
+   for(i32 i = 0; i < TRACK_COUNT; ++i)
    {	    
       if(!(state.tracks.adjList[i].flags & Attribute::invisible) &&
 	 !(state.tracks.adjList[i].flags & Attribute::unused))
@@ -1649,4 +1649,11 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
    END_TIME();
 
    return rendered;
+}
+
+Particles InitParticles(GLuint texture, u32 count, StackAllocator *allocator)
+{
+   Particles result;
+   result.positions = allocator->Push(sizeof(v3) * count);
+   result.texture = texture;
 }

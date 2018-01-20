@@ -28,6 +28,10 @@
 #include <time.h>
 #include <semaphore.h>
 #include <jni.h>
+#include <firebase/admob.h>
+#include <firebase/admob/types.h>
+#include <firebase/app.h>
+#include <firebase/future.h>
 #endif
 
 #pragma warning(pop)

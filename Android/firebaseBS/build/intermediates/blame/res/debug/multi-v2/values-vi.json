@@ -1,0 +1,43 @@
+{
+    "logs": [
+        {
+            "outputFile": "W:\\branch\\Android\\firebaseBS\\build\\intermediates\\incremental\\mergeDebugResources\\merged.dir\\values-vi\\values-vi.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\mcnam_000\\.gradle\\caches\\transforms-1\\files-1.1\\play-services-ads-11.8.0.aar\\3d7085254fd45c1d856c76af76bcb4cb\\res\\values-vi\\values.xml",
+                    "from": {
+                        "startLines": "4,5,6,7,8,9,10",
+                        "startColumns": "0,0,0,0,0,0,0",
+                        "startOffsets": "235,304,417,484,549,623,717",
+                        "endColumns": "68,112,66,64,73,93,77",
+                        "endOffsets": "303,416,483,548,622,716,794"
+                    },
+                    "to": {
+                        "startLines": "3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4",
+                        "startOffsets": "300,373,490,561,630,708,806",
+                        "endColumns": "72,116,70,68,77,97,81",
+                        "endOffsets": "368,485,556,625,703,801,883"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\mcnam_000\\.gradle\\caches\\transforms-1\\files-1.1\\play-services-basement-11.8.0.aar\\9f138bb63bf43b90dfdb964729dc0fb1\\res\\values-vi\\values.xml",
+                    "from": {
+                        "startLines": "4",
+                        "startColumns": "0",
+                        "startOffsets": "283",
+                        "endColumns": "194",
+                        "endOffsets": "477"
+                    },
+                    "to": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "105",
+                        "endColumns": "194",
+                        "endOffsets": "295"
+                    }
+                }
+            ]
+        }
+    ]
+}

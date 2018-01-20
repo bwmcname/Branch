@@ -19,6 +19,16 @@ enum AndroidSysCommand
    LOWMEMORY
 };
 
+enum dpi
+{
+   LDPI,
+   MDPI,
+   HDPI,
+   XHDPI,
+   XXHDPI,
+   XXXHDPI,
+};
+
 struct AndroidCommand
 {
    enum : u32
@@ -81,4 +91,5 @@ struct AndroidState
    RebuildState *savedState;
    bool started;
    int hasFocus;
+   dpi density;
 };

@@ -112,6 +112,7 @@ void SetScreenConfiguration(AndroidState *state)
 {
    JNIEnv* env;
    state->activity->vm->AttachCurrentThread(&env, 0);
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
 
    if(!env)
    {
@@ -120,26 +121,46 @@ void SetScreenConfiguration(AndroidState *state)
    }
 
    jclass activityClass = env->FindClass("android/app/NativeActivity");
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
+
    jmethodID getWindow = env->GetMethodID(activityClass, "getWindow", "()Landroid/view/Window;");
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
 
    jclass windowClass = env->FindClass("android/view/Window");
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
    jmethodID getDecorView = env->GetMethodID(windowClass, "getDecorView", "()Landroid/view/View;");
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
 
    jclass viewClass = env->FindClass("android/view/View");
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
    jmethodID setSystemUiVisibility = env->GetMethodID(viewClass, "setSystemUiVisibility", "(I)V");
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
 
    jobject window = env->CallObjectMethod(state->activity->clazz, getWindow);
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
    jobject decorView = env->CallObjectMethod(window, getDecorView);
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
 
    jfieldID fullScreenField = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_FULLSCREEN", "I");
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
    jfieldID hideNavigationField = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_HIDE_NAVIGATION", "I");
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
    jfieldID immersiveField = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_IMMERSIVE", "I");
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
 
    int fullScreenFlag = env->GetStaticIntField(viewClass, fullScreenField);
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
    int hideNavigationFlag = env->GetStaticIntField(viewClass, hideNavigationField);
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
    int immersiveFlag = env->GetStaticIntField(viewClass, immersiveField);
 
+   LOG_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
+
    env->CallVoidMethod(decorView, setSystemUiVisibility, fullScreenFlag | hideNavigationFlag | immersiveFlag);
+   // jthrowable excep = env->ExceptionOccurred();
+   env->ExceptionDescribe();
+
+   //log_WRITE("%i, %i", env->ExceptionCheck(), __LINE__);
    state->activity->vm->DetachCurrentThread();
 }
 
@@ -226,6 +247,62 @@ void OnLowMemory(ANativeActivity *activity)
 {
    AndroidState *state = (AndroidState *)activity->instance;
    state->events.Push({AndroidCommand::LOWMEMORY});
+}
+
+static dpi GetDPI(AndroidState *state)
+{
+   AConfiguration *config = AConfiguration_new();
+   AConfiguration_fromAssetManager(config, manager);
+
+   i32 density = AConfiguration_getDensity(config);
+
+   dpi result;
+
+   switch(density)
+   {
+      case ACONFIGURATION_DENSITY_LOW:
+      {
+	 result = LDPI;
+      }break;
+
+      case ACONFIGURATION_DENSITY_MEDIUM:
+      {
+	 result = MDPI;
+      }break;
+      
+      case ACONFIGURATION_DENSITY_HIGH:
+      {
+	 result = HDPI;
+      }break;
+      
+      case ACONFIGURATION_DENSITY_XHIGH:
+      {
+	 result = XHDPI;
+      }break;
+      
+      case ACONFIGURATION_DENSITY_XXHIGH:
+      {
+	 result = XXHDPI;
+      }break;
+      
+      case ACONFIGURATION_DENSITY_XXXHIGH:
+      {
+	 result = XXXHDPI;
+      }break;
+
+	 
+      case ACONFIGURATION_DENSITY_ANY:
+      case ACONFIGURATION_DENSITY_NONE:
+      case ACONFIGURATION_DENSITY_DEFAULT:
+      case ACONFIGURATION_DENSITY_TV:
+      {
+	 result = MDPI;
+      }break;
+   }
+
+   AConfiguration_delete(config);
+
+   return result;
 }
 
 static
@@ -502,6 +579,64 @@ void DestroyDisplay(AndroidState *state)
 #define BRANCH_ACTIVE 0x4
 #define BRANCH_INPUT_READY 0x8
 
+void SetupAds(AndroidState *state)
+{
+   JNIEnv* env;
+   jint result = state->activity->vm->AttachCurrentThread(&env, 0);   
+
+   if(result == JNI_OK && !env->ExceptionCheck())
+   {
+      firebase::App *app = firebase::App::Create(env,
+						 state->activity->clazz);
+      const char* kAdMobAppID = "ca-app-pub-XXXXXXXXXXXXXXXX~NNNNNNNNNN";
+      firebase::admob::Initialize(*app, kAdMobAppID);
+      state->activity->vm->DetachCurrentThread();
+   }
+}
+
+void LoadAndShowAds(AndroidState *state)
+{
+   static const char *testIDS[] = {
+      "2077ef9a63d2b398840261c8221a0c9b",
+      "098fe087d987c9a878965454a65654d7"
+   };
+
+   static const char *testKeywords[] = {
+      "Arcade", "Action", "Infinite Runner"
+   };
+
+   const char* kInterstitialAdUnit = "ca-app-pub-3940256099942544/1033173712";
+
+   firebase::admob::AdRequest request;
+   request.test_device_ids = testIDS;
+   request.test_device_id_count = 2;
+   request.keywords = testKeywords;
+   request.keyword_count = 3;
+   request.extras = 0;
+   request.extras_count = 0;
+   request.birthday_day = 20;
+   request.birthday_month = 10;
+   request.birthday_year = 1995;
+   request.gender = firebase::admob::kGenderUnknown;
+   request.tagged_for_child_directed_treatment = firebase::admob::kChildDirectedTreatmentStateNotTagged;
+
+   firebase::admob::InterstitialAd *ad = new firebase::admob::InterstitialAd();
+   ad->Initialize(state->activity->clazz,
+		  kInterstitialAdUnit);
+
+   while(ad->InitializeLastResult().status() != firebase::kFutureStatusComplete);
+   if(ad->InitializeLastResult().error() == firebase::admob::kAdMobErrorNone)
+   {
+      ad->LoadAd(request);
+   }
+
+   while(ad->InitializeLastResult().status() != firebase::kFutureStatusComplete);
+   if(ad->InitializeLastResult().error() == firebase::admob::kAdMobErrorNone)
+   {
+      ad->Show();
+   }
+}
+
 void AndroidMain(AndroidState *state)
 {
    bool drawing = false;
@@ -516,6 +651,9 @@ void AndroidMain(AndroidState *state)
    bool resumed = false;
 
    i32 flags = 0;
+
+   LOG_WRITE("SETUP FIREBASE");
+   SetupAds(state);
    
    for(;;)
    {
@@ -645,7 +783,7 @@ void AndroidMain(AndroidState *state)
 
 	       if(state->hasFocus)
 	       {
-		  
+		  // SetScreenConfiguration(state);
 	       }
 	    }break;
 
@@ -797,12 +935,24 @@ void *CreateApp(ANativeActivity *activity, void *savedState, size_t savedStateSi
    manager = activity->assetManager;
    state->started = false;
    state->hasFocus = 0;
+   state->density = GetDPI(state);
 
    pthread_t t;
    pthread_attr_t attributes;
    pthread_attr_init(&attributes);
    pthread_attr_setdetachstate(&attributes, PTHREAD_CREATE_DETACHED);
    pthread_create(&t, &attributes, (pthread_func)AndroidMain, state);
+
+   /*
+   sched_param sp;
+   sp.sched_priority = sched_get_priority_max(SCHED_OTHER);
+   int result = pthread_setschedparam(t, SCHED_OTHER, &sp);
+   
+   if(result != 0)
+   {
+      LOG_WRITE("Could not set priority.");
+   }
+   */
    
    return (void *)state;
 }

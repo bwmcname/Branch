@@ -1,4 +1,5 @@
 #define TRACK_SEGMENT_SIZE 10.0f
+#define TRACK_COUNT 512
 
 #define SCREEN_TOP ((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
 #define SCREEN_BOTTOM -((float)SCREEN_HEIGHT / (float)SCREEN_WIDTH)
@@ -203,7 +204,6 @@ struct NewTrackGraph
       switching = 0x2,
    };   
 
-   static const u32 capacity = 1024;
    Attribute *adjList;
    Track *elements;
    CircularQueue<u16> availableIDs;
