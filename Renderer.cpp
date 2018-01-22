@@ -1650,10 +1650,3 @@ i32 PushRenderTracks(GameState &state, StackAllocator *allocator)
 
    return rendered;
 }
-
-Particles InitParticles(GLuint texture, u32 count, StackAllocator *allocator)
-{
-   Particles result;
-   result.positions = allocator->Push(sizeof(v3) * count);
-   result.texture = texture;
-}

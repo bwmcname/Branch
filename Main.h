@@ -242,6 +242,11 @@ struct Player
       Force_Right = 0x2,
    };
 
+   enum
+   {
+      shrinking = 0x1,
+   };
+
    Object renderable;
    u16 trackIndex;
    u16 tracksTraversedSequence;
@@ -250,15 +255,24 @@ struct Player
    float velocity;
    MeshObject mesh;
    u8 forceDirection;
+   u8 flags;
 
+   // encapsulate some animation values for cleanliness.
    struct PlayerAnimation
    {
       float t;
    };
 
+   struct PlayerShrink
+   {
+      float t;
+   };
+
    PlayerAnimation animation;
+   PlayerShrink shrink;
 
    inline bool OnSwitch(NewTrackGraph &tracks);
+   inline void StartShrink();
 };
 
 inline bool

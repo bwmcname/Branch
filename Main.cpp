@@ -970,6 +970,14 @@ void ResetPlayer(Player &player)
    player.forceDirection = 0;
    player.tracksTraversedSequence = 0;
    player.timesAccelerated = 0;
+   player.flags = 0;
+}
+
+inline void
+Player::StartShrink()
+{
+   flags |= shrinking;
+   shrink.t = 0.0f;
 }
 
 void OnLoss(GameState &state)
@@ -983,6 +991,12 @@ void OnLoss(GameState &state)
 	 B_ASSERT(0);
       }
    }
+
+   state.sphereGuy.StartShrink();
+
+   #ifdef ANDROID_BUILD
+   LoadAndShowAds(state.android);
+   #endif
 }
 
 void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
@@ -990,11 +1004,12 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
    // current track physical ID
    u16 actualID = tracks.GetActualID(player.trackIndex);
    Track *currentTrack = &tracks.elements[actualID];
-
+   
    player.animation.t += delta;
    float scale = ((sinf(player.animation.t * 0.3f) + 1.0f) * 0.2f) + 0.7f;
    player.renderable.scale = V3(scale, scale, scale);
    
+
    if(!state.paused)
    {
       player.t += player.velocity * delta;
@@ -1015,7 +1030,6 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	 player.tracksTraversedSequence = 0;
 	 BeginChangeWorldColor(state);
       }
-   
 
       player.t -= 1.0f;
 
@@ -1033,6 +1047,7 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	 }
 	 else
 	 {
+	    player.t = 0.9f;
 	    state.state = GameState::RESET;
 	    OnLoss(state);
 	 }
@@ -1049,15 +1064,40 @@ void UpdatePlayer(Player &player, NewTrackGraph &tracks, GameState &state)
 	 }
 	 else
 	 {
+	    player.t = 0.9f;
 	    state.state = GameState::RESET;
 	    OnLoss(state);
 	 }
       }
 
       player.forceDirection = 0;
-   }   
+   }
    
    player.renderable.worldPos = GetPositionOnTrack(*currentTrack, player.t);
+}
+
+inline float
+ShrinkInterpolation(float a, float b, float t)
+{
+   return a + ((t * t * t) * (b - a));
+}
+
+inline
+void UpdatePlayerShrink(Player &player)
+{
+   if(player.flags & Player::shrinking)
+   {
+      player.shrink.t += delta * 0.01f;
+
+      if(player.shrink.t >= 1.0f)
+      {
+	 player.shrink.t = 1.0f;
+	 player.flags &= ~Player::shrinking;
+      }
+
+      float shrunk = ShrinkInterpolation(1.0f, 0.0f, player.shrink.t);
+      player.renderable.scale = V3(shrunk, shrunk, shrunk);
+   }
 }
 
 void UpdateCamera(Camera &camera, Player &player, NewTrackGraph &graph)
@@ -1095,6 +1135,7 @@ Player InitPlayer()
    result.trackIndex = 0;
    result.tracksTraversedSequence = 0;
    result.timesAccelerated = 0;
+   result.flags = 0;
 
    result.forceDirection = 0;
 
@@ -1526,6 +1567,24 @@ void PushCycles(GameState &state, v2 location, u64 count)
 #define DebugPushCycles(state, location, count)
 #endif
 
+void UpdateTracks(GameState &state)
+{
+   if(state.tracks.flags & NewTrackGraph::switching)
+   {
+      state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
+
+      GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, smoothstep(0.0f, 1.0f, state.tracks.switchDelta));
+      GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
+
+      if(state.tracks.switchDelta == 1.0f)
+      {
+	 state.tracks.flags &= ~NewTrackGraph::switching;
+      }
+   }	 
+
+   NewUpdateTrackGraph(state.tracks, *((StackAllocator *)state.mainArena.base), state.sphereGuy, state.camera);	    
+}
+
 void GameLoop(GameState &state)
 {
    static u64 cycles = 0;
@@ -1547,24 +1606,11 @@ void GameLoop(GameState &state)
 	 else
 	 {
 	    #ifdef DEBUG
-	    AutoPlay(state);
+	    // AutoPlay(state);
 	    #endif
 	    TracksProcessInput(state);
-	    
-	    if(state.tracks.flags & NewTrackGraph::switching)
-	    {
-	       state.tracks.switchDelta = min(state.tracks.switchDelta + 0.1f * delta, 1.0f);
 
-	       GlobalBranchCurve = lerp(state.tracks.beginLerp, state.tracks.endLerp, smoothstep(0.0f, 1.0f, state.tracks.switchDelta));
-	       GenerateTrackSegmentVertices(BranchTrack, GlobalBranchCurve, (StackAllocator *)state.mainArena.base);
-
-	       if(state.tracks.switchDelta == 1.0f)
-	       {
-		  state.tracks.flags &= ~NewTrackGraph::switching;
-	       }
-	    }	 
-
-	    NewUpdateTrackGraph(state.tracks, *((StackAllocator *)state.mainArena.base), state.sphereGuy, state.camera);
+	    UpdateTracks(state);
 	    UpdatePlayer(state.sphereGuy, state.tracks, state);
 	    UpdateCamera(state.camera, state.sphereGuy, state.tracks);
 	 }
@@ -1577,7 +1623,6 @@ void GameLoop(GameState &state)
 
 	 // @TODO This should be inserted into the render queue instead of being drawn immediately.
 	 glUseProgram(DefaultShader.programHandle);
-	 // glUniform3fv(glGetUniformLocation(DefaultShader.programHandle, "color"), 1, state.renderer.worldColors.playerc.e);
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, state.renderer.currentColors.playerc);
 
 	 static int frame_id = 0;
@@ -1597,7 +1642,6 @@ void GameLoop(GameState &state)
 	 DEBUG_CONTROL_CAMERA(state);
 
 	 glUseProgram(DefaultShader.programHandle);
-	 // glUniform3fv(glGetUniformLocation(DefaultShader.programHandle, "color"), 1, state.renderer.worldColors.playerc.e);
 	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, state.renderer.currentColors.playerc);
 	 PushRenderTracks(state, (StackAllocator *)state.mainArena.base);
 
@@ -1615,8 +1659,16 @@ void GameLoop(GameState &state)
 
       case GameState::RESET:
       {	 
-	 // state.state = GameState::START;
 	 DEBUG_CONTROL_CAMERA(state);
+
+	 UpdatePlayerShrink(state.sphereGuy);
+	 glUseProgram(DefaultShader.programHandle);
+	 RenderObject(state.sphereGuy.renderable, state.sphereGuy.mesh, &DefaultShader, state.camera.view, state.lightPos, state.renderer.currentColors.playerc);
+
+	 // We want to keep updating the tracks when we lose so that
+	 // If we hit a break and the tracks were in the middle of switching
+	 // it will finish that switch.
+	 UpdateTracks(state);
 
 	 v2 button_area = V2(2.0f, 2.0f);
 	 v2 button_scale = V2(GetXtoYRatio(GUIMap::GoSign_box) * 0.16f, 0.16f);
@@ -1624,13 +1676,12 @@ void GameLoop(GameState &state)
 	 {
 	    ResetPlayer(state.sphereGuy);
 	    ResetRenderer(state.renderer);
-	    state.camera.position.y = state.sphereGuy.renderable.worldPos.y - 10.0f;
-	    state.camera.position.x = 0.0f;
+	    InitCamera(state.camera);
 
 	    ResetGraph(state.tracks);
 	    FillGraph(state.tracks);
 
-	    state.state = GameState::LOOP;
+	    state.state = GameState::START;
 	    
 	    // Reset track
 	    state.sphereGuy.trackIndex = 0;

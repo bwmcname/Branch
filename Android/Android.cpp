@@ -579,6 +579,7 @@ void DestroyDisplay(AndroidState *state)
 #define BRANCH_ACTIVE 0x4
 #define BRANCH_INPUT_READY 0x8
 
+
 void SetupAds(AndroidState *state)
 {
    JNIEnv* env;
@@ -597,21 +598,20 @@ void SetupAds(AndroidState *state)
 void LoadAndShowAds(AndroidState *state)
 {
    static const char *testIDS[] = {
-      "2077ef9a63d2b398840261c8221a0c9b",
-      "098fe087d987c9a878965454a65654d7"
+      "89E50838BD26B10DC872A7FF22EA5962"
    };
 
    static const char *testKeywords[] = {
-      "Arcade", "Action", "Infinite Runner"
+      "Arcade", "Action",
    };
 
    const char* kInterstitialAdUnit = "ca-app-pub-3940256099942544/1033173712";
 
    firebase::admob::AdRequest request;
    request.test_device_ids = testIDS;
-   request.test_device_id_count = 2;
+   request.test_device_id_count = 1;
    request.keywords = testKeywords;
-   request.keyword_count = 3;
+   request.keyword_count = 2;
    request.extras = 0;
    request.extras_count = 0;
    request.birthday_day = 20;
@@ -621,21 +621,45 @@ void LoadAndShowAds(AndroidState *state)
    request.tagged_for_child_directed_treatment = firebase::admob::kChildDirectedTreatmentStateNotTagged;
 
    firebase::admob::InterstitialAd *ad = new firebase::admob::InterstitialAd();
+
+   LOG_WRITE("ABOUT TO INITIALIZE");
    ad->Initialize(state->activity->clazz,
 		  kInterstitialAdUnit);
+   LOG_WRITE("INITIALIZE CALLED");
 
    while(ad->InitializeLastResult().status() != firebase::kFutureStatusComplete);
    if(ad->InitializeLastResult().error() == firebase::admob::kAdMobErrorNone)
    {
       ad->LoadAd(request);
+      LOG_WRITE("LOADED AD");
+   }
+   else
+   {
+      LOG_WRITE("Failed to load ad");
    }
 
-   while(ad->InitializeLastResult().status() != firebase::kFutureStatusComplete);
-   if(ad->InitializeLastResult().error() == firebase::admob::kAdMobErrorNone)
+   while(ad->LoadAdLastResult().status() != firebase::kFutureStatusComplete);
+   if(ad->LoadAdLastResult().error() == firebase::admob::kAdMobErrorNone)
    {
+      LOG_WRITE("AD SHOWING");
       ad->Show();
    }
+   else
+   {
+      LOG_WRITE("Failed to show ad");
+   }
+
+   while(ad->ShowLastResult().status() != firebase::kFutureStatusComplete);
+   if(ad->ShowLastResult().error() == firebase::admob::kAdMobErrorNone)
+   {
+      LOG_WRITE("ALL GOOD");
+   }
+   else
+   {
+      LOG_WRITE(":(");
+   }
 }
+
 
 void AndroidMain(AndroidState *state)
 {
@@ -654,7 +678,9 @@ void AndroidMain(AndroidState *state)
 
    LOG_WRITE("SETUP FIREBASE");
    SetupAds(state);
-   
+
+   LOG_WRITE("NICE CHANGE");
+
    for(;;)
    {
       clock_gettime(CLOCK_MONOTONIC, &begin);
