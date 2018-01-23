@@ -994,7 +994,7 @@ void OnLoss(GameState &state)
 
    state.sphereGuy.StartShrink();
 
-   #ifdef ANDROID_BUILD
+#if defined(ANDROID_BUILD) && !defined(CUSTOM_BUILD)
    LoadAndShowAds(state.android);
    #endif
 }

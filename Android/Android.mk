@@ -14,7 +14,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE    := Branch
 LOCAL_SRC_FILES := ..\include.cpp
 LOCAL_LDLIBS    := -llog -landroid -lEGL -lGLESv3 -lc
-LOCAL_CFLAGS    := -std=c++11 -Wno-write-strings -Wno-attributes -DANDROID_BUILD -DDEBUG -I ../libs/
+LOCAL_CFLAGS    := -std=c++11 -Wno-write-strings -Wno-attributes -DCUSTOM_BUILD -DANDROID_BUILD -DDEBUG -I ../libs/
 LOCAL_STATIC_LIBRARIES := firebase_admob firebase_app
 include $(BUILD_SHARED_LIBRARY)
 

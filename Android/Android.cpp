@@ -579,7 +579,7 @@ void DestroyDisplay(AndroidState *state)
 #define BRANCH_ACTIVE 0x4
 #define BRANCH_INPUT_READY 0x8
 
-
+#if !defined(CUSTOM_BUILD)
 void SetupAds(AndroidState *state)
 {
    JNIEnv* env;
@@ -659,7 +659,7 @@ void LoadAndShowAds(AndroidState *state)
       LOG_WRITE(":(");
    }
 }
-
+#endif
 
 void AndroidMain(AndroidState *state)
 {
@@ -677,7 +677,10 @@ void AndroidMain(AndroidState *state)
    i32 flags = 0;
 
    LOG_WRITE("SETUP FIREBASE");
+
+#if !defined(CUSTOM_BUILD)
    SetupAds(state);
+#endif
 
    LOG_WRITE("NICE CHANGE");
 
